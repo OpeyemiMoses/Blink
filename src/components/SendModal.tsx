@@ -37,7 +37,7 @@ export const SendModal: React.FC<SendModalProps> = ({
 }) => {
   const [recipient, setRecipient] = useState(initialRecipient || '');
   const [amount, setAmount] = useState('');
-  const [selectedToken, setSelectedToken] = useState<'SOL' | 'USDC'>('SOL');
+  const [selectedToken, setSelectedToken] = useState<'SOL' | 'USDC' | 'SKR'>('SOL');
   const [currentBalanceUsdc, setCurrentBalanceUsdc] = useState<number>(0);
   const [resolvedBlinkInfo, setResolvedBlinkInfo] = useState<{ id: string; name: string; recipient: string; amount?: number; token?: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -192,6 +192,8 @@ export const SendModal: React.FC<SendModalProps> = ({
       let transaction: Transaction;
       if (selectedToken === 'USDC') {
         transaction = await SolanaService.buildUsdcTransferTransaction(fromPubkey, toPubkey, numAmount);
+      } else if (selectedToken === 'SKR') {
+        transaction = await SolanaService.buildSkrTransferTransaction(fromPubkey, toPubkey, numAmount);
       } else {
         const lamports = Math.round(numAmount * LAMPORTS_PER_SOL);
         const connection = SolanaService.getConnection();
@@ -431,7 +433,7 @@ export const SendModal: React.FC<SendModalProps> = ({
               </View>
             ) : (
               <View style={styles.form}>
-                {/* Currency Selector: SOL vs USDC on Solana */}
+                {/* Currency Selector: SOL vs USDC vs SKR on Solana */}
                 <View style={styles.tokenPillRow}>
                   <TouchableOpacity
                     style={[styles.tokenPill, selectedToken === 'SOL' && styles.tokenPillActive]}
@@ -439,7 +441,7 @@ export const SendModal: React.FC<SendModalProps> = ({
                     activeOpacity={0.8}
                   >
                     <Text style={[styles.tokenPillText, selectedToken === 'SOL' && styles.tokenPillTextActive]}>
-                      SOL (Native)
+                      SOL
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -448,7 +450,16 @@ export const SendModal: React.FC<SendModalProps> = ({
                     activeOpacity={0.8}
                   >
                     <Text style={[styles.tokenPillText, selectedToken === 'USDC' && styles.tokenPillTextActive]}>
-                      USDC (Solana SPL)
+                      USDC
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.tokenPill, selectedToken === 'SKR' && styles.tokenPillActive]}
+                    onPress={() => setSelectedToken('SKR')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.tokenPillText, selectedToken === 'SKR' && styles.tokenPillTextActive]}>
+                      SKR
                     </Text>
                   </TouchableOpacity>
                 </View>

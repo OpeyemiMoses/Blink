@@ -76,7 +76,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   const [formName, setFormName] = useState('');
   const [formActionType, setFormActionType] = useState<ActionType>('payment');
   const [formAmount, setFormAmount] = useState('5.00');
-  const [formToken, setFormToken] = useState<'USDC' | 'SOL'>('USDC');
+  const [formToken, setFormToken] = useState<'USDC' | 'SOL' | 'SKR'>('USDC');
   const [formPhysicalId, setFormPhysicalId] = useState('');
   const [formRecipient, setFormRecipient] = useState(activeAccount?.publicKey || '');
   const [formDomain, setFormDomain] = useState('');
@@ -441,7 +441,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                 placeholderTextColor={colors.textMuted}
               />
             </View>
-            <View style={{ width: 110 }}>
+            <View style={{ width: 150 }}>
               <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>CURRENCY</Text>
               <View style={[styles.tokenPillRow, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}>
                 <TouchableOpacity
@@ -458,6 +458,14 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                 >
                   <Text style={[styles.tokenPillText, { color: colors.textSecondary }, formToken === 'SOL' && styles.tokenPillTextActive]}>
                     SOL
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.tokenPill, formToken === 'SKR' && styles.tokenPillActive]}
+                  onPress={() => setFormToken('SKR')}
+                >
+                  <Text style={[styles.tokenPillText, { color: colors.textSecondary }, formToken === 'SKR' && styles.tokenPillTextActive]}>
+                    SKR
                   </Text>
                 </TouchableOpacity>
               </View>

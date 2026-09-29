@@ -6,7 +6,7 @@ export interface PhysicalBlink {
   name: string; // e.g. "Dean's Coffee Counter"
   actionType: ActionType;
   amount: number;
-  token: 'USDC' | 'SOL';
+  token: 'USDC' | 'SOL' | 'SKR';
   recipient: string;
   description: string;
   verifiedDomain?: string;

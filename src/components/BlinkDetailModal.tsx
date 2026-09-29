@@ -79,6 +79,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
   // Price & Recipient Editing state
   const [isEditingPrice, setIsEditingPrice] = useState(false);
   const [editPriceInput, setEditPriceInput] = useState(blink.amount.toString());
+  const [editTokenInput, setEditTokenInput] = useState<'USDC' | 'SOL' | 'SKR'>(blink.token || 'USDC');
   const [editDescInput, setEditDescInput] = useState(blink.description);
   const [editRecipientInput, setEditRecipientInput] = useState(blink.recipient);
   const [isSaved, setIsSaved] = useState(false);
@@ -138,10 +139,11 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
     if (blink) {
       setCurrentBlink({ ...blink });
       setEditPriceInput(blink.amount.toString());
+      setEditTokenInput(blink.token || 'USDC');
       setEditDescInput(blink.description || '');
       setEditRecipientInput(blink.recipient || '');
     }
-  }, [blink?.id, blink?.amount, blink?.description, blink?.recipient]);
+  }, [blink?.id, blink?.amount, blink?.token, blink?.description, blink?.recipient]);
 
   useEffect(() => {
     const handleRegistryUpdate = (e: any) => {
@@ -152,6 +154,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       if (target) {
         setCurrentBlink({ ...target });
         setEditPriceInput(target.amount.toString());
+        setEditTokenInput(target.token || 'USDC');
         setEditDescInput(target.description || '');
         setEditRecipientInput(target.recipient || '');
       }
@@ -359,6 +362,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
 
     const updated = PhysicalBlinkRegistry.updateAction(currentBlink.id, {
       amount: parsedAmount,
+      token: editTokenInput,
       description: editDescInput.trim() || currentBlink.description,
       recipient: editRecipientInput.trim() || currentBlink.recipient,
     });
@@ -366,9 +370,10 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
     if (updated) {
       setCurrentBlink({ ...updated });
       setEditPriceInput(parsedAmount.toString());
+      setEditTokenInput(updated.token);
       setEditRecipientInput(updated.recipient);
       setIsEditingPrice(false);
-      const formatted = currentBlink.token === 'SOL' ? `${parsedAmount} SOL` : `$${parsedAmount.toFixed(2)} USDC`;
+      const formatted = updated.token === 'SOL' ? `${parsedAmount} SOL` : (updated.token === 'SKR' ? `${parsedAmount} SKR` : `$${parsedAmount.toFixed(2)} USDC`);
       ToastService.success(`Blink updated to ${formatted} globally.`);
       onUpdateBlink?.(updated);
       fetchRecipientBalance();
@@ -500,6 +505,9 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       if (currentBlink.token === 'USDC') {
         // Native SPL USDC transfer on Solana network
         tx = await SolanaService.buildUsdcTransferTransaction(fromPubkey, toPubkey, checkoutAmount);
+      } else if (currentBlink.token === 'SKR') {
+        // Native SPL SKR token transfer on Solana network
+        tx = await SolanaService.buildSkrTransferTransaction(fromPubkey, toPubkey, checkoutAmount);
       } else {
         // Native SOL transfer on Solana network
         const connection = SolanaService.getConnection();

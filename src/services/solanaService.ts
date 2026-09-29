@@ -13,8 +13,9 @@ import { ExternalWalletService } from './externalWalletService';
 export const DEVNET_RPC = 'https://api.devnet.solana.com';
 export const MAINNET_RPC = 'https://api.mainnet-beta.solana.com';
 
-// Official Solana Devnet USDC SPL Mint & Program IDs
+// Official Solana Devnet USDC & SKR SPL Mint & Program IDs
 export const USDC_DEVNET_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
+export const SKR_DEVNET_MINT = new PublicKey('SKR1111111111111111111111111111111111111111');
 export const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 export const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 
@@ -32,7 +33,8 @@ export interface EnrichedTransactionInfo extends OnChainTransactionInfo {
   direction: 'send' | 'receive' | 'unknown';
   amountSol: number | null;
   amountUsdc?: number | null;
-  token?: 'SOL' | 'USDC';
+  amountSkr?: number | null;
+  token?: 'SOL' | 'USDC' | 'SKR';
   counterparty: string | null;
 }
 
@@ -386,6 +388,41 @@ export class SolanaService {
 
     // 1 USDC = 1,000,000 atomic units (6 decimals)
     const amountUnits = BigInt(Math.max(1, Math.round(amountUsdc * 1_000_000)));
+    transaction.add(
+      this.createSplTokenTransferInstruction(senderAta, recipientAta, senderPubkey, amountUnits)
+    );
+
+    const latestBlockhash = await this.connection.getLatestBlockhash('confirmed');
+    transaction.recentBlockhash = latestBlockhash.blockhash;
+    transaction.feePayer = senderPubkey;
+
+    return transaction;
+  }
+
+  /**
+   * Build complete on-chain SKR transfer transaction on Solana network.
+   * Auto-creates recipient SKR ATA if not already existing.
+   */
+  static async buildSkrTransferTransaction(
+    senderPubkey: PublicKey,
+    recipientPubkey: PublicKey,
+    amountSkr: number
+  ): Promise<Transaction> {
+    const senderAta = this.getAssociatedTokenAddress(senderPubkey, SKR_DEVNET_MINT);
+    const recipientAta = this.getAssociatedTokenAddress(recipientPubkey, SKR_DEVNET_MINT);
+
+    const transaction = new Transaction();
+
+    // Check if recipient ATA exists on Solana network
+    const recipientAtaInfo = await this.connection.getAccountInfo(recipientAta);
+    if (!recipientAtaInfo) {
+      transaction.add(
+        this.createAssociatedTokenAccountInstruction(senderPubkey, recipientAta, recipientPubkey, SKR_DEVNET_MINT)
+      );
+    }
+
+    // 1 SKR = 1,000,000 atomic units (6 decimals)
+    const amountUnits = BigInt(Math.max(1, Math.round(amountSkr * 1_000_000)));
     transaction.add(
       this.createSplTokenTransferInstruction(senderAta, recipientAta, senderPubkey, amountUnits)
     );
