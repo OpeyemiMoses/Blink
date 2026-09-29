@@ -464,19 +464,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </Text>
         </View>
 
-        {authenticated ? (
-          <TouchableOpacity
-            style={styles.signOutBtn}
-            onPress={() => {
-              logout();
-              ToastService.info('Signed out of account');
-            }}
-            activeOpacity={0.8}
-          >
-            <LogOut size={14} color="#EF4444" />
-            <Text style={styles.signOutBtnText}>Sign Out</Text>
-          </TouchableOpacity>
-        ) : (
+        {!authenticated && (
           <TouchableOpacity
             style={styles.signInBtn}
             onPress={login}

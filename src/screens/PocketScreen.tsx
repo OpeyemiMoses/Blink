@@ -349,11 +349,6 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
             <Text style={[styles.heroAmount, { color: colors.textPrimary }]}>
               ${totalUsdValue.toFixed(2)}
             </Text>
-            <View style={styles.gainRow}>
-              <Text style={[styles.gainText, { color: colors.textSecondary }]}>
-                ● {safeSol > 0 ? `${safeSol.toFixed(4)} SOL` : '0.0000 SOL'} • {safeUsdc > 0 ? `${safeUsdc.toFixed(2)} USDC` : '0.00 USDC'} • {safeSkr > 0 ? `${safeSkr.toFixed(2)} SKR` : '0.00 SKR'}
-              </Text>
-            </View>
           </View>
 
           {/* Quick Action Buttons */}
@@ -481,16 +476,7 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
                 </Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity
-              style={styles.switchBtn}
-              onPress={() => {
-                logout();
-                ToastService.info('Signed out of wallet');
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.switchBtnText}>Sign Out</Text>
-            </TouchableOpacity>
+
             <TouchableOpacity
               style={styles.refreshIconBtn}
               onPress={() => {
