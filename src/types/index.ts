@@ -26,7 +26,7 @@ export interface SolanaActionMetadata {
   error?: {
     message: string;
   };
-  // TapBlink extensions
+  // Blink extensions
   skrRewardPercent?: number;
   merchantName?: string;
   category?: 'retail' | 'event' | 'defi' | 'social';

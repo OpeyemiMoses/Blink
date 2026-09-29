@@ -297,7 +297,7 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
       loadOnChainData(false);
     };
     if (typeof window !== 'undefined') {
-      window.addEventListener('tapblink_tx_updated', handleTxUpdate);
+      window.addEventListener('blink_tx_updated', handleTxUpdate);
       window.addEventListener('blink_balance_refresh', handleTxUpdate);
       window.addEventListener('focus', handleTxUpdate);
     }
@@ -305,7 +305,7 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
     return () => {
       clearInterval(interval);
       if (typeof window !== 'undefined') {
-        window.removeEventListener('tapblink_tx_updated', handleTxUpdate);
+        window.removeEventListener('blink_tx_updated', handleTxUpdate);
         window.removeEventListener('blink_balance_refresh', handleTxUpdate);
         window.removeEventListener('focus', handleTxUpdate);
       }

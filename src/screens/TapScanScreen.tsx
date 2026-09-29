@@ -339,7 +339,7 @@ export const TapScanScreen: React.FC<TapScanScreenProps> = ({
       ReceiptService.saveReceipt(rcpt);
 
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('tapblink_tx_updated', { detail: rcpt }));
+        window.dispatchEvent(new CustomEvent('blink_tx_updated', { detail: rcpt }));
       }
 
       const displayPaid = resolvedBlink.token === 'SOL'

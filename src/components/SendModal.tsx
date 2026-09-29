@@ -257,7 +257,7 @@ export const SendModal: React.FC<SendModalProps> = ({
 
       // Notify app to instantly refresh transactions and balance without waiting or manual refresh
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('tapblink_tx_updated', { detail: rcpt }));
+        window.dispatchEvent(new CustomEvent('blink_tx_updated', { detail: rcpt }));
       }
       onSuccess();
 
@@ -292,7 +292,7 @@ export const SendModal: React.FC<SendModalProps> = ({
         };
         ReceiptService.saveReceipt(fallbackRcpt);
         if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('tapblink_tx_updated', { detail: fallbackRcpt }));
+          window.dispatchEvent(new CustomEvent('blink_tx_updated', { detail: fallbackRcpt }));
         }
         setTimeout(() => onSuccess(), 500);
         return;

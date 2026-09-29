@@ -18,8 +18,8 @@ export interface BiometricSecurityStatus {
 }
 
 const SMS_APP_IDENTITY = {
-  name: 'Seeker TapBlink',
-  uri: 'https://seeker.tapblink.solana',
+  name: 'Blink',
+  uri: 'https://seeker.blink.solana',
   icon: 'icon.png',
 };
 

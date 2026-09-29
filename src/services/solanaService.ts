@@ -125,7 +125,7 @@ export class SolanaService {
       return mem.value;
     }
     if (typeof window !== 'undefined' && window.localStorage) {
-      const stored = window.localStorage.getItem(`tapblink_cached_sol_${pubkeyStr}`);
+      const stored = window.localStorage.getItem(`blink_cached_sol_${pubkeyStr}`);
       if (stored !== null && stored !== '') {
         const val = parseFloat(stored);
         if (!isNaN(val)) {
@@ -147,7 +147,7 @@ export class SolanaService {
       return mem.value;
     }
     if (typeof window !== 'undefined' && window.localStorage) {
-      const stored = window.localStorage.getItem(`tapblink_cached_usdc_${pubkeyStr}`);
+      const stored = window.localStorage.getItem(`blink_cached_usdc_${pubkeyStr}`);
       if (stored !== null && stored !== '') {
         const val = parseFloat(stored);
         if (!isNaN(val)) {
@@ -167,13 +167,13 @@ export class SolanaService {
     if (typeof sol === 'number' && !isNaN(sol)) {
       this.solCache.set(pubkeyStr, { value: sol, time: Date.now() });
       if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(`tapblink_cached_sol_${pubkeyStr}`, String(sol));
+        window.localStorage.setItem(`blink_cached_sol_${pubkeyStr}`, String(sol));
       }
     }
     if (typeof usdc === 'number' && !isNaN(usdc)) {
       this.usdcCache.set(pubkeyStr, { value: usdc, time: Date.now() });
       if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(`tapblink_cached_usdc_${pubkeyStr}`, String(usdc));
+        window.localStorage.setItem(`blink_cached_usdc_${pubkeyStr}`, String(usdc));
       }
     }
   }
@@ -205,7 +205,7 @@ export class SolanaService {
 
         this.solCache.set(pubkeyStr, { value: solVal, time: Date.now() });
         if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.setItem(`tapblink_cached_sol_${pubkeyStr}`, String(solVal));
+          window.localStorage.setItem(`blink_cached_sol_${pubkeyStr}`, String(solVal));
         }
         return solVal;
       } catch (err: any) {
@@ -296,7 +296,7 @@ export class SolanaService {
         const usdcVal = Number(total.toFixed(2));
         this.usdcCache.set(pubkeyStr, { value: usdcVal, time: Date.now() });
         if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.setItem(`tapblink_cached_usdc_${pubkeyStr}`, String(usdcVal));
+          window.localStorage.setItem(`blink_cached_usdc_${pubkeyStr}`, String(usdcVal));
         }
         return usdcVal;
       } catch (err: any) {

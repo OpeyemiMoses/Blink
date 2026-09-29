@@ -36,7 +36,7 @@ const DEFAULT_GLOBAL_BLINKS = [
     token: 'SOL',
     recipient: '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1',
     description: 'Support open-source builders creating physical Blinks on Solana Seeker.',
-    verifiedDomain: 'tapblink.so',
+    verifiedDomain: 'blink.so',
     visibility: 'global',
     createdAt: Date.now() - 86400000 * 3,
     updatedAt: Date.now(),
@@ -345,7 +345,7 @@ const server = http.createServer((req, res) => {
       return { taken: true, reason: 'Username may only contain letters, numbers, and underscores.' };
     }
 
-    const reserved = ['admin', 'root', 'system', 'blink', 'tapblink', 'seeker', 'solana', 'official', 'support', 'help', 'api'];
+    const reserved = ['admin', 'root', 'system', 'blink', 'blink', 'seeker', 'solana', 'official', 'support', 'help', 'api'];
     if (reserved.includes(clean)) {
       return { taken: true, reason: `@${clean} is a reserved system handle.` };
     }
@@ -773,7 +773,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`[TapBlink Server] Running on http://localhost:${PORT}`);
-  console.log(`[TapBlink Server] Serving static files from: ${DIST_DIR}`);
-  console.log(`[TapBlink Server] Cloud Sync REST API ready.`);
+  console.log(`[Blink Server] Running on http://localhost:${PORT}`);
+  console.log(`[Blink Server] Serving static files from: ${DIST_DIR}`);
+  console.log(`[Blink Server] Cloud Sync REST API ready.`);
 });

@@ -1,7 +1,7 @@
 import { TransactionReceipt } from '../types';
 import { EnrichedTransactionInfo, SolanaService } from './solanaService';
 
-const STORAGE_KEY = 'tapblink_transaction_receipts_v1';
+const STORAGE_KEY = 'blink_transaction_receipts_v1';
 
 export interface BlinkPayerInfo {
   address: string;

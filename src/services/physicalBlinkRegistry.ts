@@ -147,7 +147,7 @@ export class PhysicalBlinkRegistry {
       try {
         window.dispatchEvent(new CustomEvent('blink_registry_updated', { detail: blink }));
         window.dispatchEvent(new CustomEvent('blink_database_updated', { detail: blink }));
-        window.dispatchEvent(new CustomEvent('tapblink_blink_updated', { detail: blink }));
+        window.dispatchEvent(new CustomEvent('blink_updated', { detail: blink }));
       } catch {}
     }
   }

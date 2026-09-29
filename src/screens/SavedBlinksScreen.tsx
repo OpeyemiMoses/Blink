@@ -78,12 +78,12 @@ export const SavedBlinksScreen: React.FC<SavedBlinksScreenProps> = ({
       window.addEventListener('blink_bookmarks_updated', reloadBookmarks);
       window.addEventListener('blink_database_updated', reloadBookmarks);
       window.addEventListener('blink_registry_updated', reloadBookmarks);
-      window.addEventListener('tapblink_blink_updated', reloadBookmarks);
+      window.addEventListener('blink_updated', reloadBookmarks);
       return () => {
         window.removeEventListener('blink_bookmarks_updated', reloadBookmarks);
         window.removeEventListener('blink_database_updated', reloadBookmarks);
         window.removeEventListener('blink_registry_updated', reloadBookmarks);
-        window.removeEventListener('tapblink_blink_updated', reloadBookmarks);
+        window.removeEventListener('blink_updated', reloadBookmarks);
       };
     }
   }, []);

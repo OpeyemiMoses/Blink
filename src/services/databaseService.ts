@@ -312,7 +312,7 @@ export class DatabaseService {
         token: 'SOL',
         recipient: '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1',
         description: 'Support open-source builders creating physical Blinks on Solana Seeker.',
-        verifiedDomain: 'tapblink.so',
+        verifiedDomain: 'blink.so',
         visibility: 'global',
         createdAt: Date.now() - 86400000 * 3,
         updatedAt: Date.now(),

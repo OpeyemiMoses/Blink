@@ -165,7 +165,7 @@ export class BiometricService {
         publicKey: {
           challenge,
           rp: {
-            name: 'Seeker TapBlink',
+            name: 'Blink',
             ...(rpId ? { id: rpId } : {}),
           },
           user: {

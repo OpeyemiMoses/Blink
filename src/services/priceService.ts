@@ -9,7 +9,7 @@ export interface PriceData {
   source: string;
 }
 
-const STORAGE_KEY = 'tapblink_sol_price_data';
+const STORAGE_KEY = 'blink_sol_price_data';
 const DEFAULT_FALLBACK_PRICE = 118.84; // Real live market price baseline
 
 export class PriceService {

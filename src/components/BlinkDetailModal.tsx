@@ -159,11 +159,11 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
     if (typeof window !== 'undefined') {
       window.addEventListener('blink_registry_updated', handleRegistryUpdate);
       window.addEventListener('blink_database_updated', handleRegistryUpdate);
-      window.addEventListener('tapblink_blink_updated', handleRegistryUpdate);
+      window.addEventListener('blink_updated', handleRegistryUpdate);
       return () => {
         window.removeEventListener('blink_registry_updated', handleRegistryUpdate);
         window.removeEventListener('blink_database_updated', handleRegistryUpdate);
-        window.removeEventListener('tapblink_blink_updated', handleRegistryUpdate);
+        window.removeEventListener('blink_updated', handleRegistryUpdate);
       };
     }
   }, [currentBlink?.id]);
@@ -188,10 +188,10 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
     loadPayers();
     if (typeof window !== 'undefined') {
       const handleTxUpdate = () => loadPayers();
-      window.addEventListener('tapblink_tx_updated', handleTxUpdate);
+      window.addEventListener('blink_tx_updated', handleTxUpdate);
       window.addEventListener('blink_database_updated', handleTxUpdate);
       return () => {
-        window.removeEventListener('tapblink_tx_updated', handleTxUpdate);
+        window.removeEventListener('blink_tx_updated', handleTxUpdate);
         window.removeEventListener('blink_database_updated', handleTxUpdate);
       };
     }
@@ -573,7 +573,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('blink_balance_refresh'));
-        window.dispatchEvent(new CustomEvent('tapblink_tx_updated', { detail: rcpt }));
+        window.dispatchEvent(new CustomEvent('blink_tx_updated', { detail: rcpt }));
       }
       onUpdateBlink?.(currentBlink);
     } catch (err: any) {

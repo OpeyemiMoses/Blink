@@ -117,11 +117,11 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     if (typeof window !== 'undefined') {
       window.addEventListener('blink_registry_updated', handleUpdate);
       window.addEventListener('blink_database_updated', handleUpdate);
-      window.addEventListener('tapblink_blink_updated', handleUpdate);
+      window.addEventListener('blink_updated', handleUpdate);
       return () => {
         window.removeEventListener('blink_registry_updated', handleUpdate);
         window.removeEventListener('blink_database_updated', handleUpdate);
-        window.removeEventListener('tapblink_blink_updated', handleUpdate);
+        window.removeEventListener('blink_updated', handleUpdate);
       };
     }
   }, []);

@@ -430,7 +430,7 @@ function BlinkMainApp() {
             }
             if (changed && typeof window !== 'undefined') {
               // Automatically notify screens of new on-chain funds arrival
-              window.dispatchEvent(new CustomEvent('tapblink_tx_updated', { detail: { reason: 'balance_change' } }));
+              window.dispatchEvent(new CustomEvent('blink_tx_updated', { detail: { reason: 'balance_change' } }));
             }
           }
         } catch (err) {
@@ -458,7 +458,7 @@ function BlinkMainApp() {
     };
     if (typeof window !== 'undefined') {
       window.addEventListener('focus', onWindowFocus);
-      window.addEventListener('tapblink_tx_updated', onExternalTx);
+      window.addEventListener('blink_tx_updated', onExternalTx);
       window.addEventListener('blink_balance_refresh', onExternalTx);
     }
 
@@ -467,7 +467,7 @@ function BlinkMainApp() {
       clearInterval(interval);
       if (typeof window !== 'undefined') {
         window.removeEventListener('focus', onWindowFocus);
-        window.removeEventListener('tapblink_tx_updated', onExternalTx);
+        window.removeEventListener('blink_tx_updated', onExternalTx);
         window.removeEventListener('blink_balance_refresh', onExternalTx);
       }
     };

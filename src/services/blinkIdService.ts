@@ -14,7 +14,7 @@ export interface ResolvedBlinkId {
   source: 'profile' | 'server' | 'physical_blink' | 'address';
 }
 
-const STORAGE_KEY = 'tapblink_registered_blink_ids_v1';
+const STORAGE_KEY = 'blink_registered_blink_ids_v1';
 
 export class BlinkIdService {
   private static localRegistry: Record<string, ResolvedBlinkId> = {};
@@ -208,7 +208,7 @@ export class BlinkIdService {
       return { available: false, reason: 'Username may only contain letters, numbers, and underscores.' };
     }
 
-    const reserved = ['admin', 'root', 'system', 'blink', 'tapblink', 'seeker', 'solana', 'official', 'support', 'help', 'api'];
+    const reserved = ['admin', 'root', 'system', 'blink', 'blink', 'seeker', 'solana', 'official', 'support', 'help', 'api'];
     if (reserved.includes(clean)) {
       return { available: false, reason: `@${clean} is a reserved system handle.` };
     }

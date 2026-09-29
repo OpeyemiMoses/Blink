@@ -1,4 +1,4 @@
-# ⚡ TapBlink (Powered by Radiants)
+# ⚡ Blink (Powered by Radiants)
 > **The Physical Solana Actions & Blinks Engine for Solana Seeker**  
 > *Submitted to Clock In: A Solana Mobile Hackathon (September – October 2026)*
 
@@ -14,7 +14,7 @@ Solana Actions and Blinks turned complex smart contracts into shareable metadata
 
 Meanwhile, mobile web3 commerce has been stifled by Apple and Google's **30% App Store cut**, bans on direct crypto payments, and restrictions on background NFC protocols.
 
-**TapBlink** solves this by unlocking **Physical Blinks on the Solana Seeker**:
+**Blink** solves this by unlocking **Physical Blinks on the Solana Seeker**:
 1. **NFC Tap-to-Blink**: Tap any physical NFC tag, merchant terminal, or peer phone to execute a Solana Action in <400ms without opening browser tabs or copying addresses.
 2. **Seed Vault Biometric 1-Tap Execution**: Uses the Solana Mobile Stack (MWA) and hardware Seed Vault. Private keys never leave the secure enclave—sign with your fingerprint on the Seeker power button.
 3. **BlinkPocket**: A native mobile drawer to save, organize, and re-trigger your favorite Blinks (micro-tipping, daily DCA, yield vaults).
@@ -109,11 +109,11 @@ npx eas-cli build --platform android --profile preview
 
 | Time | Visual | Voiceover / Action |
 |---|---|---|
-| **0:00 - 0:25** | Host holds two Seeker phones; zooms into TapBlink app. | *"Blinks changed the web, but they've been trapped on desktop Twitter. Today, we're bringing Blinks into the physical world with TapBlink on Solana Seeker."* |
+| **0:00 - 0:25** | Host holds two Seeker phones; zooms into Blink app. | *"Blinks changed the web, but they've been trapped on desktop Twitter. Today, we're bringing Blinks into the physical world with Blink on Solana Seeker."* |
 | **0:25 - 0:55** | Phone 1 (Merchant) enters $4.50 for Coffee, activates NFC Beam. Phone 2 taps Phone 1 back-to-back. | *"Watch this: Phone 1 sets up an espresso order and beams it over NFC. Phone 2 taps it—instantly, the native Solana Action renders on screen."* |
 | **0:55 - 1:20** | Fingerprint prompt appears on Seeker. User touches power button sensor; payment confirms in ~400ms. | *"No browser popups, no seed phrases. 1-tap Seed Vault biometric approval on Seeker's hardware sensor, and the transaction is finalized on Solana."* |
 | **1:20 - 1:45** | Receipt modal triggers confetti and "+15 SKR Earned" badge. Shows $SKR Staking Vault. | *"And with Radiants $SKR integration, every tap earns instant cashback, while merchants stake SKR for 0% processing fees."* |
-| **1:45 - 2:00** | Shows BlinkPocket with saved actions and APK ready for Seeker dApp Store. | *"TapBlink: Zero 30% App Store tax, 100% hardware-powered. Clock In on Seeker today."* |
+| **1:45 - 2:00** | Shows BlinkPocket with saved actions and APK ready for Seeker dApp Store. | *"Blink: Zero 30% App Store tax, 100% hardware-powered. Clock In on Seeker today."* |
 
 ---
 
