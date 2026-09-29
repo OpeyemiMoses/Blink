@@ -39,6 +39,7 @@ export const SendModal: React.FC<SendModalProps> = ({
   const [amount, setAmount] = useState('');
   const [selectedToken, setSelectedToken] = useState<'SOL' | 'USDC' | 'SKR'>('SOL');
   const [currentBalanceUsdc, setCurrentBalanceUsdc] = useState<number>(0);
+  const [currentBalanceSkr, setCurrentBalanceSkr] = useState<number>(0);
   const [resolvedBlinkInfo, setResolvedBlinkInfo] = useState<{ id: string; name: string; recipient: string; amount?: number; token?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,10 +57,16 @@ export const SendModal: React.FC<SendModalProps> = ({
 
   React.useEffect(() => {
     if (senderPublicKey) {
-      const cached = SolanaService.getCachedUsdc(senderPublicKey);
-      if (cached !== null) setCurrentBalanceUsdc(cached);
+      const cachedUsdc = SolanaService.getCachedUsdc(senderPublicKey);
+      const cachedSkr = SolanaService.getCachedSkr(senderPublicKey);
+      if (cachedUsdc !== null) setCurrentBalanceUsdc(cachedUsdc);
+      if (cachedSkr !== null) setCurrentBalanceSkr(cachedSkr);
+
       SolanaService.getUsdcBalance(senderPublicKey).then((bal) => {
         if (typeof bal === 'number') setCurrentBalanceUsdc(bal);
+      });
+      SolanaService.getSkrBalance(senderPublicKey).then((bal) => {
+        if (typeof bal === 'number') setCurrentBalanceSkr(bal);
       });
     }
   }, [senderPublicKey, visible]);
@@ -123,10 +130,13 @@ export const SendModal: React.FC<SendModalProps> = ({
       return;
     }
 
-    const availableBal = selectedToken === 'SOL' ? currentBalanceSol : currentBalanceUsdc;
+    const availableBal = selectedToken === 'SOL' ? currentBalanceSol : (selectedToken === 'SKR' ? currentBalanceSkr : currentBalanceUsdc);
     if (numAmount > availableBal) {
+      const balStr = selectedToken === 'SOL'
+        ? `${currentBalanceSol.toFixed(4)} SOL`
+        : (selectedToken === 'SKR' ? `${currentBalanceSkr.toFixed(2)} SKR` : `$${currentBalanceUsdc.toFixed(2)} USDC`);
       setError(
-        `Insufficient ${selectedToken} balance. Current balance: ${selectedToken === 'SOL' ? `${currentBalanceSol.toFixed(4)} SOL` : `$${currentBalanceUsdc.toFixed(2)} USDC`}.`
+        `Insufficient ${selectedToken} balance. Current balance: ${balStr}.`
       );
       return;
     }
@@ -135,9 +145,10 @@ export const SendModal: React.FC<SendModalProps> = ({
       setLoading(true);
 
       // Pre-flight fresh balance check before biometrics or transaction building
-      const [freshSol, freshUsdc] = await Promise.all([
+      const [freshSol, freshUsdc, freshSkr] = await Promise.all([
         SolanaService.getBalance(senderPublicKey, true),
         SolanaService.getUsdcBalance(senderPublicKey, true),
+        SolanaService.getSkrBalance(senderPublicKey, true),
       ]);
 
       const MIN_GAS_SOL = 0.00001;
@@ -145,6 +156,17 @@ export const SendModal: React.FC<SendModalProps> = ({
       if (selectedToken === 'USDC') {
         if (numAmount > freshUsdc) {
           setError(`Insufficient USDC balance. You have $${freshUsdc.toFixed(2)} USDC, but are trying to send $${numAmount.toFixed(2)} USDC.`);
+          setLoading(false);
+          return;
+        }
+        if (freshSol < MIN_GAS_SOL) {
+          setError(`Insufficient SOL for network fee. You need at least 0.00001 SOL for gas, but have ${freshSol.toFixed(4)} SOL.`);
+          setLoading(false);
+          return;
+        }
+      } else if (selectedToken === 'SKR') {
+        if (numAmount > freshSkr) {
+          setError(`Insufficient SKR balance. You have ${freshSkr.toFixed(2)} SKR, but are trying to send ${numAmount.toFixed(2)} SKR.`);
           setLoading(false);
           return;
         }
@@ -170,8 +192,9 @@ export const SendModal: React.FC<SendModalProps> = ({
       } catch {}
 
       // 1. Mandatory Device Security: Face ID / Fingerprint / Passcode / Pattern
+      const tokenDisplayStr = selectedToken === 'SOL' ? `${numAmount} SOL` : (selectedToken === 'SKR' ? `${numAmount} SKR` : `$${numAmount.toFixed(2)} USDC`);
       const bioAuth = await BiometricService.authenticate(
-        `Authorize transfer of ${selectedToken === 'SOL' ? `${numAmount} SOL` : `$${numAmount.toFixed(2)} USDC`} on Solana`
+        `Authorize transfer of ${tokenDisplayStr} on Solana`
       );
       if (!bioAuth.success) {
         setError(bioAuth.error || 'Device security authorization was cancelled.');
@@ -249,12 +272,16 @@ export const SendModal: React.FC<SendModalProps> = ({
       // Optimistically update cached balance so UI reflects new balance immediately
       const currentSol = SolanaService.getCachedSol(senderPublicKey) ?? 0;
       const currentUsdc = SolanaService.getCachedUsdc(senderPublicKey) ?? 0;
+      const currentSkr = SolanaService.getCachedSkr(senderPublicKey) ?? 0;
       if (selectedToken === 'SOL') {
         const nextSol = Math.max(0, Number((currentSol - numAmount - 0.000005).toFixed(4)));
         SolanaService.setCachedBalance(senderPublicKey, nextSol);
-      } else {
+      } else if (selectedToken === 'USDC') {
         const nextUsdc = Math.max(0, Number((currentUsdc - numAmount).toFixed(2)));
         SolanaService.setCachedBalance(senderPublicKey, undefined, nextUsdc);
+      } else {
+        const nextSkr = Math.max(0, Number((currentSkr - numAmount).toFixed(2)));
+        SolanaService.setCachedBalance(senderPublicKey, undefined, undefined, nextSkr);
       }
 
       // Notify app to instantly refresh transactions and balance without waiting or manual refresh
@@ -263,7 +290,7 @@ export const SendModal: React.FC<SendModalProps> = ({
       }
       onSuccess();
 
-      ToastService.success(`Transfer of ${selectedToken === 'SOL' ? `${numAmount} SOL` : `$${numAmount.toFixed(2)} USDC`} confirmed.`);
+      ToastService.success(`Transfer of ${tokenDisplayStr} confirmed.`);
     } catch (err: any) {
       console.error('Send error:', err);
       const errMsg = err?.message || String(err);
@@ -519,6 +546,8 @@ export const SendModal: React.FC<SendModalProps> = ({
                       onPress={() => {
                         if (selectedToken === 'SOL') {
                           setAmount(Math.max(0, currentBalanceSol - 0.0005).toFixed(4));
+                        } else if (selectedToken === 'SKR') {
+                          setAmount(currentBalanceSkr.toFixed(2));
                         } else {
                           setAmount(currentBalanceUsdc.toFixed(2));
                         }
@@ -526,13 +555,13 @@ export const SendModal: React.FC<SendModalProps> = ({
                       activeOpacity={0.7}
                     >
                       <Text style={styles.maxText}>
-                        MAX ({selectedToken === 'SOL' ? `${currentBalanceSol.toFixed(4)} SOL` : `$${currentBalanceUsdc.toFixed(2)} USDC`})
+                        MAX ({selectedToken === 'SOL' ? `${currentBalanceSol.toFixed(4)} SOL` : (selectedToken === 'SKR' ? `${currentBalanceSkr.toFixed(2)} SKR` : `$${currentBalanceUsdc.toFixed(2)} USDC`)})
                       </Text>
                     </TouchableOpacity>
                   </View>
                   <TextInput
                     style={[styles.input, styles.amountInput]}
-                    placeholder={selectedToken === 'SOL' ? '0.00' : '0.00'}
+                    placeholder="0.00"
                     placeholderTextColor="#6B7280"
                     value={amount}
                     onChangeText={setAmount}
@@ -542,7 +571,9 @@ export const SendModal: React.FC<SendModalProps> = ({
                     <Text style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>
                       {selectedToken === 'SOL'
                         ? `≈ $${PriceService.convertSolToUsdt(parseFloat(amount)).toFixed(2)} USDT`
-                        : `≈ $${parseFloat(amount).toFixed(2)} USD`}
+                        : (selectedToken === 'SKR'
+                          ? `≈ $${PriceService.convertSkrToUsdt(parseFloat(amount)).toFixed(2)} USDT`
+                          : `≈ $${parseFloat(amount).toFixed(2)} USD`)}
                     </Text>
                   )}
                 </View>
@@ -556,7 +587,7 @@ export const SendModal: React.FC<SendModalProps> = ({
                 <View style={styles.feeInfoRow}>
                   <Text style={styles.feeLabel}>Network / Currency</Text>
                   <Text style={styles.feeValue}>
-                    {selectedToken === 'USDC' ? 'USDC (Solana SPL Token)' : 'SOL (Solana Native)'}
+                    {selectedToken === 'USDC' ? 'USDC (Solana SPL Token)' : (selectedToken === 'SKR' ? 'SKR (Solana Mobile Token)' : 'SOL (Solana Native)')}
                   </Text>
                 </View>
 
@@ -590,7 +621,7 @@ export const SendModal: React.FC<SendModalProps> = ({
                         {amount && parseFloat(amount) > 0
                           ? selectedToken === 'SOL'
                             ? `Pay ${amount} SOL`
-                            : `Pay $${parseFloat(amount).toFixed(2)} USDC`
+                            : (selectedToken === 'SKR' ? `Pay ${amount} SKR` : `Pay $${parseFloat(amount).toFixed(2)} USDC`)
                           : `Pay ${selectedToken}`}
                       </Text>
                       <ArrowRight size={15} color="#FFFFFF" />

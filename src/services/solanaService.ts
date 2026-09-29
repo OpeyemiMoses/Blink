@@ -15,7 +15,7 @@ export const MAINNET_RPC = 'https://api.mainnet-beta.solana.com';
 
 // Official Solana Devnet USDC & SKR SPL Mint & Program IDs
 export const USDC_DEVNET_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
-export const SKR_DEVNET_MINT = new PublicKey('SKR1111111111111111111111111111111111111111');
+export const SKR_DEVNET_MINT = new PublicKey('SKRbvo6Gf7GondiT3BbTfuRDPqLWei4j2Qy2NPGZhW3');
 export const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 export const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 
