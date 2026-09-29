@@ -114,6 +114,24 @@ function BlinkMainApp() {
   // Detail Modal for Screenshot 2 view
   const [selectedDetailBlink, setSelectedDetailBlink] = useState<PhysicalBlink | null>(null);
 
+  useEffect(() => {
+    const handleBlinkDeleted = (e: any) => {
+      const deletedId = e?.detail?.id;
+      if (deletedId && selectedDetailBlink?.id && selectedDetailBlink.id.toLowerCase() === String(deletedId).toLowerCase()) {
+        setSelectedDetailBlink(null);
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('blink_deleted', handleBlinkDeleted);
+      window.addEventListener('tapblink_blink_deleted', handleBlinkDeleted);
+      return () => {
+        window.removeEventListener('blink_deleted', handleBlinkDeleted);
+        window.removeEventListener('tapblink_blink_deleted', handleBlinkDeleted);
+      };
+    }
+  }, [selectedDetailBlink?.id]);
+
   // Modals
   const [aboutModalVisible, setAboutModalVisible] = useState(false);
   const [sendModalVisible, setSendModalVisible] = useState(false);

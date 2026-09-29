@@ -1,5 +1,5 @@
 # Session Memory — TapBlink / Seeker Project
-**Saved:** 2026-09-29T23:30
+**Saved:** 2026-09-29T23:32
 
 ---
 
@@ -7,19 +7,21 @@
 
 1. **Always Save Memory on Task Completion:** Update and persist `session_memory.md` after EVERY task or response without exception.
 2. **Always Provide Mobile Test URL:** Provide the active HTTPS tunnel URL after every rebuild for instant mobile preview.
-3. **Strict Creator-Only Editing & Deletion:**
+3. **Instant Modal Dismissal on Delete:**
+   - Deleting a Blink instantly invokes `onClose()`, resetting `selectedDetailBlink` state to `null` with 0ms delay.
+   - `App.tsx` and `BlinkDetailModal.tsx` listen to deletion window events (`blink_deleted`, `tapblink_blink_deleted`) and auto-dismiss the modal page, seamlessly returning the user to the exact screen they opened the Blink from (`MarketsScreen`, `StudioScreen`, etc.).
+4. **Strict Creator-Only Editing & Deletion:**
    - Non-creators cannot see or invoke Edit or Delete buttons anywhere (`BlinkDetailModal.tsx`, `StudioScreen.tsx`).
    - `server.js` validates creator matching case-insensitively (`incomingRequester === existingCreator`) and rejects unauthorized edit or deletion attempts with HTTP 403.
-4. **Global Cross-Device Deletion Sync:**
+5. **Global Cross-Device Deletion Sync:**
    - When a creator deletes a Blink, `server.js` adds the ID to `deletedBlinksDb` (`server_deleted_db.json`).
    - Every client device running `PhysicalBlinkRegistry.syncFromCloud()` automatically purges tombstoned IDs from `this.globalCloudBlinks`, `this.blinks`, `DatabaseService`, and `localStorage` across all user sessions globally.
-5. **Scrollable Mobile Search & Filter Bars:** The search bar and category filter pills in `MarketsScreen.tsx` are wrapped in a horizontal `ScrollView` so no text, input fields, or pills get cut off on mobile viewports.
-6. **No Mocked or Pre-populated Default Blinks:** All seeded, mocked, and default blinks (`DEFAULT_GLOBAL_BLINKS`, `DEFAULT_FALLBACKS`, `server_db.json`) are completely removed from both backend and frontend. The app operates with a clean slate for real user-created Blinks.
-7. **No "Choose from Gallery" button anywhere:** Avatar changes are strictly via camera or 3D Mascot selector.
-8. **No inline alert/toast banners:** Use `ToastService` exclusively.
-9. **Profile Edit Form Hidden by Default:** Collapses once saved; pencil icon toggles display.
-10. **3D Toy / Lego Mascot Avatars as Default:** All new accounts receive one of the 6 colorful 3D Toy/Lego mascot avatars from `assets/avatars/` (`mascot_purple.png`, `mascot_green.png`, `mascot_pink.png`, `mascot_cyan.png`, `mascot_orange.png`, `mascot_gold.png`) at random until they choose to change it.
-11. **Modal Auto-Dismissal on Delete:** Deleting a Blink from `BlinkDetailModal` or `StudioScreen` immediately dismisses the modal page (`onClose()`) and returns to the previous screen.
+6. **Scrollable Mobile Search & Filter Bars:** The search bar and category filter pills in `MarketsScreen.tsx` are wrapped in a horizontal `ScrollView` so no text, input fields, or pills get cut off on mobile viewports.
+7. **No Mocked or Pre-populated Default Blinks:** All seeded, mocked, and default blinks (`DEFAULT_GLOBAL_BLINKS`, `DEFAULT_FALLBACKS`, `server_db.json`) are completely removed from both backend and frontend. The app operates with a clean slate for real user-created Blinks.
+8. **No "Choose from Gallery" button anywhere:** Avatar changes are strictly via camera or 3D Mascot selector.
+9. **No inline alert/toast banners:** Use `ToastService` exclusively.
+10. **Profile Edit Form Hidden by Default:** Collapses once saved; pencil icon toggles display.
+11. **3D Toy / Lego Mascot Avatars as Default:** All new accounts receive one of the 6 colorful 3D Toy/Lego mascot avatars from `assets/avatars/` (`mascot_purple.png`, `mascot_green.png`, `mascot_pink.png`, `mascot_cyan.png`, `mascot_orange.png`, `mascot_gold.png`) at random until they choose to change it.
 12. **Clean Header & Hero Cards (No Subtext / Redundant Sign Out Pills):**
     - Subtext balance lines (`● X.XXXX SOL • XX.XX USDC`) removed from balance hero cards in `PocketScreen.tsx` and `MarketsScreen.tsx`.
     - Redundant top header `Sign Out` button pills removed from `ProfileScreen.tsx` and `PocketScreen.tsx` header actions.
@@ -42,13 +44,10 @@
 
 ---
 
-## Latest Update: Strict Creator-Only Edit/Delete Guard & Global Synchronized Deletions
+## Latest Update: Automatic Modal Dismissal on Delete & Seamless Page Return
 
 ### 1. Requirements & Fix Summary
-- **Creator-Only Authorization Guard:**
-  - Removed faulty database fallback check from `isCreator` in `BlinkDetailModal.tsx` so only authentic creators (matching recipient wallet or creator public key) are granted Edit or Delete controls.
-  - Non-creators CANNOT see or access Edit or Delete options anywhere.
-  - Server routes `POST /api/blinks` (for edits) and `DELETE /api/blinks/:id` (for deletion) enforce case-insensitive creator verification and reject unauthorized requests with HTTP 403 Forbidden.
-- **Global Cross-Device Deletion:**
-  - Deleting a Blink adds its ID to `deletedBlinksDb` (`server_deleted_db.json`).
-  - `PhysicalBlinkRegistry.syncFromCloud()` automatically purges tombstoned IDs across all client devices, browser sessions, local storage, and database records globally for every user.
+- **Instant Deletion Navigation:**
+  - Removed `onUpdateBlink` callback invocation on deletion so `selectedDetailBlink` state is never re-assigned with the deleted item.
+  - Implemented real-time deletion event listeners (`blink_deleted`, `tapblink_blink_deleted`) in both [`App.tsx`](file:///Users/user/.gemini/antigravity-ide/scratch/seeker-tapblink/App.tsx) and [`BlinkDetailModal.tsx`](file:///Users/user/.gemini/antigravity-ide/scratch/seeker-tapblink/src/components/BlinkDetailModal.tsx).
+  - Upon confirming deletion, the Blink detail modal instantly closes (`onClose()`) and returns the user to the exact screen they clicked the Blink from (`MarketsScreen`, `StudioScreen`, or `SavedBlinksScreen`).

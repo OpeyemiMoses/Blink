@@ -110,6 +110,25 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
     )
   );
 
+  useEffect(() => {
+    const handleDeletedEvent = (e: any) => {
+      const deletedId = e?.detail?.id;
+      if (deletedId && currentBlink?.id && currentBlink.id.toLowerCase() === String(deletedId).toLowerCase()) {
+        setShowDeleteConfirm(false);
+        onClose();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('blink_deleted', handleDeletedEvent);
+      window.addEventListener('tapblink_blink_deleted', handleDeletedEvent);
+      return () => {
+        window.removeEventListener('blink_deleted', handleDeletedEvent);
+        window.removeEventListener('tapblink_blink_deleted', handleDeletedEvent);
+      };
+    }
+  }, [currentBlink?.id, onClose]);
+
   const fetchLiveBalance = async () => {
     const acc = WalletProviderService.getActiveAccount();
     if (!acc?.publicKey) {
@@ -1452,10 +1471,11 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                   }}
                   onPress={() => {
                     setShowDeleteConfirm(false);
-                    PhysicalBlinkRegistry.deleteBlink(currentBlink.id, activeAccount?.publicKey);
-                    ToastService.success(`Deleted Blink "${currentBlink.name}".`);
-                    if (onUpdateBlink) onUpdateBlink(currentBlink);
+                    const delId = currentBlink.id;
+                    const delName = currentBlink.name;
                     onClose();
+                    PhysicalBlinkRegistry.deleteBlink(delId, activeAccount?.publicKey);
+                    ToastService.success(`Deleted Blink "${delName}".`);
                   }}
                   activeOpacity={0.8}
                 >
