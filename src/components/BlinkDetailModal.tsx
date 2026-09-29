@@ -982,8 +982,9 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
             </View>
           )}
 
-          {/* Payers Section */}
-          <View style={[styles.aboutCard, { backgroundColor: colors.bgCard, borderColor: colors.border, marginTop: 14 }]}>
+          {/* Payers Section (Visible ONLY to creator of the Blink) */}
+          {isCreator && (
+            <View style={[styles.aboutCard, { backgroundColor: colors.bgCard, borderColor: colors.border, marginTop: 14 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
                 <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
@@ -1159,6 +1160,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
               </View>
             )}
           </View>
+          )}
         </ScrollView>
 
         {/* Floating Bottom Dual Action Bar */}

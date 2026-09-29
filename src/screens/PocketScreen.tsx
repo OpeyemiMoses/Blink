@@ -112,7 +112,7 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
       const cached = SolanaService.getCachedSkr(activePublicKey);
       if (cached !== null) return cached;
     }
-    return 500;
+    return 0;
   });
   const [solPrice, setSolPrice] = useState<number>(() => PriceService.getSolPriceSync());
   const [loading, setLoading] = useState<boolean>(false);

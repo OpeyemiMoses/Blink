@@ -348,7 +348,7 @@ export class SolanaService {
   }
 
   /**
-   * Query real on-chain balance in SKR on Solana network with deduplication and cache fallback.
+   * Query real on-chain balance in SKR (Solana Mobile Token) on mainnet/devnet with deduplication and cache fallback.
    */
   static async getSkrBalance(pubkeyStr: string, forceFresh = false): Promise<number> {
     if (!pubkeyStr) return 0;
@@ -369,12 +369,14 @@ export class SolanaService {
         const pubkey = new PublicKey(pubkeyStr);
         let total = 0;
 
+        // 1. Query real SKR token balance on mainnet
         try {
-          const accounts = await this.connection.getParsedTokenAccountsByOwner(pubkey, {
+          const mainnetConn = new Connection(MAINNET_RPC, 'confirmed');
+          const mainnetAccounts = await mainnetConn.getParsedTokenAccountsByOwner(pubkey, {
             mint: SKR_DEVNET_MINT,
           });
-          if (accounts && accounts.value.length > 0) {
-            for (const item of accounts.value) {
+          if (mainnetAccounts && mainnetAccounts.value.length > 0) {
+            for (const item of mainnetAccounts.value) {
               const parsed = item.account.data?.parsed?.info?.tokenAmount;
               if (parsed && typeof parsed.uiAmount === 'number') {
                 total += parsed.uiAmount;
@@ -385,13 +387,23 @@ export class SolanaService {
           // quiet ignore
         }
 
-        // If on-chain balance is 0 or unminted on Devnet, default to starter SKR balance (500 SKR)
+        // 2. Also check devnet token account
         if (total === 0) {
-          const lastKnown = this.getCachedSkr(pubkeyStr);
-          if (lastKnown !== null) return lastKnown;
-          total = 500;
-          this.setCachedBalance(pubkeyStr, undefined, undefined, 500);
-          return 500;
+          try {
+            const devnetAccounts = await this.connection.getParsedTokenAccountsByOwner(pubkey, {
+              mint: SKR_DEVNET_MINT,
+            });
+            if (devnetAccounts && devnetAccounts.value.length > 0) {
+              for (const item of devnetAccounts.value) {
+                const parsed = item.account.data?.parsed?.info?.tokenAmount;
+                if (parsed && typeof parsed.uiAmount === 'number') {
+                  total += parsed.uiAmount;
+                }
+              }
+            }
+          } catch (e) {
+            // quiet ignore
+          }
         }
 
         const skrVal = Number(total.toFixed(2));
@@ -401,12 +413,9 @@ export class SolanaService {
         }
         return skrVal;
       } catch (err: any) {
-        console.warn('SolanaService.getSkrBalance RPC error or rate-limited:', err?.message || err);
+        console.warn('SolanaService.getSkrBalance RPC error:', err?.message || err);
         const lastKnown = this.getCachedSkr(pubkeyStr);
-        if (lastKnown !== null) {
-          return lastKnown;
-        }
-        return 500;
+        return lastKnown !== null ? lastKnown : 0;
       } finally {
         this.inFlightSkr.delete(pubkeyStr);
       }
