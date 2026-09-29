@@ -265,25 +265,23 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({
         </TouchableOpacity>
       </View>
 
-      {/* Search & Category Pills */}
-      <View style={styles.filterBar}>
-        <View style={[styles.searchIconBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-          <Search size={14} color={colors.textMuted} />
+      {/* Search & Category Pills Horizontal Scroll Container */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterBarScroll}
+        style={styles.filterBarWrapper}
+      >
+        <View style={[styles.searchPillBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <Search size={14} color={colors.textMuted} style={{ marginLeft: 10 }} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.textPrimary }]}
+            placeholder="Search by name, ID or domain..."
+            placeholderTextColor={colors.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
         </View>
-
-        <TextInput
-          style={{
-            flex: 1,
-            color: colors.textPrimary,
-            fontSize: 13,
-            paddingVertical: 4,
-            paddingHorizontal: 6,
-          }}
-          placeholder="Search by name, ID or domain..."
-          placeholderTextColor={colors.textMuted}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
 
         {(['trending', 'completed', 'volume'] as const).map((filter) => (
           <TouchableOpacity
@@ -305,7 +303,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({
             </Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
       {/* Rich List Items with real data */}
       <View style={styles.listSection}>
@@ -593,21 +591,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#5B67F6',
     borderRadius: 2,
   },
-  filterBar: {
+  filterBarWrapper: {
+    marginBottom: 18,
+    marginHorizontal: -6,
+  },
+  filterBarScroll: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 18,
+    paddingHorizontal: 6,
   },
-  searchIconBox: {
-    backgroundColor: '#0F1118',
-    borderWidth: 1,
-    borderColor: '#1D212E',
-    borderRadius: 20,
-    width: 36,
-    height: 36,
+  searchPillBox: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    borderWidth: 1,
+    borderRadius: 20,
+    height: 36,
+    width: 210,
+    paddingRight: 6,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
   },
   filterPill: {
     backgroundColor: '#0F1118',
