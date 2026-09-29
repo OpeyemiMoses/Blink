@@ -92,10 +92,19 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
   const [isAirdropping, setIsAirdropping] = useState(false);
 
   const activeAccount = WalletProviderService.getActiveAccount();
+  const userProfile = UserProfileService.getProfile();
+  const userBlinkId = BlinkIdService.formatBlinkId(userProfile.username || userProfile.displayName, activeAccount?.publicKey);
+  const userUsername = (userProfile.username || '').trim().toLowerCase();
+
   const isCreator = Boolean(
     activeAccount?.publicKey &&
-    (activeAccount.publicKey === currentBlink.recipient ||
-     (currentBlink as any).creatorAddress === activeAccount.publicKey)
+    (
+      activeAccount.publicKey.toLowerCase() === (currentBlink.recipient || '').toLowerCase() ||
+      ((currentBlink as any).creatorAddress && (currentBlink as any).creatorAddress.toLowerCase() === activeAccount.publicKey.toLowerCase()) ||
+      (userUsername && userUsername.length > 0 && currentBlink.recipient && currentBlink.recipient.toLowerCase().includes(userUsername)) ||
+      (userBlinkId && currentBlink.recipient && userBlinkId.toLowerCase() === currentBlink.recipient.toLowerCase()) ||
+      (currentBlink.id && DatabaseService.getAllBlinks()?.some(b => b.id.toLowerCase() === currentBlink.id.toLowerCase()))
+    )
   );
 
   const fetchLiveBalance = async () => {

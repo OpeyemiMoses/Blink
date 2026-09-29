@@ -268,8 +268,17 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     onProfileUpdated();
   };
 
+  const handleCancel = () => {
+    const p = UserProfileService.getProfile();
+    setUsername(p.username);
+    setDisplayName(p.displayName);
+    setAvatarUrl(p.avatarUrl);
+    setBio(p.bio);
+    onClose();
+  };
+
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleCancel}>
       <View style={styles.overlay}>
         <View style={styles.modalBox}>
           {/* Header */}
@@ -278,7 +287,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               <Text style={styles.headerTitle}>Edit Profile & Identities</Text>
               <Text style={styles.headerSub}>Manage your username, avatar, and Privy social accounts</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
+            <TouchableOpacity onPress={handleCancel} style={styles.closeBtn} activeOpacity={0.7}>
               <X size={18} color="#94A3B8" />
             </TouchableOpacity>
           </View>
@@ -737,7 +746,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
           {/* Footer Actions */}
           <View style={styles.footer}>
-            <TouchableOpacity onPress={onClose} style={styles.cancelBtn} activeOpacity={0.8}>
+            <TouchableOpacity onPress={handleCancel} style={styles.cancelBtn} activeOpacity={0.8}>
               <Text style={styles.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>
 

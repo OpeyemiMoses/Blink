@@ -107,6 +107,13 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
     }
     return 0;
   });
+  const [skrBalance, setSkrBalance] = useState<number>(() => {
+    if (activePublicKey) {
+      const cached = SolanaService.getCachedSkr(activePublicKey);
+      if (cached !== null) return cached;
+    }
+    return 500;
+  });
   const [solPrice, setSolPrice] = useState<number>(() => PriceService.getSolPriceSync());
   const [loading, setLoading] = useState<boolean>(false);
   const [signatures, setSignatures] = useState<EnrichedTransactionInfo[]>([]);
@@ -149,15 +156,19 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
     }
     if (showLoading) setLoading(true);
     try {
-      const [bal, usdc] = await Promise.all([
+      const [bal, usdc, skr] = await Promise.all([
         SolanaService.getBalance(activePublicKey, showLoading),
         SolanaService.getUsdcBalance(activePublicKey, showLoading),
+        SolanaService.getSkrBalance(activePublicKey, showLoading),
       ]);
       if (typeof bal === 'number' && !isNaN(bal)) {
         setBalance(bal);
       }
       if (typeof usdc === 'number' && !isNaN(usdc)) {
         setUsdcBalance(usdc);
+      }
+      if (typeof skr === 'number' && !isNaN(skr)) {
+        setSkrBalance(skr);
       }
 
       const sigs = await SolanaService.getEnrichedRecentTransactions(activePublicKey, 50);
@@ -625,6 +636,25 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
             <Text style={[styles.holdingPrice, { color: colors.textPrimary }]}>${usdcBalance.toFixed(2)}</Text>
             <Text style={[styles.holdingBalance, { color: colors.textMuted }]}>
               {usdcBalance > 0 ? `${usdcBalance.toFixed(2)} USDC` : '0.00 USDC'}
+            </Text>
+          </View>
+        </View>
+
+        {/* SKR Holding */}
+        <View style={[styles.holdingItem, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <View style={styles.holdingItemLeft}>
+            <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#8B5CF6', alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: 13 }}>SKR</Text>
+            </View>
+            <View style={{ marginLeft: 12 }}>
+              <Text style={[styles.holdingSymbol, { color: colors.textPrimary }]}>SKR</Text>
+              <Text style={[styles.holdingName, { color: colors.textSecondary }]}>Seeker Ecosystem Token</Text>
+            </View>
+          </View>
+          <View style={styles.holdingItemRight}>
+            <Text style={[styles.holdingPrice, { color: colors.textPrimary }]}>${(skrBalance * 0.10).toFixed(2)}</Text>
+            <Text style={[styles.holdingBalance, { color: colors.textMuted }]}>
+              {skrBalance > 0 ? `${skrBalance.toFixed(2)} SKR` : '0.00 SKR'}
             </Text>
           </View>
         </View>

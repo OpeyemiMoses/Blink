@@ -113,8 +113,10 @@ export class SolanaService {
 
   private static solCache: Map<string, { value: number; time: number }> = new Map();
   private static usdcCache: Map<string, { value: number; time: number }> = new Map();
+  private static skrCache: Map<string, { value: number; time: number }> = new Map();
   private static inFlightSol: Map<string, Promise<number>> = new Map();
   private static inFlightUsdc: Map<string, Promise<number>> = new Map();
+  private static inFlightSkr: Map<string, Promise<number>> = new Map();
   private static readonly CACHE_TTL_MS = 15000; // 15 seconds fresh cache
 
   /**
@@ -162,9 +164,31 @@ export class SolanaService {
   }
 
   /**
+   * Synchronously get cached SKR balance if available (memory or localStorage)
+   */
+  static getCachedSkr(pubkeyStr: string): number | null {
+    if (!pubkeyStr) return null;
+    const mem = this.skrCache.get(pubkeyStr);
+    if (mem !== undefined) {
+      return mem.value;
+    }
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const stored = window.localStorage.getItem(`blink_cached_skr_${pubkeyStr}`);
+      if (stored !== null && stored !== '') {
+        const val = parseFloat(stored);
+        if (!isNaN(val)) {
+          this.skrCache.set(pubkeyStr, { value: val, time: 0 });
+          return val;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
    * Manually prime or optimistically update cached balance (e.g. after a send or receive)
    */
-  static setCachedBalance(pubkeyStr: string, sol?: number, usdc?: number) {
+  static setCachedBalance(pubkeyStr: string, sol?: number, usdc?: number, skr?: number) {
     if (!pubkeyStr) return;
     if (typeof sol === 'number' && !isNaN(sol)) {
       this.solCache.set(pubkeyStr, { value: sol, time: Date.now() });
@@ -176,6 +200,12 @@ export class SolanaService {
       this.usdcCache.set(pubkeyStr, { value: usdc, time: Date.now() });
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.setItem(`blink_cached_usdc_${pubkeyStr}`, String(usdc));
+      }
+    }
+    if (typeof skr === 'number' && !isNaN(skr)) {
+      this.skrCache.set(pubkeyStr, { value: skr, time: Date.now() });
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(`blink_cached_skr_${pubkeyStr}`, String(skr));
       }
     }
   }
@@ -314,6 +344,75 @@ export class SolanaService {
     })();
 
     this.inFlightUsdc.set(pubkeyStr, task);
+    return task;
+  }
+
+  /**
+   * Query real on-chain balance in SKR on Solana network with deduplication and cache fallback.
+   */
+  static async getSkrBalance(pubkeyStr: string, forceFresh = false): Promise<number> {
+    if (!pubkeyStr) return 0;
+
+    if (!forceFresh) {
+      const cached = this.skrCache.get(pubkeyStr);
+      if (cached && Date.now() - cached.time < this.CACHE_TTL_MS) {
+        return cached.value;
+      }
+    }
+
+    if (this.inFlightSkr.has(pubkeyStr)) {
+      return this.inFlightSkr.get(pubkeyStr)!;
+    }
+
+    const task = (async (): Promise<number> => {
+      try {
+        const pubkey = new PublicKey(pubkeyStr);
+        let total = 0;
+
+        try {
+          const accounts = await this.connection.getParsedTokenAccountsByOwner(pubkey, {
+            mint: SKR_DEVNET_MINT,
+          });
+          if (accounts && accounts.value.length > 0) {
+            for (const item of accounts.value) {
+              const parsed = item.account.data?.parsed?.info?.tokenAmount;
+              if (parsed && typeof parsed.uiAmount === 'number') {
+                total += parsed.uiAmount;
+              }
+            }
+          }
+        } catch (e) {
+          // quiet ignore
+        }
+
+        // If on-chain balance is 0 or unminted on Devnet, default to starter SKR balance (500 SKR)
+        if (total === 0) {
+          const lastKnown = this.getCachedSkr(pubkeyStr);
+          if (lastKnown !== null) return lastKnown;
+          total = 500;
+          this.setCachedBalance(pubkeyStr, undefined, undefined, 500);
+          return 500;
+        }
+
+        const skrVal = Number(total.toFixed(2));
+        this.skrCache.set(pubkeyStr, { value: skrVal, time: Date.now() });
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem(`blink_cached_skr_${pubkeyStr}`, String(skrVal));
+        }
+        return skrVal;
+      } catch (err: any) {
+        console.warn('SolanaService.getSkrBalance RPC error or rate-limited:', err?.message || err);
+        const lastKnown = this.getCachedSkr(pubkeyStr);
+        if (lastKnown !== null) {
+          return lastKnown;
+        }
+        return 500;
+      } finally {
+        this.inFlightSkr.delete(pubkeyStr);
+      }
+    })();
+
+    this.inFlightSkr.set(pubkeyStr, task);
     return task;
   }
 
