@@ -41,10 +41,18 @@ export class PhysicalBlinkRegistry {
         const data = await res.json();
         if (data.success && Array.isArray(data.blinks)) {
           this.globalCloudBlinks = data.blinks;
-
-          // Merge cloud blinks into local registry so all devices share them
           let current = this.loadRegistry();
           let changed = false;
+
+          // Purge legacy mock default Blinks if present in local cache
+          const mockIds = ['tip-solana-dev', 'mint-seeker-pioneer', 'charity-clean-oceans', 'voucher-hacker-house', 'voucher-coffee-seeker'];
+          for (const mId of mockIds) {
+            const beforeLen = current.length;
+            current = current.filter(b => b.id.toLowerCase() !== mId);
+            this.globalCloudBlinks = this.globalCloudBlinks.filter(b => b.id.toLowerCase() !== mId);
+            if (current.length < beforeLen) changed = true;
+            DatabaseService.deleteBlink(mId);
+          }
 
           // Purge any globally deleted Blinks tombstoned by cloud server
           if (Array.isArray(data.deletedIds) && data.deletedIds.length > 0) {
@@ -58,14 +66,21 @@ export class PhysicalBlinkRegistry {
             }
           }
 
-          for (const cb of data.blinks) {
-            const existingIdx = current.findIndex(b => b.id.toLowerCase() === cb.id.toLowerCase());
-            if (existingIdx >= 0) {
-              current[existingIdx] = { ...current[existingIdx], ...cb };
-              changed = true;
-            } else {
-              current.unshift(cb);
-              changed = true;
+          if (data.blinks.length === 0) {
+            // Cloud has 0 blinks, keep only user blinks or set to empty
+            current = current.filter(b => !!b.creatorAddress);
+            this.blinks = current;
+            this.saveRegistry();
+          } else {
+            for (const cb of data.blinks) {
+              const existingIdx = current.findIndex(b => b.id.toLowerCase() === cb.id.toLowerCase());
+              if (existingIdx >= 0) {
+                current[existingIdx] = { ...current[existingIdx], ...cb };
+                changed = true;
+              } else {
+                current.unshift(cb);
+                changed = true;
+              }
             }
           }
           if (changed) {

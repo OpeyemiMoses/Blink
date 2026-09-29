@@ -302,71 +302,7 @@ export class DatabaseService {
       } catch {}
     }
 
-    // 3. Fallback to default registered blinks
-    const DEFAULT_FALLBACKS: PhysicalBlink[] = [
-      {
-        id: 'tip-solana-dev',
-        name: 'Solana Mobile Dev Tip Jar',
-        actionType: 'tip',
-        amount: 0.05,
-        token: 'SOL',
-        recipient: '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1',
-        description: 'Support open-source builders creating physical Blinks on Solana Seeker.',
-        verifiedDomain: 'blink.so',
-        visibility: 'global',
-        createdAt: Date.now() - 86400000 * 3,
-        updatedAt: Date.now(),
-        stats: { taps: 142, completed: 89, volumeUsdc: 44.5 },
-      },
-      {
-        id: 'mint-seeker-pioneer',
-        name: 'Seeker Pioneer Commemorative POAP',
-        actionType: 'mint',
-        amount: 0.01,
-        token: 'SOL',
-        recipient: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
-        description: 'Mint your exclusive on-chain proof of physical Solana tap interaction.',
-        verifiedDomain: 'seeker.solana.com',
-        visibility: 'global',
-        createdAt: Date.now() - 86400000 * 2,
-        updatedAt: Date.now(),
-        stats: { taps: 310, completed: 278, volumeUsdc: 27.8 },
-      },
-      {
-        id: 'charity-clean-oceans',
-        name: 'Clean Oceans Solana Fund',
-        actionType: 'donation',
-        amount: 1.0,
-        token: 'USDC',
-        recipient: '8W9B7W8j3FvX9mJ5Hk2Vb1L6Q4zC8eRtP0sY5uIa3Op',
-        description: 'Verified ocean cleanup initiative on Solana.',
-        verifiedDomain: 'oceans.solana.org',
-        visibility: 'global',
-        createdAt: Date.now() - 86400000 * 5,
-        updatedAt: Date.now(),
-        stats: { taps: 521, completed: 498, volumeUsdc: 498.0 },
-      },
-      {
-        id: 'voucher-coffee-seeker',
-        name: 'Decaf & Code $5 Voucher',
-        actionType: 'voucher',
-        amount: 5.0,
-        token: 'USDC',
-        recipient: '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin',
-        description: 'Redeem for specialty coffee at any Solana Hacker House or Seeker kiosk.',
-        verifiedDomain: 'decaf.so',
-        visibility: 'global',
-        createdAt: Date.now() - 86400000 * 1,
-        updatedAt: Date.now(),
-        stats: { taps: 88, completed: 72, volumeUsdc: 360.0 },
-      },
-    ];
 
-    for (const b of DEFAULT_FALLBACKS) {
-      if (!allBlinksMap.has(b.id)) {
-        allBlinksMap.set(b.id, b);
-      }
-    }
 
     const bookmarked: PhysicalBlink[] = [];
     for (const id of this.bookmarks) {

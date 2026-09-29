@@ -26,65 +26,8 @@ const MIME_TYPES = {
   '.webp': 'image/webp',
 };
 
-// Seed global public blinks (Creator Tips, NFT Mints, Donations, Vouchers)
-const DEFAULT_GLOBAL_BLINKS = [
-  {
-    id: 'tip-solana-dev',
-    name: 'Solana Mobile Dev Tip Jar',
-    actionType: 'tip',
-    amount: 0.05,
-    token: 'SOL',
-    recipient: '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1',
-    description: 'Support open-source builders creating physical Blinks on Solana Seeker.',
-    verifiedDomain: 'blink.so',
-    visibility: 'global',
-    createdAt: Date.now() - 86400000 * 3,
-    updatedAt: Date.now(),
-    stats: { taps: 142, completed: 89, volumeUsdc: 44.5 },
-  },
-  {
-    id: 'mint-seeker-pioneer',
-    name: 'Seeker Pioneer Commemorative POAP',
-    actionType: 'mint',
-    amount: 0.01,
-    token: 'SOL',
-    recipient: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
-    description: 'Mint your exclusive on-chain proof of physical Solana tap interaction.',
-    verifiedDomain: 'seeker.solana.com',
-    visibility: 'global',
-    createdAt: Date.now() - 86400000 * 2,
-    updatedAt: Date.now(),
-    stats: { taps: 310, completed: 278, volumeUsdc: 27.8 },
-  },
-  {
-    id: 'charity-clean-oceans',
-    name: 'Clean Oceans Solana Fund',
-    actionType: 'donation',
-    amount: 0.1,
-    token: 'SOL',
-    recipient: '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM',
-    description: 'Global micro-donations cleaning ocean plastics tracked transparently on Solana.',
-    verifiedDomain: 'oceans.foundation',
-    visibility: 'global',
-    createdAt: Date.now() - 86400000 * 5,
-    updatedAt: Date.now(),
-    stats: { taps: 84, completed: 62, volumeUsdc: 62.0 },
-  },
-  {
-    id: 'voucher-hacker-house',
-    name: 'Hacker House Day Pass Voucher',
-    actionType: 'voucher',
-    amount: 10.0,
-    token: 'USDC',
-    recipient: '3BxsJ47p1wH4h2B6r9d5J8qW8kF2P3tL5j8Z9xY1W2A3',
-    description: 'Digital pre-order voucher for day co-working at Solana Hacker House events.',
-    verifiedDomain: 'hackerhouse.solana.com',
-    visibility: 'global',
-    createdAt: Date.now() - 86400000 * 1,
-    updatedAt: Date.now(),
-    stats: { taps: 55, completed: 41, volumeUsdc: 410.0 },
-  },
-];
+// Seed global public blinks (empty by default)
+const DEFAULT_GLOBAL_BLINKS = [];
 
 // In-memory cache + file persistence
 let blinksDb = [];
@@ -96,12 +39,12 @@ function loadDb() {
       const data = fs.readFileSync(DB_FILE, 'utf8');
       blinksDb = JSON.parse(data);
     } else {
-      blinksDb = [...DEFAULT_GLOBAL_BLINKS];
+      blinksDb = [];
       saveDb();
     }
   } catch (err) {
     console.error('Error loading DB:', err);
-    blinksDb = [...DEFAULT_GLOBAL_BLINKS];
+    blinksDb = [];
   }
 }
 
