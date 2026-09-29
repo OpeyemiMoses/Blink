@@ -11,8 +11,8 @@ export interface PriceData {
 }
 
 const STORAGE_KEY = 'blink_market_prices_data';
-const DEFAULT_SOL_PRICE = 142.50; // Real live SOL market price baseline
-const DEFAULT_SKR_PRICE = 0.25;   // Real live SKR market price baseline
+const DEFAULT_SOL_PRICE = 119.15; // Real live SOL spot market price baseline
+const DEFAULT_SKR_PRICE = 0.0184; // Real live SKR market price baseline
 
 export class PriceService {
   private static cachedSolPrice: number = DEFAULT_SOL_PRICE;
@@ -43,11 +43,11 @@ export class PriceService {
     // Immediately trigger initial fresh price fetch
     this.fetchLivePrice();
 
-    // Poll periodically every 60 seconds
+    // Poll periodically every 30 seconds
     if (typeof window !== 'undefined') {
       setInterval(() => {
         this.fetchLivePrice();
-      }, 60000);
+      }, 30000);
     }
   }
 
@@ -109,21 +109,35 @@ export class PriceService {
       let solPrice = this.cachedSolPrice;
       let skrPrice = this.cachedSkrPrice;
 
-      // 1. Try fetching SOL price from CoinGecko
+      // 1. Try fetching SOL price from Coinbase public spot API (CORS enabled)
       try {
-        const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd,usdt', {
-          headers: { Accept: 'application/json' },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const price = data?.solana?.usdt || data?.solana?.usd;
-          if (typeof price === 'number' && price > 0) {
-            solPrice = price;
+        const cbRes = await fetch('https://api.coinbase.com/v2/prices/SOL-USD/spot');
+        if (cbRes.ok) {
+          const cbJson = await cbRes.json();
+          const p = parseFloat(cbJson?.data?.amount);
+          if (!isNaN(p) && p > 0) {
+            solPrice = p;
           }
         }
       } catch (err) {}
 
-      // 2. Fetch live SKR price from DexScreener API
+      // 2. Fallback SOL fetch from CoinGecko
+      if (solPrice === DEFAULT_SOL_PRICE) {
+        try {
+          const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd,usdt', {
+            headers: { Accept: 'application/json' },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const price = data?.solana?.usdt || data?.solana?.usd;
+            if (typeof price === 'number' && price > 0) {
+              solPrice = price;
+            }
+          }
+        } catch (err) {}
+      }
+
+      // 3. Fetch live SKR price from DexScreener API
       try {
         const skrRes = await fetch('https://api.dexscreener.com/latest/dex/search?q=SKR');
         if (skrRes.ok) {
