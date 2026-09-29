@@ -212,47 +212,72 @@ export const HackerHouseLogo: React.FC<{ size?: number }> = ({ size = 40 }) => (
 );
 
 export const UsdcCoinLogo: React.FC<{ size?: number }> = ({ size = 36 }) => (
-  <Svg width={size} height={size} viewBox="0 0 40 40" fill="none">
-    <Circle cx="20" cy="20" r="19" fill="#2775CA" stroke="#3D87D8" strokeWidth="1" />
-    {/* Dollar Sign */}
+  <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+    {/* Blue circular coin base */}
+    <Circle cx="50" cy="50" r="48" fill="#2775CA" />
+    {/* White inner coin face */}
+    <Circle cx="50" cy="50" r="38" fill="#FFFFFF" />
+    {/* Left blue arc */}
     <Path
-      d="M20 12V28M16 17C16 15.3431 17.7909 14 20 14C22.2091 14 24 15.3431 24 17C24 18.6569 22.2091 20 20 20C17.7909 20 16 21.3431 16 23C16 24.6569 17.7909 26 20 26C22.2091 26 24 24.6569 24 23"
-      stroke="#FFFFFF"
-      strokeWidth="2.2"
+      d="M 44 26 C 30 30 30 70 44 74 C 36 68 36 32 44 26 Z"
+      fill="#2775CA"
+    />
+    {/* Right blue arc */}
+    <Path
+      d="M 56 26 C 70 30 70 70 56 74 C 64 68 64 32 56 26 Z"
+      fill="#2775CA"
+    />
+    {/* Center blue $ dollar symbol */}
+    <Path
+      d="M 50 20 V 80 M 38 35 C 38 26 62 26 62 38 C 62 50 38 48 38 62 C 38 74 62 74 62 65"
+      stroke="#2775CA"
+      strokeWidth="6"
       strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
     />
   </Svg>
 );
 
 export const SolanaCoinLogo: React.FC<{ size?: number }> = ({ size = 36 }) => (
-  <Svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+  <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
     <Defs>
-      <LinearGradient id="solLogoGrad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
-        <Stop offset="0%" stopColor="#14F195" />
+      <LinearGradient id="solOfficialGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <Stop offset="0%" stopColor="#00FFA3" />
+        <Stop offset="50%" stopColor="#00C2FF" />
         <Stop offset="100%" stopColor="#9945FF" />
       </LinearGradient>
     </Defs>
-    <Circle cx="20" cy="20" r="19" fill="#0E1017" stroke="#252A38" strokeWidth="1" />
+    <Circle cx="50" cy="50" r="48" fill="#090A0F" stroke="#252A38" strokeWidth="2" />
+    {/* Top Bar */}
     <Path
-      d="M14 26H26M15 20H27M14 14H26"
-      stroke="url(#solLogoGrad)"
-      strokeWidth="2.4"
-      strokeLinecap="round"
+      d="M 24 20 L 78 20 C 80.5 20 81.8 21.2 80.6 23.4 L 69.4 37.6 C 68.6 38.6 67.2 39.2 65.8 39.2 L 10 39.2 C 7.5 39.2 6.2 38 7.4 35.8 L 18.6 21.6 C 19.4 20.6 20.8 20 22.2 20 Z"
+      fill="url(#solOfficialGrad)"
+    />
+    {/* Middle Bar (Inverted Slant) */}
+    <Path
+      d="M 10 42.4 C 7.5 42.4 6.2 43.6 7.4 45.8 L 18.6 60 C 19.4 61 20.8 61.6 22.2 61.6 L 78 61.6 C 80.5 61.6 81.8 60.4 80.6 58.2 L 69.4 44 C 68.6 43 67.2 42.4 65.8 42.4 Z"
+      fill="url(#solOfficialGrad)"
+    />
+    {/* Bottom Bar */}
+    <Path
+      d="M 24 64.8 L 78 64.8 C 80.5 64.8 81.8 66 80.6 68.2 L 69.4 82.4 C 68.6 83.4 67.2 84 65.8 84 L 10 84 C 7.5 84 6.2 82.8 7.4 80.6 L 18.6 66.4 C 19.4 65.4 20.8 64.8 22.2 64.8 Z"
+      fill="url(#solOfficialGrad)"
     />
   </Svg>
 );
 
 export const SkrCoinLogo: React.FC<{ size?: number }> = ({ size = 36 }) => (
   <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-    <Circle cx="50" cy="50" r="48" fill="#090A0F" stroke="#2D3348" strokeWidth="2" />
-    {/* Upper piece of interlocking 'S' logo */}
+    <Circle cx="50" cy="50" r="48" fill="#090A0F" stroke="#252A38" strokeWidth="2" />
+    {/* Upper piece of white interlocking 'S' logo */}
     <Path
-      d="M 82 14 L 48 14 A 24 24 0 0 0 24 38 L 24 40 A 24 24 0 0 0 48 64 L 82 64 L 82 48 L 48 48 A 8 8 0 0 1 40 40 L 40 38 A 8 8 0 0 1 48 30 L 82 30 Z"
+      d="M 74 16 L 46 16 A 22 22 0 0 0 24 38 L 24 40 A 22 22 0 0 0 46 62 L 74 62 L 74 48 L 46 48 A 8 8 0 0 1 38 40 L 38 38 A 8 8 0 0 1 46 30 L 74 30 Z"
       fill="#FFFFFF"
     />
-    {/* Lower piece of interlocking 'S' logo (180deg rotational symmetry) */}
+    {/* Lower piece of white interlocking 'S' logo (180deg rotational symmetry) */}
     <Path
-      d="M 18 86 L 52 86 A 24 24 0 0 0 76 62 L 76 60 A 24 24 0 0 0 52 36 L 18 36 L 18 52 L 52 52 A 8 8 0 0 1 60 60 L 60 62 A 8 8 0 0 1 52 70 L 18 70 Z"
+      d="M 26 84 L 54 84 A 22 22 0 0 0 76 62 L 76 60 A 22 22 0 0 0 54 38 L 26 38 L 26 52 L 54 52 A 8 8 0 0 1 62 60 L 62 62 A 8 8 0 0 1 54 70 L 26 70 Z"
       fill="#FFFFFF"
     />
   </Svg>

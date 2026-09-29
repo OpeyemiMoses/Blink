@@ -125,7 +125,7 @@ export class SolanaService {
   static getCachedSol(pubkeyStr: string): number | null {
     if (!pubkeyStr) return null;
     const mem = this.solCache.get(pubkeyStr);
-    if (mem !== undefined) {
+    if (mem !== undefined && typeof mem.value === 'number' && !isNaN(mem.value)) {
       return mem.value;
     }
     if (typeof window !== 'undefined' && window.localStorage) {
@@ -147,7 +147,7 @@ export class SolanaService {
   static getCachedUsdc(pubkeyStr: string): number | null {
     if (!pubkeyStr) return null;
     const mem = this.usdcCache.get(pubkeyStr);
-    if (mem !== undefined) {
+    if (mem !== undefined && typeof mem.value === 'number' && !isNaN(mem.value)) {
       return mem.value;
     }
     if (typeof window !== 'undefined' && window.localStorage) {
@@ -169,7 +169,7 @@ export class SolanaService {
   static getCachedSkr(pubkeyStr: string): number | null {
     if (!pubkeyStr) return null;
     const mem = this.skrCache.get(pubkeyStr);
-    if (mem !== undefined) {
+    if (mem !== undefined && typeof mem.value === 'number' && !isNaN(mem.value)) {
       return mem.value;
     }
     if (typeof window !== 'undefined' && window.localStorage) {

@@ -69,16 +69,22 @@ export class PriceService {
    * Convert SOL balance to real USDT value.
    */
   static convertSolToUsdt(solAmount: number): number {
+    const safeAmount = typeof solAmount === 'number' && !isNaN(solAmount) ? solAmount : 0;
     const price = this.getSolPriceSync();
-    return Number((solAmount * price).toFixed(2));
+    const safePrice = typeof price === 'number' && !isNaN(price) ? price : DEFAULT_SOL_PRICE;
+    const val = safeAmount * safePrice;
+    return isNaN(val) ? 0 : Number(val.toFixed(2));
   }
 
   /**
    * Convert SKR balance to real USDT value.
    */
   static convertSkrToUsdt(skrAmount: number): number {
+    const safeAmount = typeof skrAmount === 'number' && !isNaN(skrAmount) ? skrAmount : 0;
     const price = this.getSkrPriceSync();
-    return Number((skrAmount * price).toFixed(2));
+    const safePrice = typeof price === 'number' && !isNaN(price) ? price : DEFAULT_SKR_PRICE;
+    const val = safeAmount * safePrice;
+    return isNaN(val) ? 0 : Number(val.toFixed(2));
   }
 
   /**
@@ -86,8 +92,10 @@ export class PriceService {
    */
   static calculateTotalPortfolioUsdt(solAmount: number, usdcAmount: number, skrAmount: number = 0): number {
     const solVal = this.convertSolToUsdt(solAmount);
+    const usdcVal = typeof usdcAmount === 'number' && !isNaN(usdcAmount) ? usdcAmount : 0;
     const skrVal = this.convertSkrToUsdt(skrAmount);
-    return Number((solVal + (usdcAmount || 0) + skrVal).toFixed(2));
+    const total = solVal + usdcVal + skrVal;
+    return isNaN(total) ? 0 : Number(total.toFixed(2));
   }
 
   /**

@@ -323,9 +323,14 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
     };
   }, [activePublicKey, refreshTrigger]);
 
-  const solUsdValue = Number((balance * solPrice).toFixed(2));
-  const usdcUsdValue = usdcBalance;
-  const totalUsdValue = Number((solUsdValue + usdcUsdValue).toFixed(2));
+  const safeSol = typeof balance === 'number' && !isNaN(balance) ? balance : 0;
+  const safeUsdc = typeof usdcBalance === 'number' && !isNaN(usdcBalance) ? usdcBalance : 0;
+  const safeSkr = typeof skrBalance === 'number' && !isNaN(skrBalance) ? skrBalance : 0;
+
+  const solUsdValue = PriceService.convertSolToUsdt(safeSol);
+  const usdcUsdValue = safeUsdc;
+  const skrUsdValue = PriceService.convertSkrToUsdt(safeSkr);
+  const totalUsdValue = PriceService.calculateTotalPortfolioUsdt(safeSol, safeUsdc, safeSkr);
 
   return (
     <ScrollView
@@ -346,7 +351,7 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
             </Text>
             <View style={styles.gainRow}>
               <Text style={[styles.gainText, { color: colors.textSecondary }]}>
-                ● {balance > 0 ? `${balance.toFixed(4)} SOL` : '0.0000 SOL'} • {usdcBalance > 0 ? `${usdcBalance.toFixed(2)} USDC` : '0.00 USDC'}
+                ● {safeSol > 0 ? `${safeSol.toFixed(4)} SOL` : '0.0000 SOL'} • {safeUsdc > 0 ? `${safeUsdc.toFixed(2)} USDC` : '0.00 USDC'} • {safeSkr > 0 ? `${safeSkr.toFixed(2)} SKR` : '0.00 SKR'}
               </Text>
             </View>
           </View>
@@ -618,7 +623,7 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
           <View style={styles.holdingItemRight}>
             <Text style={[styles.holdingPrice, { color: colors.textPrimary }]}>${solUsdValue.toFixed(2)}</Text>
             <Text style={[styles.holdingBalance, { color: colors.textMuted }]}>
-              {balance > 0 ? `${balance.toFixed(4)} SOL` : '0.00 SOL'}
+              {safeSol > 0 ? `${safeSol.toFixed(4)} SOL` : '0.00 SOL'}
             </Text>
           </View>
         </View>
@@ -633,9 +638,9 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
             </View>
           </View>
           <View style={styles.holdingItemRight}>
-            <Text style={[styles.holdingPrice, { color: colors.textPrimary }]}>${usdcBalance.toFixed(2)}</Text>
+            <Text style={[styles.holdingPrice, { color: colors.textPrimary }]}>${safeUsdc.toFixed(2)}</Text>
             <Text style={[styles.holdingBalance, { color: colors.textMuted }]}>
-              {usdcBalance > 0 ? `${usdcBalance.toFixed(2)} USDC` : '0.00 USDC'}
+              {safeUsdc > 0 ? `${safeUsdc.toFixed(2)} USDC` : '0.00 USDC'}
             </Text>
           </View>
         </View>
@@ -650,9 +655,9 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
             </View>
           </View>
           <View style={styles.holdingItemRight}>
-            <Text style={[styles.holdingPrice, { color: colors.textPrimary }]}>${PriceService.convertSkrToUsdt(skrBalance).toFixed(2)}</Text>
+            <Text style={[styles.holdingPrice, { color: colors.textPrimary }]}>${skrUsdValue.toFixed(2)}</Text>
             <Text style={[styles.holdingBalance, { color: colors.textMuted }]}>
-              {skrBalance > 0 ? `${skrBalance.toFixed(2)} SKR` : '0.00 SKR'}
+              {safeSkr > 0 ? `${safeSkr.toFixed(2)} SKR` : '0.00 SKR'}
             </Text>
           </View>
         </View>

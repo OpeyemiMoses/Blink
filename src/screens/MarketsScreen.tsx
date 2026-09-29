@@ -185,12 +185,12 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({
       <View style={styles.heroSection}>
         <View>
           <Text style={[styles.heroAmount, { color: colors.textPrimary }]}>
-            ${activeAccount ? ((balanceSol * solPrice) + (balanceUsdc || 0)).toFixed(2) : '0.00'}
+            ${activeAccount ? PriceService.calculateTotalPortfolioUsdt(balanceSol || 0, balanceUsdc || 0, 0).toFixed(2) : '0.00'}
           </Text>
           <View style={styles.gainRow}>
             <Text style={[styles.gainText, { color: colors.textSecondary }]}>
               {activeAccount
-                ? `● ${balanceSol > 0 ? balanceSol.toFixed(4) : '0.0000'} SOL • ${(balanceUsdc || 0) > 0 ? (balanceUsdc || 0).toFixed(2) : '0.00'} USDC Available`
+                ? `● ${(balanceSol || 0) > 0 ? (balanceSol || 0).toFixed(4) : '0.0000'} SOL • ${(balanceUsdc || 0) > 0 ? (balanceUsdc || 0).toFixed(2) : '0.00'} USDC`
                 : 'Connect wallet to view portfolio'}
             </Text>
           </View>
