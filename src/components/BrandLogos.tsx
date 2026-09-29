@@ -241,3 +241,25 @@ export const SolanaCoinLogo: React.FC<{ size?: number }> = ({ size = 36 }) => (
     />
   </Svg>
 );
+
+export const SkrCoinLogo: React.FC<{ size?: number }> = ({ size = 36 }) => (
+  <Svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+    <Defs>
+      <LinearGradient id="skrGrad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+        <Stop offset="0%" stopColor="#A855F7" />
+        <Stop offset="50%" stopColor="#6366F1" />
+        <Stop offset="100%" stopColor="#3B82F6" />
+      </LinearGradient>
+    </Defs>
+    <Circle cx="20" cy="20" r="19" fill="url(#skrGrad)" stroke="#C084FC" strokeWidth="1" />
+    <Circle cx="20" cy="20" r="14" fill="#0F172A" fillOpacity="0.4" />
+    {/* Stylized Seeker SKR Lightning Emblem */}
+    <Path
+      d="M22 10L14 21H20L18 30L26 19H20L22 10Z"
+      fill="#FFFFFF"
+      stroke="#F3E8FF"
+      strokeWidth="0.8"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);

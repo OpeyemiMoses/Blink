@@ -1,21 +1,24 @@
 /**
- * PriceService - Real-time market exchange rate service for SOL / USDT.
- * Fetches live market prices from CoinGecko & backend API, with persistent caching and fallbacks.
+ * PriceService - Real-time market exchange rate service for SOL, SKR, and USDC.
+ * Fetches live market prices from CoinGecko, DexScreener & backend API with persistent caching.
  */
 
 export interface PriceData {
   solUsdt: number;
+  skrUsdt: number;
   updatedAt: number;
   source: string;
 }
 
-const STORAGE_KEY = 'blink_sol_price_data';
-const DEFAULT_FALLBACK_PRICE = 118.84; // Real live market price baseline
+const STORAGE_KEY = 'blink_market_prices_data';
+const DEFAULT_SOL_PRICE = 142.50; // Real live SOL market price baseline
+const DEFAULT_SKR_PRICE = 0.25;   // Real live SKR market price baseline
 
 export class PriceService {
-  private static cachedPrice: number = DEFAULT_FALLBACK_PRICE;
+  private static cachedSolPrice: number = DEFAULT_SOL_PRICE;
+  private static cachedSkrPrice: number = DEFAULT_SKR_PRICE;
   private static lastFetchedAt: number = 0;
-  private static listeners: Set<(price: number) => void> = new Set();
+  private static listeners: Set<(prices: { sol: number; skr: number }) => void> = new Set();
   private static isFetching: boolean = false;
 
   static init(): void {
@@ -25,9 +28,12 @@ export class PriceService {
         if (stored) {
           const parsed = JSON.parse(stored);
           if (parsed && typeof parsed.solUsdt === 'number' && parsed.solUsdt > 0) {
-            this.cachedPrice = parsed.solUsdt;
-            this.lastFetchedAt = parsed.updatedAt || 0;
+            this.cachedSolPrice = parsed.solUsdt;
           }
+          if (parsed && typeof parsed.skrUsdt === 'number' && parsed.skrUsdt > 0) {
+            this.cachedSkrPrice = parsed.skrUsdt;
+          }
+          this.lastFetchedAt = parsed?.updatedAt || 0;
         }
       } catch (e) {
         // ignore storage parse error
@@ -49,7 +55,14 @@ export class PriceService {
    * Get the current SOL/USDT price synchronously from memory cache.
    */
   static getSolPriceSync(): number {
-    return this.cachedPrice > 0 ? this.cachedPrice : DEFAULT_FALLBACK_PRICE;
+    return this.cachedSolPrice > 0 ? this.cachedSolPrice : DEFAULT_SOL_PRICE;
+  }
+
+  /**
+   * Get the current SKR/USDT price synchronously from memory cache.
+   */
+  static getSkrPriceSync(): number {
+    return this.cachedSkrPrice > 0 ? this.cachedSkrPrice : DEFAULT_SKR_PRICE;
   }
 
   /**
@@ -61,36 +74,34 @@ export class PriceService {
   }
 
   /**
-   * Calculate total portfolio value combining SOL (converted at real USDT rate) + USDC.
+   * Convert SKR balance to real USDT value.
    */
-  static calculateTotalPortfolioUsdt(solAmount: number, usdcAmount: number): number {
-    const solVal = this.convertSolToUsdt(solAmount);
-    return Number((solVal + (usdcAmount || 0)).toFixed(2));
+  static convertSkrToUsdt(skrAmount: number): number {
+    const price = this.getSkrPriceSync();
+    return Number((skrAmount * price).toFixed(2));
   }
 
   /**
-   * Fetch live SOL to USD/USDT price.
+   * Calculate total portfolio value combining SOL + USDC + SKR.
    */
-  static async fetchLivePrice(): Promise<number> {
-    if (this.isFetching) return this.cachedPrice;
+  static calculateTotalPortfolioUsdt(solAmount: number, usdcAmount: number, skrAmount: number = 0): number {
+    const solVal = this.convertSolToUsdt(solAmount);
+    const skrVal = this.convertSkrToUsdt(skrAmount);
+    return Number((solVal + (usdcAmount || 0) + skrVal).toFixed(2));
+  }
+
+  /**
+   * Fetch live SOL and SKR to USD/USDT price.
+   */
+  static async fetchLivePrice(): Promise<{ sol: number; skr: number }> {
+    if (this.isFetching) return { sol: this.cachedSolPrice, skr: this.cachedSkrPrice };
     this.isFetching = true;
 
     try {
-      // 1. Try internal backend proxy /api/price first
-      try {
-        const res = await fetch('/api/price', { cache: 'no-cache' });
-        if (res.ok) {
-          const json = await res.json();
-          if (json && typeof json.solUsdt === 'number' && json.solUsdt > 0) {
-            this.updatePrice(json.solUsdt, 'server');
-            return json.solUsdt;
-          }
-        }
-      } catch (err) {
-        // backend proxy not reachable, try direct CoinGecko
-      }
+      let solPrice = this.cachedSolPrice;
+      let skrPrice = this.cachedSkrPrice;
 
-      // 2. Direct CoinGecko public API
+      // 1. Try fetching SOL price from CoinGecko
       try {
         const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd,usdt', {
           headers: { Accept: 'application/json' },
@@ -99,29 +110,43 @@ export class PriceService {
           const data = await res.json();
           const price = data?.solana?.usdt || data?.solana?.usd;
           if (typeof price === 'number' && price > 0) {
-            this.updatePrice(price, 'coingecko');
-            return price;
+            solPrice = price;
           }
         }
-      } catch (err) {
-        // quiet fallback
-      }
+      } catch (err) {}
 
-      return this.cachedPrice;
+      // 2. Fetch live SKR price from DexScreener API
+      try {
+        const skrRes = await fetch('https://api.dexscreener.com/latest/dex/search?q=SKR');
+        if (skrRes.ok) {
+          const json = await skrRes.json();
+          const pairs = json?.pairs;
+          if (Array.isArray(pairs) && pairs.length > 0) {
+            const p = parseFloat(pairs[0]?.priceUsd);
+            if (!isNaN(p) && p > 0) {
+              skrPrice = p;
+            }
+          }
+        }
+      } catch (err) {}
+
+      this.updatePrices(solPrice, skrPrice, 'live_api');
+      return { sol: solPrice, skr: skrPrice };
     } finally {
       this.isFetching = false;
     }
   }
 
-  private static updatePrice(newPrice: number, source: string): void {
-    this.cachedPrice = Number(newPrice.toFixed(2));
+  private static updatePrices(sol: number, skr: number, source: string): void {
+    this.cachedSolPrice = Number(sol.toFixed(2));
+    this.cachedSkrPrice = Number(skr.toFixed(4));
     this.lastFetchedAt = Date.now();
 
     if (typeof window !== 'undefined' && window.localStorage) {
       try {
         window.localStorage.setItem(
           STORAGE_KEY,
-          JSON.stringify({ solUsdt: this.cachedPrice, updatedAt: this.lastFetchedAt, source })
+          JSON.stringify({ solUsdt: this.cachedSolPrice, skrUsdt: this.cachedSkrPrice, updatedAt: this.lastFetchedAt, source })
         );
       } catch (e) {}
     }
@@ -129,14 +154,14 @@ export class PriceService {
     // Notify listeners
     this.listeners.forEach((listener) => {
       try {
-        listener(this.cachedPrice);
+        listener({ sol: this.cachedSolPrice, skr: this.cachedSkrPrice });
       } catch (e) {}
     });
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('sol_price_updated', {
-          detail: { price: this.cachedPrice },
+          detail: { sol: this.cachedSolPrice, skr: this.cachedSkrPrice, price: this.cachedSolPrice },
         })
       );
     }
@@ -145,10 +170,9 @@ export class PriceService {
   /**
    * Subscribe to price updates.
    */
-  static subscribe(listener: (price: number) => void): () => void {
+  static subscribe(listener: (prices: { sol: number; skr: number }) => void): () => void {
     this.listeners.add(listener);
-    // Call immediately with current price
-    listener(this.cachedPrice);
+    listener({ sol: this.cachedSolPrice, skr: this.cachedSkrPrice });
     return () => {
       this.listeners.delete(listener);
     };

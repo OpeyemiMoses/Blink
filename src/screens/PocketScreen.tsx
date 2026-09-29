@@ -33,7 +33,7 @@ import { BlinkIdService } from '../services/blinkIdService';
 import { WalletAccount } from '../services/walletProviderService';
 import { LinkedAction, SolanaActionMetadata } from '../types';
 import { PhantomIcon, SolflareIcon, BackpackIcon, CoinbaseIcon } from '../components/WalletIcons';
-import { SolanaCoinLogo, UsdcCoinLogo, BlinkBrandMark } from '../components/BrandLogos';
+import { SolanaCoinLogo, UsdcCoinLogo, SkrCoinLogo, BlinkBrandMark } from '../components/BrandLogos';
 import { PrivyIcon } from '../components/PrivyIcon';
 import { usePrivy } from '@privy-io/react-auth';
 import { useExportWallet } from '@privy-io/react-auth/solana';
@@ -643,16 +643,14 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
         {/* SKR Holding */}
         <View style={[styles.holdingItem, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
           <View style={styles.holdingItemLeft}>
-            <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#8B5CF6', alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: 13 }}>SKR</Text>
-            </View>
+            <SkrCoinLogo size={42} />
             <View style={{ marginLeft: 12 }}>
               <Text style={[styles.holdingSymbol, { color: colors.textPrimary }]}>SKR</Text>
               <Text style={[styles.holdingName, { color: colors.textSecondary }]}>Seeker Ecosystem Token</Text>
             </View>
           </View>
           <View style={styles.holdingItemRight}>
-            <Text style={[styles.holdingPrice, { color: colors.textPrimary }]}>${(skrBalance * 0.10).toFixed(2)}</Text>
+            <Text style={[styles.holdingPrice, { color: colors.textPrimary }]}>${PriceService.convertSkrToUsdt(skrBalance).toFixed(2)}</Text>
             <Text style={[styles.holdingBalance, { color: colors.textMuted }]}>
               {skrBalance > 0 ? `${skrBalance.toFixed(2)} SKR` : '0.00 SKR'}
             </Text>
