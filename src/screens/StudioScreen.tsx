@@ -32,6 +32,7 @@ import {
   Lock,
   ArrowRight,
   Users,
+  Trash2,
 } from 'lucide-react-native';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -118,10 +119,14 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       window.addEventListener('blink_registry_updated', handleUpdate);
       window.addEventListener('blink_database_updated', handleUpdate);
       window.addEventListener('blink_updated', handleUpdate);
+      window.addEventListener('blink_deleted', handleUpdate);
+      window.addEventListener('tapblink_blink_deleted', handleUpdate);
       return () => {
         window.removeEventListener('blink_registry_updated', handleUpdate);
         window.removeEventListener('blink_database_updated', handleUpdate);
         window.removeEventListener('blink_updated', handleUpdate);
+        window.removeEventListener('blink_deleted', handleUpdate);
+        window.removeEventListener('tapblink_blink_deleted', handleUpdate);
       };
     }
   }, []);
@@ -212,6 +217,16 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       showToast('Failed to update Blink price.');
     }
     setEditingId(null);
+  };
+
+  const handleDeleteBlink = (b: PhysicalBlink) => {
+    if (typeof window !== 'undefined' && window.confirm) {
+      const confirmed = window.confirm(`Are you sure you want to delete "${b.name}"?\nThis will permanently wipe it from local storage, database, and cloud backend.`);
+      if (!confirmed) return;
+    }
+    PhysicalBlinkRegistry.deleteBlink(b.id, activeAccount?.publicKey);
+    setBlinks(prev => prev.filter(x => x.id.toLowerCase() !== b.id.toLowerCase()));
+    ToastService.success(`Deleted Physical Blink "${b.name}".`);
   };
 
   const handleBeamToTag = async (b: PhysicalBlink) => {
@@ -677,16 +692,28 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                   </Text>
                 </TouchableOpacity>
 
-                {/* Edit Price: Only show for the creator of this Blink */}
-                {Boolean(activeAccount?.publicKey && (activeAccount.publicKey === blink.recipient || (blink as any).creatorAddress === activeAccount.publicKey)) && !isEditing && (
-                  <TouchableOpacity
-                    style={styles.actionBtnEditPrice}
-                    onPress={() => startEdit(blink)}
-                    activeOpacity={0.8}
-                  >
-                    <Edit3 size={13} color="#5B67F6" />
-                    <Text style={styles.actionBtnEditPriceText}>Edit Price</Text>
-                  </TouchableOpacity>
+                {/* Edit & Delete Actions: Only show for the creator of this Blink */}
+                {Boolean(activeAccount?.publicKey && (activeAccount.publicKey === blink.recipient || (blink as any).creatorAddress === activeAccount.publicKey)) && (
+                  <>
+                    {!isEditing && (
+                      <TouchableOpacity
+                        style={styles.actionBtnEditPrice}
+                        onPress={() => startEdit(blink)}
+                        activeOpacity={0.8}
+                      >
+                        <Edit3 size={13} color="#5B67F6" />
+                        <Text style={styles.actionBtnEditPriceText}>Edit Price</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      style={[styles.actionBtnSecondary, { backgroundColor: '#EF444418', borderColor: '#EF444466', borderWidth: 1 }]}
+                      onPress={() => handleDeleteBlink(blink)}
+                      activeOpacity={0.8}
+                    >
+                      <Trash2 size={13} color="#EF4444" />
+                      <Text style={[styles.actionBtnSecondaryText, { color: '#EF4444', fontWeight: '700' }]}>Delete</Text>
+                    </TouchableOpacity>
+                  </>
                 )}
 
                 <TouchableOpacity

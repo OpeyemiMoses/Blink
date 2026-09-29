@@ -278,6 +278,39 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Delete a Blink (DELETE /api/blinks/<id> or POST /api/blinks/<id>/delete)
+  if (pathname.startsWith('/api/blinks/') && !pathname.endsWith('/tap') && (req.method === 'DELETE' || (req.method === 'POST' && pathname.endsWith('/delete')))) {
+    const cleanPath = pathname.replace('/api/blinks/', '').replace(/\/delete$/, '').trim();
+    const blinkId = cleanPath.toLowerCase();
+
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const data = body ? JSON.parse(body) : {};
+        const existingIdx = blinksDb.findIndex(b => b.id.toLowerCase() === blinkId);
+        if (existingIdx >= 0) {
+          const existing = blinksDb[existingIdx];
+          const incomingRequester = (data.creatorAddress || data.requesterAddress || data.recipient || '').trim();
+          const existingCreator = (existing.creatorAddress || existing.recipient || '').trim();
+
+          if (existingCreator && incomingRequester && existingCreator.toLowerCase() !== incomingRequester.toLowerCase()) {
+            return sendJson(res, 403, { success: false, error: 'Unauthorized: Only the creator can delete this Blink' });
+          }
+
+          blinksDb.splice(existingIdx, 1);
+          saveDb();
+          console.log(`[TapBlink Server] Deleted Blink "${blinkId}" from cloud database.`);
+          return sendJson(res, 200, { success: true, deletedId: blinkId });
+        }
+        return sendJson(res, 404, { success: false, error: 'Blink not found' });
+      } catch (err) {
+        return sendJson(res, 400, { success: false, error: 'Invalid JSON payload' });
+      }
+    });
+    return;
+  }
+
   if (pathname.endsWith('/tap') && req.method === 'POST') {
     const parts = pathname.split('/');
     const blinkId = parts[3]; // /api/blinks/<id>/tap

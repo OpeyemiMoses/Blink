@@ -33,6 +33,7 @@ import {
   Send,
   Sparkles,
   Layers,
+  Trash2,
 } from 'lucide-react-native';
 import { QRCodeSVG } from 'qrcode.react';
 import { PhysicalBlink, PhysicalBlinkRegistry } from '../services/physicalBlinkRegistry';
@@ -48,6 +49,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { ReceiptService, BlinkPayerInfo } from '../services/receiptService';
 import { ReceiptModal } from './ReceiptModal';
 import { TransactionReceipt } from '../types';
+import { UserProfileService } from '../services/userProfileService';
+import { BlinkIdService } from '../services/blinkIdService';
 
 interface BlinkDetailModalProps {
   blink: PhysicalBlink | null;
@@ -1175,23 +1178,45 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
           </TouchableOpacity>
 
           {isCreator ? (
-            <TouchableOpacity
-              style={[
-                styles.primaryActionBtn,
-                { backgroundColor: colors.accentSoft, borderColor: colors.accent, borderWidth: 1 },
-              ]}
-              onPress={() => {
-                setEditPriceInput(currentBlink.amount.toString());
-                setEditDescInput(currentBlink.description);
-                setIsEditingPrice(true);
-              }}
-              activeOpacity={0.8}
-            >
-              <Edit3 size={16} color={colors.accent} />
-              <Text style={[styles.primaryBtnText, { color: colors.accent, marginLeft: 6 }]}>
-                Creator Options • Edit Price
-              </Text>
-            </TouchableOpacity>
+            <View style={{ flex: 1, flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                style={[
+                  styles.primaryActionBtn,
+                  { flex: 1, backgroundColor: colors.accentSoft, borderColor: colors.accent, borderWidth: 1 },
+                ]}
+                onPress={() => {
+                  setEditPriceInput(currentBlink.amount.toString());
+                  setEditDescInput(currentBlink.description);
+                  setIsEditingPrice(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Edit3 size={15} color={colors.accent} />
+                <Text style={[styles.primaryBtnText, { color: colors.accent, marginLeft: 4, fontSize: 13 }]}>
+                  Edit Price
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.secondaryActionBtn,
+                  { backgroundColor: '#EF444418', borderColor: '#EF444466', borderWidth: 1, paddingHorizontal: 12 },
+                ]}
+                onPress={() => {
+                  if (typeof window !== 'undefined' && window.confirm) {
+                    const confirmed = window.confirm(`Delete "${currentBlink.name}"?\nThis will permanently remove this Blink from database and cloud.`);
+                    if (!confirmed) return;
+                  }
+                  PhysicalBlinkRegistry.deleteBlink(currentBlink.id, activeAccount?.publicKey);
+                  ToastService.success(`Deleted Blink "${currentBlink.name}".`);
+                  if (onUpdateBlink) onUpdateBlink(currentBlink);
+                  onClose();
+                }}
+                activeOpacity={0.8}
+              >
+                <Trash2 size={15} color="#EF4444" />
+                <Text style={[styles.secondaryBtnText, { color: '#EF4444', fontWeight: '700' }]}>Delete</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             <TouchableOpacity
               style={[

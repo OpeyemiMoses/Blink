@@ -331,6 +331,45 @@ export class PhysicalBlinkRegistry {
   }
 
   /**
+   * Delete a Physical Blink permanently from local registry, DatabaseService, in-memory caches, and cloud database.
+   */
+  static deleteBlink(id: string, requesterAddress?: string): boolean {
+    const list = this.loadRegistry(true);
+    const cleanId = id.trim().toLowerCase();
+
+    // 1. Remove from local memory list
+    this.blinks = list.filter(b => b.id.toLowerCase() !== cleanId);
+
+    // 2. Remove from in-memory globalCloudBlinks
+    this.globalCloudBlinks = this.globalCloudBlinks.filter(b => b.id.toLowerCase() !== cleanId);
+
+    // 3. Save local registry & remove from DatabaseService
+    this.saveRegistry();
+    DatabaseService.deleteBlink(cleanId);
+
+    // 4. Dispatch real-time window events for 0ms reactive UI removal
+    if (typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(new CustomEvent('blink_deleted', { detail: { id: cleanId } }));
+        window.dispatchEvent(new CustomEvent('tapblink_blink_deleted', { detail: { id: cleanId } }));
+        window.dispatchEvent(new CustomEvent('blink_database_updated', { detail: this.blinks }));
+        window.dispatchEvent(new CustomEvent('blink_registry_updated', { detail: this.blinks }));
+      } catch {}
+    }
+
+    // 5. Send REST DELETE request to cloud backend
+    if (typeof window !== 'undefined' && typeof fetch === 'function') {
+      fetch(`/api/blinks/${cleanId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creatorAddress: requesterAddress }),
+      }).catch(() => {});
+    }
+
+    return true;
+  }
+
+  /**
    * Record a physical tap interaction and update studio analytics.
    */
   static recordTap(id: string, success: boolean, amountUsdc: number = 0): void {
