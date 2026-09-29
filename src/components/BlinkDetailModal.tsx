@@ -78,6 +78,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [showQr, setShowQr] = useState(false);
   const [activeReceipt, setActiveReceipt] = useState<TransactionReceipt | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Price & Recipient Editing state
   const [isEditingPrice, setIsEditingPrice] = useState(false);
@@ -1201,16 +1202,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                   styles.secondaryActionBtn,
                   { backgroundColor: '#EF444418', borderColor: '#EF444466', borderWidth: 1, paddingHorizontal: 12 },
                 ]}
-                onPress={() => {
-                  if (typeof window !== 'undefined' && window.confirm) {
-                    const confirmed = window.confirm(`Delete "${currentBlink.name}"?\nThis will permanently remove this Blink from database and cloud.`);
-                    if (!confirmed) return;
-                  }
-                  PhysicalBlinkRegistry.deleteBlink(currentBlink.id, activeAccount?.publicKey);
-                  ToastService.success(`Deleted Blink "${currentBlink.name}".`);
-                  if (onUpdateBlink) onUpdateBlink(currentBlink);
-                  onClose();
-                }}
+                onPress={() => setShowDeleteConfirm(true)}
                 activeOpacity={0.8}
               >
                 <Trash2 size={15} color="#EF4444" />
@@ -1346,6 +1338,135 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
           viewerAddress={activeAccount?.publicKey}
           onClose={() => setActiveReceipt(null)}
         />
+
+        {/* Custom Delete Confirmation Modal */}
+        {showDeleteConfirm && (
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.78)',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: 20,
+              zIndex: 9999,
+            }}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              style={{
+                width: '100%',
+                maxWidth: 420,
+                backgroundColor: colors.bgCard,
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: '#EF444466',
+                padding: 24,
+                alignItems: 'center',
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.4,
+                shadowRadius: 20,
+                elevation: 10,
+              }}
+            >
+              <View
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 26,
+                  backgroundColor: '#EF44441E',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  marginBottom: 16,
+                  borderWidth: 1,
+                  borderColor: '#EF444444',
+                }}
+              >
+                <Trash2 size={24} color="#EF4444" />
+              </View>
+
+              <Text style={{ fontSize: 18, fontWeight: '700', color: colors.textPrimary, textAlign: 'center', marginBottom: 8 }}>
+                Delete Physical Blink?
+              </Text>
+
+              <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: 'center', lineHeight: 18, marginBottom: 16 }}>
+                Are you sure you want to delete <Text style={{ fontWeight: '700', color: colors.textPrimary }}>"{currentBlink.name}"</Text>? This action cannot be undone and will permanently wipe it from local storage, database, and cloud backend.
+              </Text>
+
+              <View
+                style={{
+                  width: '100%',
+                  backgroundColor: colors.bgCardAlt,
+                  borderRadius: 12,
+                  padding: 12,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  marginBottom: 20,
+                  gap: 6,
+                }}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>Blink ID</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.accent, fontFamily: 'monospace' }}>
+                    /t/{currentBlink.id}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>Action Price</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textPrimary }}>
+                    ${currentBlink.amount.toFixed(2)} {currentBlink.token}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                    backgroundColor: colors.bgCardAlt,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    alignItems: 'center',
+                  }}
+                  onPress={() => setShowDeleteConfirm(false)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textPrimary }}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                    backgroundColor: '#EF4444',
+                    alignItems: 'center',
+                    flexDirection: 'row',
+                    justifyContent: 'center',
+                    gap: 6,
+                  }}
+                  onPress={() => {
+                    setShowDeleteConfirm(false);
+                    PhysicalBlinkRegistry.deleteBlink(currentBlink.id, activeAccount?.publicKey);
+                    ToastService.success(`Deleted Blink "${currentBlink.name}".`);
+                    if (onUpdateBlink) onUpdateBlink(currentBlink);
+                    onClose();
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Trash2 size={15} color="#FFFFFF" />
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </View>
   );
