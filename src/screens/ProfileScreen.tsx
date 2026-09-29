@@ -284,6 +284,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     }
   };
 
+  const handleCancelEditing = () => {
+    const p = UserProfileService.getProfile();
+    setProfile(p);
+    setUsername(p.username);
+    setDisplayName(p.displayName);
+    setBio(p.bio);
+    setAvatarUrl(p.avatarUrl);
+    setIsUsernameAvailable(null);
+    setUsernameError(null);
+    setSuggestedAlternative(null);
+    setIsEditingProfile(false);
+  };
+
   const handleSaveProfile = async () => {
     const cleanUsername = username.trim().replace(/^@/, '').toLowerCase().replace(/[^a-zA-Z0-9_]/g, '');
     if (!cleanUsername) {
@@ -536,7 +549,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
           {/* Pencil icon to toggle edit form */}
           <TouchableOpacity
-            onPress={() => setIsEditingProfile(v => !v)}
+            onPress={() => {
+              if (isEditingProfile) {
+                handleCancelEditing();
+              } else {
+                setIsEditingProfile(true);
+              }
+            }}
             style={[styles.editToggleBtn, { backgroundColor: isEditingProfile ? colors.accent + '22' : colors.bgCardAlt, borderColor: isEditingProfile ? colors.accent : colors.border }]}
             activeOpacity={0.7}
             accessibilityLabel="Edit profile"

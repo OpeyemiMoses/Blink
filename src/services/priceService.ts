@@ -27,13 +27,18 @@ export class PriceService {
         const stored = window.localStorage.getItem(STORAGE_KEY);
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (parsed && typeof parsed.solUsdt === 'number' && parsed.solUsdt > 0) {
-            this.cachedSolPrice = parsed.solUsdt;
+          // Purge stale 142.50 cache if present
+          if (parsed?.solUsdt === 142.5 || parsed?.solUsdt === 142.50) {
+            window.localStorage.removeItem(STORAGE_KEY);
+            this.cachedSolPrice = DEFAULT_SOL_PRICE;
+          } else {
+            if (parsed && typeof parsed.solUsdt === 'number' && parsed.solUsdt > 0) {
+              this.cachedSolPrice = parsed.solUsdt;
+            }
+            if (parsed && typeof parsed.skrUsdt === 'number' && parsed.skrUsdt > 0) {
+              this.cachedSkrPrice = parsed.skrUsdt;
+            }
           }
-          if (parsed && typeof parsed.skrUsdt === 'number' && parsed.skrUsdt > 0) {
-            this.cachedSkrPrice = parsed.skrUsdt;
-          }
-          this.lastFetchedAt = parsed?.updatedAt || 0;
         }
       } catch (e) {
         // ignore storage parse error
@@ -43,11 +48,11 @@ export class PriceService {
     // Immediately trigger initial fresh price fetch
     this.fetchLivePrice();
 
-    // Poll periodically every 30 seconds
+    // Poll periodically every 15 seconds
     if (typeof window !== 'undefined') {
       setInterval(() => {
         this.fetchLivePrice();
-      }, 30000);
+      }, 15000);
     }
   }
 
