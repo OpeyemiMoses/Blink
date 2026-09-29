@@ -12,11 +12,9 @@ import {
 import {
   X,
   Search,
-  BookOpen,
   Radio,
   Zap,
   Shield,
-  Layers,
   HelpCircle,
   Code,
   ExternalLink,
@@ -24,10 +22,8 @@ import {
   ChevronUp,
   Sparkles,
   Smartphone,
-  Cpu,
   ArrowRight,
   CheckCircle2,
-  AlertCircle,
   Copy,
   Wallet,
   Globe,
@@ -38,10 +34,11 @@ import {
   Share2,
   Bookmark,
   Check,
+  Terminal,
 } from 'lucide-react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { BlinkBrandMark } from './BrandLogos';
-import { SolanaCoinLogo, UsdcCoinLogo } from './BrandLogos';
+import { SolanaCoinLogo } from './BrandLogos';
 
 interface DocumentationModalProps {
   visible: boolean;
@@ -64,6 +61,15 @@ interface DocSectionNav {
   id: DocSectionId;
   label: string;
   icon: any;
+  badge?: string;
+}
+
+interface SearchableItem {
+  id: string;
+  sectionId: DocSectionId;
+  title: string;
+  snippet: string;
+  category: string;
   badge?: string;
 }
 
@@ -93,6 +99,108 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
     { id: 'developer', label: 'Developer API & Specs', icon: Code, badge: 'API' },
   ];
 
+  const searchableDocItems = useMemo<SearchableItem[]>(() => [
+    {
+      id: 'overview-1',
+      sectionId: 'overview',
+      title: 'Physical Interface for Solana Actions',
+      snippet: 'Blink turns physical objects like coffee cups, merch, and event badges into instant atomic Solana Actions.',
+      category: 'Architecture',
+      badge: 'Overview',
+    },
+    {
+      id: 'overview-2',
+      sectionId: 'overview',
+      title: 'Keyless Embedded Wallets',
+      snippet: 'Powered by Privy non-custodial MPC infrastructure. Onboard instantly with Google, Twitter, or Email OTP.',
+      category: 'Security',
+      badge: 'Privy MPC',
+    },
+    {
+      id: 'tap-nfc',
+      sectionId: 'tap_scan',
+      title: 'How to Tap & Scan NFC Tags',
+      snippet: 'Hardware antenna locations for iPhone (top rim) and Android / Seeker (rear center). Supported chips: NTAG213, NTAG215, NTAG216.',
+      category: 'Hardware',
+      badge: 'NFC Guide',
+    },
+    {
+      id: 'studio-create',
+      sectionId: 'studio',
+      title: 'Deploying Actions in Blink Studio',
+      snippet: 'Create merchant checkout links, tip jars, POAP mints, or vouchers and program NFC tags in under 60 seconds.',
+      category: 'Creator',
+      badge: 'Studio',
+    },
+    {
+      id: 'studio-edit',
+      sectionId: 'studio',
+      title: 'Live Price Modifications',
+      snippet: 'Update prices or beneficiary wallets live in Studio without reprinting or replacing physical tags.',
+      category: 'Creator',
+      badge: 'Live State',
+    },
+    {
+      id: 'wallet-privy',
+      sectionId: 'wallets_devnet',
+      title: 'Privy Embedded Wallets & MPC Security',
+      snippet: 'Isolated Solana keypair provisioned automatically via Privy MPC sharding without seed phrase friction.',
+      category: 'Security',
+      badge: 'MPC Keypair',
+    },
+    {
+      id: 'wallet-airdrop',
+      sectionId: 'wallets_devnet',
+      title: 'Solana Devnet SOL Airdrop & Faucet',
+      snippet: 'Claim free test SOL from the Pocket tab or via CLI command: solana airdrop 1 <address> --url devnet',
+      category: 'Devnet',
+      badge: 'Free SOL',
+    },
+    {
+      id: 'faq-google-popup',
+      sectionId: 'faq',
+      title: 'Google Sign In Popup Troubleshooting',
+      snippet: 'How to handle popup blockers in Safari, Chrome, and Brave, or use Email OTP fallback.',
+      category: 'FAQ',
+      badge: 'Auth',
+    },
+    {
+      id: 'faq-nfc-metal',
+      sectionId: 'faq',
+      title: 'NFC Tag Surface Troubleshooting',
+      snippet: 'Avoid placing NFC tags directly on raw metal surfaces unless using anti-metal ferrite tags.',
+      category: 'FAQ',
+      badge: 'Hardware',
+    },
+    {
+      id: 'dev-api-get',
+      sectionId: 'developer',
+      title: 'GET Action Metadata API Specification',
+      snippet: 'HTTP GET /api/actions/blink?id=<blinkId> returning Solana Actions JSON schema.',
+      category: 'Developer',
+      badge: 'GET API',
+    },
+    {
+      id: 'dev-api-post',
+      sectionId: 'developer',
+      title: 'POST Action Execution API Specification',
+      snippet: 'HTTP POST /api/actions/blink?id=<blinkId> receiving account public key and returning serialized wire transaction.',
+      category: 'Developer',
+      badge: 'POST API',
+    },
+  ], []);
+
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return searchableDocItems.filter(item =>
+      item.title.toLowerCase().includes(q) ||
+      item.snippet.toLowerCase().includes(q) ||
+      item.category.toLowerCase().includes(q) ||
+      (item.badge && item.badge.toLowerCase().includes(q))
+    );
+  }, [searchQuery, searchableDocItems]);
+
   const handleCopy = (code: string, id: string) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       navigator.clipboard.writeText(code);
@@ -103,6 +211,11 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
 
   const toggleFaq = (index: number) => {
     setExpandedFaqIndex(expandedFaqIndex === index ? null : index);
+  };
+
+  const jumpToSearchResult = (sectionId: DocSectionId) => {
+    setActiveSection(sectionId);
+    setSearchQuery('');
   };
 
   if (!visible) return null;
@@ -162,6 +275,51 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
             )}
           </View>
         </View>
+
+        {/* Live Search Results Overlay View */}
+        {searchQuery.trim().length > 0 && (
+          <View style={[styles.searchResultsContainer, { backgroundColor: colors.bgCard, borderBottomColor: colors.border }]}>
+            <View style={styles.searchResultsHeader}>
+              <Text style={[styles.searchResultsTitle, { color: colors.textPrimary }]}>
+                Search Results ({searchResults.length})
+              </Text>
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Text style={{ fontSize: 12, color: colors.accent, fontWeight: '700' }}>Clear Search</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 240 }} showsVerticalScrollIndicator={true}>
+              {searchResults.length > 0 ? (
+                searchResults.map((res) => (
+                  <TouchableOpacity
+                    key={res.id}
+                    style={[styles.searchResultCard, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
+                    onPress={() => jumpToSearchResult(res.sectionId)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.searchResultMeta}>
+                      <Text style={[styles.searchResultCategory, { color: colors.accent }]}>{res.category}</Text>
+                      {res.badge && (
+                        <View style={[styles.badgePill, { backgroundColor: colors.accentSoft }]}>
+                          <Text style={[styles.badgeText, { color: colors.accent }]}>{res.badge}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.searchResultItemTitle, { color: colors.textPrimary }]}>{res.title}</Text>
+                    <Text style={[styles.searchResultSnippet, { color: colors.textSecondary }]} numberOfLines={2}>
+                      {res.snippet}
+                    </Text>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                  <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                    No matching articles found for "{searchQuery}". Try searching for "NFC", "Privy", "API", or "Faucet".
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Content Body: Sidebar + Main Content */}
         <View style={[styles.bodyWrapper, !isDesktop && styles.bodyWrapperMobile]}>
@@ -247,7 +405,7 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
                   </Text>
                 </View>
 
-                {/* The Core Paradigm */}
+                {/* The Core Paradigm Shift Table */}
                 <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>The Core Paradigm Shift</Text>
                 <View style={[styles.paradigmBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
                   <View style={styles.paradigmRow}>
@@ -273,7 +431,7 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
                   </View>
                 </View>
 
-                {/* 3 Pillars */}
+                {/* 3 Architectural Pillars */}
                 <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>The 3 Architectural Pillars</Text>
                 <View style={styles.gridCards}>
                   <View style={[styles.featureCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
@@ -343,7 +501,7 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
                     </View>
                   </View>
 
-                  <Text style={[styles.stepItemTitle, { color: colors.textPrimary }]}>Supported NFC Hardware Chips:</Text>
+                  <Text style={[styles.stepItemTitle, { color: colors.textPrimary }]}>Supported NFC Hardware Chips Table:</Text>
                   <View style={styles.chipPillGroup}>
                     {['NTAG213 (144 bytes)', 'NTAG215 (504 bytes)', 'NTAG216 (888 bytes)', 'Mifare Ultralight EV1', 'FeliCa'].map((chip) => (
                       <View key={chip} style={[styles.chipPill, { backgroundColor: colors.bgPill, borderColor: colors.border }]}>
@@ -432,7 +590,7 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
                     <Text style={[styles.studioStepTitle, { color: colors.textPrimary }]}>Writing the Physical Tag</Text>
                   </View>
                   <Text style={[styles.studioStepBody, { color: colors.textSecondary }]}>
-                    Click <Text style={{ fontWeight: '700', color: colors.textPrimary }}>Write Tag</Text> in Blink Studio. If using a mobile phone with WebNFC support, hold the blank NFC tag to the rear. Alternatively, copy the generated NDEF URL (e.g. <Text style={{ fontFamily: 'monospace' }}>https://blink.sol/t/coffee-001</Text>) and write it using standard apps like <Text style={{ fontWeight: '700', color: colors.textPrimary }}>NFC Tools</Text> or <Text style={{ fontWeight: '700', color: colors.textPrimary }}>NXP TagWriter</Text>.
+                    Click <Text style={{ fontWeight: '700', color: colors.textPrimary }}>Write Tag</Text> in Blink Studio. If using a mobile phone with WebNFC support, hold the blank NFC tag to the rear. Alternatively, copy the generated NDEF URL (e.g. <Text style={{ fontFamily: 'monospace' }}>https://blink.sol/t/demo-blink-001</Text>) and write it using standard apps like <Text style={{ fontWeight: '700', color: colors.textPrimary }}>NFC Tools</Text> or <Text style={{ fontWeight: '700', color: colors.textPrimary }}>NXP TagWriter</Text>.
                   </Text>
                 </View>
 
@@ -656,11 +814,11 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
                   </Text>
                   <View style={[styles.codeSnippetRow, { backgroundColor: colors.bgInput }]}>
                     <Text style={[styles.codeSnippetText, { color: colors.textPrimary }]}>
-                      GET /api/actions/blink?id=coffee-shop-001
+                      GET /api/actions/blink?id=demo-blink-001
                     </Text>
                     <TouchableOpacity
                       style={styles.copyBtn}
-                      onPress={() => handleCopy('GET /api/actions/blink?id=coffee-shop-001', 'get_endpoint')}
+                      onPress={() => handleCopy('GET /api/actions/blink?id=demo-blink-001', 'get_endpoint')}
                     >
                       {copiedCodeId === 'get_endpoint' ? <Check size={14} color="#10B981" /> : <Copy size={14} color={colors.textMuted} />}
                     </TouchableOpacity>
@@ -670,16 +828,16 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
                   <View style={[styles.codeBlock, { backgroundColor: '#090A10' }]}>
                     <Text style={styles.codeBlockContent}>
 {`{
-  "icon": "https://blink.sol/assets/coffee.png",
-  "title": "Artisan Roast • Espresso",
-  "description": "Tap to pay $4.50 USDC at Roasters Cafe",
+  "icon": "https://blink.sol/assets/logo.png",
+  "title": "Solana Action Blink",
+  "description": "Tap to execute $4.50 USDC transaction on Solana",
   "label": "Pay $4.50 USDC",
   "disabled": false,
   "links": {
     "actions": [
       {
         "label": "Pay $4.50 USDC",
-        "href": "/api/actions/blink?id=coffee-shop-001&amount=4.50"
+        "href": "/api/actions/blink?id=demo-blink-001&amount=4.50"
       }
     ]
   }
@@ -699,8 +857,14 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
                   </Text>
                   <View style={[styles.codeSnippetRow, { backgroundColor: colors.bgInput }]}>
                     <Text style={[styles.codeSnippetText, { color: colors.textPrimary }]}>
-                      POST /api/actions/blink?id=coffee-shop-001
+                      POST /api/actions/blink?id=demo-blink-001
                     </Text>
+                    <TouchableOpacity
+                      style={styles.copyBtn}
+                      onPress={() => handleCopy('POST /api/actions/blink?id=demo-blink-001', 'post_endpoint')}
+                    >
+                      {copiedCodeId === 'post_endpoint' ? <Check size={14} color="#10B981" /> : <Copy size={14} color={colors.textMuted} />}
+                    </TouchableOpacity>
                   </View>
                   <Text style={[styles.codeBlockLabel, { color: colors.textMuted }]}>Request Body (JSON):</Text>
                   <View style={[styles.codeBlock, { backgroundColor: '#090A10' }]}>
@@ -729,7 +893,7 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
         {/* Footer */}
         <View style={[styles.footer, { borderTopColor: colors.border, backgroundColor: colors.bgCard }]}>
           <Text style={[styles.footerHelpText, { color: colors.textMuted }]}>
-            Need additional assistance or custom hardware tags?
+            Need additional assistance or custom developer integration?
           </Text>
           <View style={styles.footerLinks}>
             <TouchableOpacity
@@ -762,7 +926,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.78)',
     zIndex: 9999,
     justifyContent: 'center',
     alignItems: 'center',
@@ -776,9 +940,9 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
   },
   modalContainerDesktop: {
-    height: '92%',
-    maxHeight: 820,
-    maxWidth: 980,
+    height: '94%',
+    maxHeight: 840,
+    maxWidth: 990,
     borderRadius: 20,
     borderWidth: 1,
     boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
@@ -853,6 +1017,47 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     outlineStyle: 'none' as any,
+  },
+  searchResultsContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  searchResultsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  searchResultsTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  searchResultCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+  },
+  searchResultMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  searchResultCategory: {
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  searchResultItemTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  searchResultSnippet: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   bodyWrapper: {
     flex: 1,
@@ -948,19 +1153,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   heroTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
-    letterSpacing: -0.3,
   },
   heroBody: {
-    fontSize: 14,
-    lineHeight: 22,
+    fontSize: 13,
+    lineHeight: 20,
   },
   blockHeading: {
-    fontSize: 15,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    fontSize: 16,
+    fontWeight: '700',
     marginTop: 6,
   },
   paradigmBox: {
@@ -975,7 +1177,7 @@ const styles = StyleSheet.create({
   paradigmLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   paradigmTag: {
     fontSize: 11,
@@ -983,12 +1185,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   paradigmCode: {
-    fontSize: 13,
+    fontSize: 12,
     lineHeight: 18,
   },
   paradigmDivider: {
     height: 1,
-    width: '100%',
+    marginVertical: 4,
   },
   gridCards: {
     gap: 12,
@@ -1005,6 +1207,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 4,
   },
   featureTitle: {
     fontSize: 15,
@@ -1012,11 +1215,11 @@ const styles = StyleSheet.create({
   },
   featureDesc: {
     fontSize: 13,
-    lineHeight: 19,
+    lineHeight: 18,
   },
   guideCard: {
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 18,
     gap: 12,
   },
@@ -1031,7 +1234,7 @@ const styles = StyleSheet.create({
   },
   guideText: {
     fontSize: 13,
-    lineHeight: 20,
+    lineHeight: 19,
   },
   calloutBox: {
     borderWidth: 1,
@@ -1046,12 +1249,12 @@ const styles = StyleSheet.create({
   antennaRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
+    gap: 10,
   },
   antennaText: {
-    fontSize: 12,
-    lineHeight: 18,
     flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
   },
   stepItemTitle: {
     fontSize: 13,
@@ -1065,7 +1268,7 @@ const styles = StyleSheet.create({
   },
   chipPill: {
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
@@ -1075,7 +1278,7 @@ const styles = StyleSheet.create({
   },
   studioStepCard: {
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 18,
     gap: 12,
   },
@@ -1085,15 +1288,15 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   stepBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepBadgeText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
   },
   studioStepTitle: {
@@ -1106,15 +1309,16 @@ const styles = StyleSheet.create({
   },
   actionTypeGrid: {
     gap: 10,
+    marginTop: 4,
   },
   actionTypeBox: {
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 12,
     gap: 4,
   },
   actionTypeTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
   actionTypeDesc: {
@@ -1125,14 +1329,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 12,
     gap: 10,
   },
   tipBannerText: {
-    fontSize: 12,
-    lineHeight: 18,
     flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
   },
   primaryActionBtn: {
     flexDirection: 'row',
@@ -1141,22 +1345,21 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 14,
     gap: 8,
-    marginTop: 8,
+    marginTop: 6,
   },
   primaryActionText: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   secondaryActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     gap: 8,
-    marginTop: 4,
   },
   secondaryActionText: {
     fontSize: 13,
@@ -1164,6 +1367,7 @@ const styles = StyleSheet.create({
   },
   bulletList: {
     gap: 8,
+    marginTop: 4,
   },
   bulletRow: {
     flexDirection: 'row',
@@ -1171,15 +1375,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   bulletText: {
-    fontSize: 12,
-    lineHeight: 18,
     flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
   },
   faucetBox: {
     borderWidth: 1,
     borderRadius: 12,
     padding: 14,
     gap: 10,
+    marginTop: 4,
   },
   faucetTitle: {
     fontSize: 13,
@@ -1193,73 +1398,69 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 8,
-    gap: 8,
   },
   codeSnippetText: {
-    fontSize: 11,
-    fontFamily: 'monospace',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 12,
     flex: 1,
   },
   copyBtn: {
     padding: 4,
-  },
-  codeBlockLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  codeBlock: {
-    borderRadius: 10,
-    padding: 12,
-    overflow: 'hidden',
-  },
-  codeBlockContent: {
-    fontFamily: 'monospace',
-    fontSize: 11,
-    color: '#34D399',
-    lineHeight: 16,
+    marginLeft: 8,
   },
   faqCard: {
     borderWidth: 1,
     borderRadius: 14,
-    overflow: 'hidden',
+    padding: 14,
   },
   faqHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-    gap: 10,
   },
   faqQuestion: {
     fontSize: 14,
     fontWeight: '700',
-    lineHeight: 19,
+    flex: 1,
   },
   faqAnswerBox: {
     borderTopWidth: 1,
-    padding: 16,
+    marginTop: 12,
     paddingTop: 12,
   },
   faqAnswerText: {
     fontSize: 13,
-    lineHeight: 20,
+    lineHeight: 19,
+  },
+  codeBlockLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 8,
+  },
+  codeBlock: {
+    borderRadius: 12,
+    padding: 14,
+  },
+  codeBlockContent: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 12,
+    color: '#38BDF8',
+    lineHeight: 18,
   },
   footer: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderTopWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    flexWrap: 'wrap',
-    gap: 10,
   },
   footerHelpText: {
     fontSize: 12,
+    flex: 1,
   },
   footerLinks: {
     flexDirection: 'row',
@@ -1269,11 +1470,11 @@ const styles = StyleSheet.create({
   footerLinkBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 6,
   },
   footerLinkText: {
     fontSize: 12,
@@ -1281,12 +1482,12 @@ const styles = StyleSheet.create({
   },
   footerDoneBtn: {
     paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
   footerDoneText: {
     color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
   },
 });
