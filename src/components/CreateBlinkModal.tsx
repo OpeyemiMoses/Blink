@@ -197,50 +197,15 @@ export const CreateBlinkModal: React.FC<CreateBlinkModalProps> = ({
               </View>
               <Text style={[styles.successTitle, { color: colors.textPrimary }]}>Blink Deployed On-Chain</Text>
               <Text style={[styles.successSub, { color: colors.textSecondary }]}>
-                "{successBlink.name}" is live on Solana Devnet. You can save and print out the physical card image below for your counter, shop, or event.
+                "{successBlink.name}" is live on Solana Devnet and ready for instant tap & QR execution.
               </Text>
 
-              {/* Placard Preview Card */}
-              <View style={[styles.placardPreviewCard, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <Text style={[styles.placardBadge, { color: colors.accent }]}>
-                    {successBlink.visibility === 'global' ? 'PUBLIC (EVERYONE)' : 'PERSONAL (IN-PERSON)'}
-                  </Text>
-                  <Text style={[styles.placardPrice, { color: colors.textPrimary }]}>
-                    {successBlink.token === 'SOL' ? `${successBlink.amount} SOL` : `$${successBlink.amount.toFixed(2)} USDC`}
-                  </Text>
-                </View>
-                <Text style={[styles.placardTitle, { color: colors.textPrimary }]}>{successBlink.name}</Text>
-                <Text style={[styles.placardDesc, { color: colors.textSecondary }]}>{successBlink.description}</Text>
-                <Text style={[styles.placardRecipient, { color: colors.textMuted }]}>
-                  Recipient: {successBlink.recipient.slice(0, 6)}...{successBlink.recipient.slice(-6)}
-                </Text>
-                {successBlink.verifiedDomain && (
-                  <Text style={{ fontSize: 12, color: '#10B981', marginTop: 4, fontWeight: '700' }}>
-                    ✓ {successBlink.verifiedDomain}
-                  </Text>
-                )}
-              </View>
-
-              {/* Save Printable Card Button */}
               <TouchableOpacity
-                style={[styles.downloadCardBtn, { backgroundColor: colors.accent }]}
-                onPress={handleDownloadCard}
-                disabled={isDownloading}
-                activeOpacity={0.8}
-              >
-                <Printer size={18} color="#FFFFFF" />
-                <Text style={styles.downloadCardBtnText}>
-                  {isDownloading ? 'Generating Placard...' : 'Save Printable Card Image (PNG)'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.doneBtn, { borderColor: colors.border, backgroundColor: colors.bgCardAlt }]}
+                style={[styles.doneBtn, { borderColor: colors.border, backgroundColor: colors.accent, marginTop: 16 }]}
                 onPress={handleCloseAndReset}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.doneBtnText, { color: colors.textPrimary }]}>Done</Text>
+                <Text style={[styles.doneBtnText, { color: '#FFFFFF', fontWeight: '800' }]}>Done</Text>
               </TouchableOpacity>
             </View>
           ) : (

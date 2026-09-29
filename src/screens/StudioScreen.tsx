@@ -671,21 +671,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                   <Text style={[styles.actionBtnSecondaryText, { color: colors.textPrimary }]}>QR Code</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[styles.actionBtnSecondary, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
-                  onPress={async () => {
-                    const ok = await PrintableCardService.downloadCard(blink);
-                    if (ok) {
-                      ToastService.success('Printable placard downloaded.');
-                    } else {
-                      ToastService.error('Failed to download card.');
-                    }
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Printer size={14} color={colors.textPrimary} />
-                  <Text style={[styles.actionBtnSecondaryText, { color: colors.textPrimary }]}>Print Card</Text>
-                </TouchableOpacity>
+
 
                 <TouchableOpacity
                   style={[styles.actionBtnSecondary, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
@@ -863,28 +849,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                 Scan with device camera or tap physical NFC tag to execute on Solana.
               </Text>
 
-              {/* Save Printable Card Placard Button */}
-              <TouchableOpacity
-                style={[styles.qrModalDownloadBtn, { backgroundColor: colors.accent }]}
-                onPress={async () => {
-                  if (isDownloadingCard) return;
-                  setIsDownloadingCard(true);
-                  try {
-                    const ok = await PrintableCardService.downloadCard(selectedBlinkForQr);
-                    if (ok) ToastService.success('Printable card downloaded.');
-                    else ToastService.error('Failed to download printable card.');
-                  } finally {
-                    setIsDownloadingCard(false);
-                  }
-                }}
-                disabled={isDownloadingCard}
-                activeOpacity={0.8}
-              >
-                <Printer size={16} color="#FFFFFF" strokeWidth={2.2} />
-                <Text style={styles.qrModalDownloadText}>
-                  {isDownloadingCard ? 'Generating High-Res Card...' : 'Save Printable Card Image (PNG)'}
-                </Text>
-              </TouchableOpacity>
+
 
               {/* Done Button */}
               <TouchableOpacity
