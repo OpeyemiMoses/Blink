@@ -54,8 +54,7 @@ type DocSectionId =
   | 'studio'
   | 'wallets_devnet'
   | 'saved_share'
-  | 'faq'
-  | 'developer';
+  | 'faq';
 
 interface DocSectionNav {
   id: DocSectionId;
@@ -96,7 +95,6 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
     { id: 'wallets_devnet', label: 'Wallets & Devnet', icon: Shield },
     { id: 'saved_share', label: 'Saved & Sharing', icon: Bookmark },
     { id: 'faq', label: 'FAQ & Troubleshooting', icon: HelpCircle },
-    { id: 'developer', label: 'Developer API & Specs', icon: Code, badge: 'API' },
   ];
 
   const searchableDocItems = useMemo<SearchableItem[]>(() => [
@@ -149,12 +147,12 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
       badge: 'MPC Keypair',
     },
     {
-      id: 'wallet-airdrop',
+      id: 'wallet-devnet',
       sectionId: 'wallets_devnet',
-      title: 'Solana Devnet SOL Airdrop & Faucet',
-      snippet: 'Claim free test SOL from the Pocket tab or via CLI command: solana airdrop 1 <address> --url devnet',
+      title: 'Solana Devnet Test Network',
+      snippet: 'All transactions in Blink execute on Solana Devnet with zero financial risk.',
       category: 'Devnet',
-      badge: 'Free SOL',
+      badge: 'Solana',
     },
     {
       id: 'faq-google-popup',
@@ -171,22 +169,6 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
       snippet: 'Avoid placing NFC tags directly on raw metal surfaces unless using anti-metal ferrite tags.',
       category: 'FAQ',
       badge: 'Hardware',
-    },
-    {
-      id: 'dev-api-get',
-      sectionId: 'developer',
-      title: 'GET Action Metadata API Specification',
-      snippet: 'HTTP GET /api/actions/blink?id=<blinkId> returning Solana Actions JSON schema.',
-      category: 'Developer',
-      badge: 'GET API',
-    },
-    {
-      id: 'dev-api-post',
-      sectionId: 'developer',
-      title: 'POST Action Execution API Specification',
-      snippet: 'HTTP POST /api/actions/blink?id=<blinkId> receiving account public key and returning serialized wire transaction.',
-      category: 'Developer',
-      badge: 'POST API',
     },
   ], []);
 
@@ -614,7 +596,7 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
               <View style={styles.sectionContainer}>
                 <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Wallets, Security & Solana Devnet</Text>
                 <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                  How non-custodial embedded keypairs, biometrics, and Devnet airdrops work together.
+                  How non-custodial embedded keypairs and biometrics work together.
                 </Text>
 
                 {/* Privy Embedded Wallet */}
@@ -648,35 +630,15 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
                   </View>
                 </View>
 
-                {/* Solana Devnet & Faucet */}
+                {/* Solana Devnet */}
                 <View style={[styles.guideCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
                   <View style={styles.guideCardHeader}>
                     <SolanaCoinLogo size={22} />
-                    <Text style={[styles.guideCardTitle, { color: colors.textPrimary }]}>Solana Devnet & Free Airdrops</Text>
+                    <Text style={[styles.guideCardTitle, { color: colors.textPrimary }]}>Solana Devnet Architecture</Text>
                   </View>
                   <Text style={[styles.guideText, { color: colors.textSecondary }]}>
                     All transactions in Blink currently execute on <Text style={{ fontWeight: '700', color: colors.accent }}>Solana Devnet</Text>, allowing creators and testers to experience real physical blinks with zero financial risk.
                   </Text>
-
-                  <View style={[styles.faucetBox, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}>
-                    <Text style={[styles.faucetTitle, { color: colors.textPrimary }]}>How to Claim Free Devnet SOL:</Text>
-                    <Text style={[styles.faucetDesc, { color: colors.textSecondary }]}>
-                      1. Open your <Text style={{ fontWeight: '700', color: colors.textPrimary }}>Wallet & Ledger (Pocket)</Text> tab.{'\n'}
-                      2. Click the <Text style={{ fontWeight: '700', color: colors.accent }}>Airdrop 1 SOL</Text> button.{'\n'}
-                      3. Alternatively, run the following Solana CLI command:
-                    </Text>
-                    <View style={[styles.codeSnippetRow, { backgroundColor: colors.bgInput }]}>
-                      <Text style={[styles.codeSnippetText, { color: colors.accent }]}>
-                        solana airdrop 1 {'<your_solana_address>'} --url devnet
-                      </Text>
-                      <TouchableOpacity
-                        style={styles.copyBtn}
-                        onPress={() => handleCopy('solana airdrop 1 <your_solana_address> --url devnet', 'airdrop_cmd')}
-                      >
-                        {copiedCodeId === 'airdrop_cmd' ? <Check size={14} color="#10B981" /> : <Copy size={14} color={colors.textMuted} />}
-                      </TouchableOpacity>
-                    </View>
-                  </View>
                 </View>
 
                 {onOpenPocket && (
@@ -688,7 +650,7 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
                     }}
                   >
                     <Wallet size={16} color={colors.accent} />
-                    <Text style={[styles.secondaryActionText, { color: colors.textPrimary }]}>View Wallet & Claim Devnet SOL</Text>
+                    <Text style={[styles.secondaryActionText, { color: colors.textPrimary }]}>View Wallet & Account</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -753,8 +715,8 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
                     a: 'Yes, 100%! That is the superpower of Blink. The physical tag only holds the invariant redirect ID. When a customer taps, Blink fetches the live price directly from the database and Solana Action API in real time. You can change a $5 coffee to $4.50 in Studio, and the very next tap will charge $4.50 without touching the physical tag!',
                   },
                   {
-                    q: 'How do I fund my wallet for gas fees?',
-                    a: 'Since Blink is on Solana Devnet, test transactions are completely free! Open your Wallet tab (Pocket), click "Airdrop 1 SOL", and free devnet SOL will arrive in your wallet within 2-3 seconds.',
+                    q: 'How do network fees work on Blink?',
+                    a: 'Blink operates on Solana Devnet where transactions require minimal network fees. You can view your wallet status directly in your Pocket tab.',
                   },
                   {
                     q: 'Are transactions on Blink non-custodial?',
@@ -792,99 +754,6 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
                     </TouchableOpacity>
                   );
                 })}
-              </View>
-            )}
-
-            {/* SECTION 7: DEVELOPER API & SPECS */}
-            {activeSection === 'developer' && (
-              <View style={styles.sectionContainer}>
-                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Developer API & Solana Actions Spec</Text>
-                <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                  Integrate Physical Blinks into your own dApps, point-of-sale systems, or smart contracts.
-                </Text>
-
-                {/* Spec Card 1: GET */}
-                <View style={[styles.guideCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-                  <View style={styles.guideCardHeader}>
-                    <Code size={20} color={colors.accent} />
-                    <Text style={[styles.guideCardTitle, { color: colors.textPrimary }]}>GET Action Metadata Endpoint</Text>
-                  </View>
-                  <Text style={[styles.guideText, { color: colors.textSecondary }]}>
-                    When an NFC tap or QR scan resolves, clients request the metadata specification:
-                  </Text>
-                  <View style={[styles.codeSnippetRow, { backgroundColor: colors.bgInput }]}>
-                    <Text style={[styles.codeSnippetText, { color: colors.textPrimary }]}>
-                      GET /api/actions/blink?id=demo-blink-001
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.copyBtn}
-                      onPress={() => handleCopy('GET /api/actions/blink?id=demo-blink-001', 'get_endpoint')}
-                    >
-                      {copiedCodeId === 'get_endpoint' ? <Check size={14} color="#10B981" /> : <Copy size={14} color={colors.textMuted} />}
-                    </TouchableOpacity>
-                  </View>
-
-                  <Text style={[styles.codeBlockLabel, { color: colors.textMuted }]}>Response Payload (JSON):</Text>
-                  <View style={[styles.codeBlock, { backgroundColor: '#090A10' }]}>
-                    <Text style={styles.codeBlockContent}>
-{`{
-  "icon": "https://blink.sol/assets/logo.png",
-  "title": "Solana Action Blink",
-  "description": "Tap to execute $4.50 USDC transaction on Solana",
-  "label": "Pay $4.50 USDC",
-  "disabled": false,
-  "links": {
-    "actions": [
-      {
-        "label": "Pay $4.50 USDC",
-        "href": "/api/actions/blink?id=demo-blink-001&amount=4.50"
-      }
-    ]
-  }
-}`}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Spec Card 2: POST */}
-                <View style={[styles.guideCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-                  <View style={styles.guideCardHeader}>
-                    <Code size={20} color="#10B981" />
-                    <Text style={[styles.guideCardTitle, { color: colors.textPrimary }]}>POST Action Execution Endpoint</Text>
-                  </View>
-                  <Text style={[styles.guideText, { color: colors.textSecondary }]}>
-                    The client submits the payer's public key to obtain a serialized, signed wire transaction:
-                  </Text>
-                  <View style={[styles.codeSnippetRow, { backgroundColor: colors.bgInput }]}>
-                    <Text style={[styles.codeSnippetText, { color: colors.textPrimary }]}>
-                      POST /api/actions/blink?id=demo-blink-001
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.copyBtn}
-                      onPress={() => handleCopy('POST /api/actions/blink?id=demo-blink-001', 'post_endpoint')}
-                    >
-                      {copiedCodeId === 'post_endpoint' ? <Check size={14} color="#10B981" /> : <Copy size={14} color={colors.textMuted} />}
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={[styles.codeBlockLabel, { color: colors.textMuted }]}>Request Body (JSON):</Text>
-                  <View style={[styles.codeBlock, { backgroundColor: '#090A10' }]}>
-                    <Text style={styles.codeBlockContent}>
-{`{
-  "account": "GsbwXfJraGW9nbvVp6Kz7mE6wK7n4x6k7y1g..."
-}`}
-                    </Text>
-                  </View>
-
-                  <Text style={[styles.codeBlockLabel, { color: colors.textMuted }]}>Response Payload (JSON):</Text>
-                  <View style={[styles.codeBlock, { backgroundColor: '#090A10' }]}>
-                    <Text style={styles.codeBlockContent}>
-{`{
-  "transaction": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...",
-  "message": "Transaction created successfully on Solana Devnet"
-}`}
-                    </Text>
-                  </View>
-                </View>
               </View>
             )}
           </ScrollView>
