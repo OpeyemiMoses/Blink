@@ -281,8 +281,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: 6,
+    paddingTop: 12,
     paddingBottom: 40,
     maxWidth: 720,
     width: '100%',

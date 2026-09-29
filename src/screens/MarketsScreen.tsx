@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 6,
     paddingTop: 8,
     paddingBottom: 110, // Avoid overlap with floating bottom dock
   },

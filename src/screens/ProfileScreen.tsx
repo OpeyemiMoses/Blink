@@ -1120,7 +1120,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#07080B',
   },
   contentContainer: {
-    padding: 20,
+    paddingHorizontal: 6,
+    paddingTop: 12,
     paddingBottom: 100,
     maxWidth: 800,
     marginHorizontal: 'auto',

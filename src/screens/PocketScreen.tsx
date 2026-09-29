@@ -870,8 +870,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#07080B',
   },
   content: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: 6,
+    paddingTop: 12,
     paddingBottom: 32,
     maxWidth: 680,
     width: '100%',

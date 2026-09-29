@@ -160,9 +160,31 @@ function saveReceiptsDb() {
   }
 }
 
+const DELETED_DB_FILE = path.join(__dirname, 'server_deleted_db.json');
+let deletedBlinksDb = new Set();
+
+function loadDeletedDb() {
+  try {
+    if (fs.existsSync(DELETED_DB_FILE)) {
+      const data = fs.readFileSync(DELETED_DB_FILE, 'utf8');
+      const list = JSON.parse(data);
+      deletedBlinksDb = new Set(Array.isArray(list) ? list : []);
+    }
+  } catch (err) {
+    deletedBlinksDb = new Set();
+  }
+}
+
+function saveDeletedDb() {
+  try {
+    fs.writeFileSync(DELETED_DB_FILE, JSON.stringify(Array.from(deletedBlinksDb)), 'utf8');
+  } catch (err) {}
+}
+
 loadDb();
 loadUsersDb();
 loadReceiptsDb();
+loadDeletedDb();
 
 // Helper to send JSON responses
 function sendJson(res, statusCode, data) {
@@ -207,11 +229,19 @@ const server = http.createServer((req, res) => {
     } else if (visibilityFilter === 'physical') {
       result = result.filter(b => b.visibility === 'physical');
     }
-    return sendJson(res, 200, { success: true, count: result.length, blinks: result });
+    return sendJson(res, 200, {
+      success: true,
+      count: result.length,
+      blinks: result,
+      deletedIds: Array.from(deletedBlinksDb),
+    });
   }
 
   if (pathname.startsWith('/api/blinks/') && req.method === 'GET') {
     const blinkId = pathname.replace('/api/blinks/', '').trim().toLowerCase();
+    if (deletedBlinksDb.has(blinkId)) {
+      return sendJson(res, 404, { success: false, error: 'Blink has been permanently deleted', deleted: true });
+    }
     const found = blinksDb.find(b => b.id.toLowerCase() === blinkId);
     if (found) {
       return sendJson(res, 200, { success: true, blink: found });
@@ -299,9 +329,11 @@ const server = http.createServer((req, res) => {
           }
 
           blinksDb.splice(existingIdx, 1);
+          deletedBlinksDb.add(blinkId);
           saveDb();
-          console.log(`[TapBlink Server] Deleted Blink "${blinkId}" from cloud database.`);
-          return sendJson(res, 200, { success: true, deletedId: blinkId });
+          saveDeletedDb();
+          console.log(`[TapBlink Server] Permanently deleted Blink "${blinkId}" from cloud database.`);
+          return sendJson(res, 200, { success: true, deletedId: blinkId, deletedIds: Array.from(deletedBlinksDb) });
         }
         return sendJson(res, 404, { success: false, error: 'Blink not found' });
       } catch (err) {

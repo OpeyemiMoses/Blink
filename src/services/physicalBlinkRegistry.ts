@@ -43,8 +43,21 @@ export class PhysicalBlinkRegistry {
           this.globalCloudBlinks = data.blinks;
 
           // Merge cloud blinks into local registry so all devices share them
-          const current = this.loadRegistry();
+          let current = this.loadRegistry();
           let changed = false;
+
+          // Purge any globally deleted Blinks tombstoned by cloud server
+          if (Array.isArray(data.deletedIds) && data.deletedIds.length > 0) {
+            for (const delId of data.deletedIds) {
+              const cleanDel = String(delId).toLowerCase().trim();
+              const beforeLen = current.length;
+              current = current.filter(b => b.id.toLowerCase() !== cleanDel);
+              this.globalCloudBlinks = this.globalCloudBlinks.filter(b => b.id.toLowerCase() !== cleanDel);
+              if (current.length < beforeLen) changed = true;
+              DatabaseService.deleteBlink(cleanDel);
+            }
+          }
+
           for (const cb of data.blinks) {
             const existingIdx = current.findIndex(b => b.id.toLowerCase() === cb.id.toLowerCase());
             if (existingIdx >= 0) {
