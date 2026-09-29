@@ -219,23 +219,25 @@ export const SolanaCoinLogo: React.FC<{ size?: number }> = ({ size = 36 }) => {
   if (Platform.OS === 'web') {
     const srcUri = typeof solanaLogoUser === 'object' && solanaLogoUser !== null ? ((solanaLogoUser as any).uri || solanaLogoUser) : solanaLogoUser;
     return (
-      <View style={{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden', backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden', backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }}>
         {React.createElement('img', {
           src: String(srcUri),
           width: size,
           height: size,
           alt: 'Solana Logo',
-          style: { width: size, height: size, objectFit: 'cover', borderRadius: size / 2, display: 'block' },
+          style: { width: size, height: size, objectFit: 'cover', borderRadius: '50%', display: 'block' },
         })}
       </View>
     );
   }
   return (
-    <Image
-      source={solanaLogoUser}
-      style={{ width: size, height: size, borderRadius: size / 2 }}
-      resizeMode="cover"
-    />
+    <View style={{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden' }}>
+      <Image
+        source={solanaLogoUser}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+        resizeMode="cover"
+      />
+    </View>
   );
 };
 
@@ -243,23 +245,25 @@ export const UsdcCoinLogo: React.FC<{ size?: number }> = ({ size = 36 }) => {
   if (Platform.OS === 'web') {
     const srcUri = typeof usdcLogoUser === 'object' && usdcLogoUser !== null ? ((usdcLogoUser as any).uri || usdcLogoUser) : usdcLogoUser;
     return (
-      <View style={{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden', backgroundColor: '#2775CA', alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden', backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }}>
         {React.createElement('img', {
           src: String(srcUri),
           width: size,
           height: size,
           alt: 'USDC Logo',
-          style: { width: size, height: size, objectFit: 'cover', borderRadius: size / 2, display: 'block' },
+          style: { width: size, height: size, objectFit: 'cover', borderRadius: '50%', display: 'block' },
         })}
       </View>
     );
   }
   return (
-    <Image
-      source={usdcLogoUser}
-      style={{ width: size, height: size, borderRadius: size / 2 }}
-      resizeMode="cover"
-    />
+    <View style={{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden' }}>
+      <Image
+        source={usdcLogoUser}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+        resizeMode="cover"
+      />
+    </View>
   );
 };
 
@@ -267,22 +271,24 @@ export const SkrCoinLogo: React.FC<{ size?: number }> = ({ size = 36 }) => {
   if (Platform.OS === 'web') {
     const srcUri = typeof skrLogoUser === 'object' && skrLogoUser !== null ? ((skrLogoUser as any).uri || skrLogoUser) : skrLogoUser;
     return (
-      <View style={{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden', backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden', backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }}>
         {React.createElement('img', {
           src: String(srcUri),
           width: size,
           height: size,
           alt: 'SKR Logo',
-          style: { width: size, height: size, objectFit: 'cover', borderRadius: size / 2, display: 'block' },
+          style: { width: size, height: size, objectFit: 'cover', borderRadius: '50%', display: 'block' },
         })}
       </View>
     );
   }
   return (
-    <Image
-      source={skrLogoUser}
-      style={{ width: size, height: size, borderRadius: size / 2 }}
-      resizeMode="cover"
-    />
+    <View style={{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden' }}>
+      <Image
+        source={skrLogoUser}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+        resizeMode="cover"
+      />
+    </View>
   );
 };

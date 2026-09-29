@@ -128,7 +128,7 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
   }, [userProfile.username, userProfile.displayName, activePublicKey]);
 
   useEffect(() => {
-    const unsub = PriceService.subscribe((p) => setSolPrice(p));
+    const unsub = PriceService.subscribe((p) => setSolPrice(p.sol));
     return () => unsub();
   }, []);
 

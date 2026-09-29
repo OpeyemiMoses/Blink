@@ -72,7 +72,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({
   const [solPrice, setSolPrice] = useState<number>(() => PriceService.getSolPriceSync());
 
   React.useEffect(() => {
-    const unsub = PriceService.subscribe((p) => setSolPrice(p));
+    const unsub = PriceService.subscribe((p) => setSolPrice(p.sol));
     return () => unsub();
   }, []);
 
