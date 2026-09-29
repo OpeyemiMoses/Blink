@@ -243,23 +243,17 @@ export const SolanaCoinLogo: React.FC<{ size?: number }> = ({ size = 36 }) => (
 );
 
 export const SkrCoinLogo: React.FC<{ size?: number }> = ({ size = 36 }) => (
-  <Svg width={size} height={size} viewBox="0 0 40 40" fill="none">
-    <Defs>
-      <LinearGradient id="skrGrad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
-        <Stop offset="0%" stopColor="#A855F7" />
-        <Stop offset="50%" stopColor="#6366F1" />
-        <Stop offset="100%" stopColor="#3B82F6" />
-      </LinearGradient>
-    </Defs>
-    <Circle cx="20" cy="20" r="19" fill="url(#skrGrad)" stroke="#C084FC" strokeWidth="1" />
-    <Circle cx="20" cy="20" r="14" fill="#0F172A" fillOpacity="0.4" />
-    {/* Stylized Seeker SKR Lightning Emblem */}
+  <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+    <Circle cx="50" cy="50" r="48" fill="#090A0F" stroke="#2D3348" strokeWidth="2" />
+    {/* Upper piece of interlocking 'S' logo */}
     <Path
-      d="M22 10L14 21H20L18 30L26 19H20L22 10Z"
+      d="M 82 14 L 48 14 A 24 24 0 0 0 24 38 L 24 40 A 24 24 0 0 0 48 64 L 82 64 L 82 48 L 48 48 A 8 8 0 0 1 40 40 L 40 38 A 8 8 0 0 1 48 30 L 82 30 Z"
       fill="#FFFFFF"
-      stroke="#F3E8FF"
-      strokeWidth="0.8"
-      strokeLinejoin="round"
+    />
+    {/* Lower piece of interlocking 'S' logo (180deg rotational symmetry) */}
+    <Path
+      d="M 18 86 L 52 86 A 24 24 0 0 0 76 62 L 76 60 A 24 24 0 0 0 52 36 L 18 36 L 18 52 L 52 52 A 8 8 0 0 1 60 60 L 60 62 A 8 8 0 0 1 52 70 L 18 70 Z"
+      fill="#FFFFFF"
     />
   </Svg>
 );
