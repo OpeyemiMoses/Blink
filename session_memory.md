@@ -1,5 +1,5 @@
 # Session Memory — TapBlink / Seeker Project
-**Saved:** 2026-09-29T23:26
+**Saved:** 2026-09-29T23:30
 
 ---
 
@@ -7,14 +7,18 @@
 
 1. **Always Save Memory on Task Completion:** Update and persist `session_memory.md` after EVERY task or response without exception.
 2. **Always Provide Mobile Test URL:** Provide the active HTTPS tunnel URL after every rebuild for instant mobile preview.
-3. **Scrollable Mobile Search & Filter Bars:** The search bar and category filter pills in `MarketsScreen.tsx` are wrapped in a horizontal `ScrollView` so no text, input fields, or pills get cut off on mobile viewports.
-4. **No Mocked or Pre-populated Default Blinks:** All seeded, mocked, and default blinks (`DEFAULT_GLOBAL_BLINKS`, `DEFAULT_FALLBACKS`, `server_db.json`) are completely removed from both backend and frontend. The app operates with a clean slate for real user-created Blinks.
-5. **No "Choose from Gallery" button anywhere:** Avatar changes are strictly via camera or 3D Mascot selector.
-6. **No inline alert/toast banners:** Use `ToastService` exclusively.
-7. **Profile Edit Form Hidden by Default:** Collapses once saved; pencil icon toggles display.
-8. **3D Toy / Lego Mascot Avatars as Default:** All new accounts receive one of the 6 colorful 3D Toy/Lego mascot avatars from `assets/avatars/` (`mascot_purple.png`, `mascot_green.png`, `mascot_pink.png`, `mascot_cyan.png`, `mascot_orange.png`, `mascot_gold.png`) at random until they choose to change it.
-9. **Creator-Only Blink Editing & Deletion:** Only the verified creator of a Blink (`activeAccount.publicKey === recipient || creatorAddress`) can edit or delete their Blink. Server enforces HTTP 403 for unauthorized updates or deletions. Non-creators CANNOT see any delete option anywhere.
-10. **Global Cross-Device Deletion Tombstones:** When a creator deletes a Blink, it is permanently tombstoned in `server_deleted_db.json`. `PhysicalBlinkRegistry.syncFromCloud()` automatically purges tombstoned Blinks from all devices, browser sessions, local storage, and database across all accounts (old and new).
+3. **Strict Creator-Only Editing & Deletion:**
+   - Non-creators cannot see or invoke Edit or Delete buttons anywhere (`BlinkDetailModal.tsx`, `StudioScreen.tsx`).
+   - `server.js` validates creator matching case-insensitively (`incomingRequester === existingCreator`) and rejects unauthorized edit or deletion attempts with HTTP 403.
+4. **Global Cross-Device Deletion Sync:**
+   - When a creator deletes a Blink, `server.js` adds the ID to `deletedBlinksDb` (`server_deleted_db.json`).
+   - Every client device running `PhysicalBlinkRegistry.syncFromCloud()` automatically purges tombstoned IDs from `this.globalCloudBlinks`, `this.blinks`, `DatabaseService`, and `localStorage` across all user sessions globally.
+5. **Scrollable Mobile Search & Filter Bars:** The search bar and category filter pills in `MarketsScreen.tsx` are wrapped in a horizontal `ScrollView` so no text, input fields, or pills get cut off on mobile viewports.
+6. **No Mocked or Pre-populated Default Blinks:** All seeded, mocked, and default blinks (`DEFAULT_GLOBAL_BLINKS`, `DEFAULT_FALLBACKS`, `server_db.json`) are completely removed from both backend and frontend. The app operates with a clean slate for real user-created Blinks.
+7. **No "Choose from Gallery" button anywhere:** Avatar changes are strictly via camera or 3D Mascot selector.
+8. **No inline alert/toast banners:** Use `ToastService` exclusively.
+9. **Profile Edit Form Hidden by Default:** Collapses once saved; pencil icon toggles display.
+10. **3D Toy / Lego Mascot Avatars as Default:** All new accounts receive one of the 6 colorful 3D Toy/Lego mascot avatars from `assets/avatars/` (`mascot_purple.png`, `mascot_green.png`, `mascot_pink.png`, `mascot_cyan.png`, `mascot_orange.png`, `mascot_gold.png`) at random until they choose to change it.
 11. **Modal Auto-Dismissal on Delete:** Deleting a Blink from `BlinkDetailModal` or `StudioScreen` immediately dismisses the modal page (`onClose()`) and returns to the previous screen.
 12. **Clean Header & Hero Cards (No Subtext / Redundant Sign Out Pills):**
     - Subtext balance lines (`● X.XXXX SOL • XX.XX USDC`) removed from balance hero cards in `PocketScreen.tsx` and `MarketsScreen.tsx`.
@@ -32,16 +36,19 @@
 ---
 
 ## Active Servers & Tunnel Status
-- **Backend & Static App Server:** `server.js` running on Port 3000 (`node server.js`) — Active (Task `task-11583`)
+- **Backend & Static App Server:** `server.js` running on Port 3000 (`node server.js`) — Active (Task `task-11664`)
 - **Self-Healing Cloudflare Tunnel URL:** `https://flag-riding-faq-stats.trycloudflare.com` — Active (Supervised by `tunnel_supervisor.js`, Task `task-11118`)
 - **Direct Local Network (Wi-Fi) URL:** `http://192.168.1.194:3000`
 
 ---
 
-## Latest Update: Scrollable Mobile Search & Filter Bar
+## Latest Update: Strict Creator-Only Edit/Delete Guard & Global Synchronized Deletions
 
 ### 1. Requirements & Fix Summary
-- **Horizontally Scrollable Search & Filter Bar (`MarketsScreen.tsx`):**
-  - Wrapped the search box and filter pills (`Most Taps`, `Top Settled`, `High Volume`) in a horizontal `<ScrollView horizontal showsHorizontalScrollIndicator={false}>`.
-  - Created a dedicated rounded `searchPillBox` (`width: 210`) so the placeholder text (`Search by name, ID or domain...`) renders clearly without truncation.
-  - On mobile screens, users can scroll horizontally across all filter pills and search inputs effortlessly without anything ever getting cut off at the edge.
+- **Creator-Only Authorization Guard:**
+  - Removed faulty database fallback check from `isCreator` in `BlinkDetailModal.tsx` so only authentic creators (matching recipient wallet or creator public key) are granted Edit or Delete controls.
+  - Non-creators CANNOT see or access Edit or Delete options anywhere.
+  - Server routes `POST /api/blinks` (for edits) and `DELETE /api/blinks/:id` (for deletion) enforce case-insensitive creator verification and reject unauthorized requests with HTTP 403 Forbidden.
+- **Global Cross-Device Deletion:**
+  - Deleting a Blink adds its ID to `deletedBlinksDb` (`server_deleted_db.json`).
+  - `PhysicalBlinkRegistry.syncFromCloud()` automatically purges tombstoned IDs across all client devices, browser sessions, local storage, and database records globally for every user.

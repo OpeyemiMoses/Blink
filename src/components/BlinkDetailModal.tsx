@@ -106,8 +106,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       activeAccount.publicKey.toLowerCase() === (currentBlink.recipient || '').toLowerCase() ||
       ((currentBlink as any).creatorAddress && (currentBlink as any).creatorAddress.toLowerCase() === activeAccount.publicKey.toLowerCase()) ||
       (userUsername && userUsername.length > 0 && currentBlink.recipient && currentBlink.recipient.toLowerCase().includes(userUsername)) ||
-      (userBlinkId && currentBlink.recipient && userBlinkId.toLowerCase() === currentBlink.recipient.toLowerCase()) ||
-      (currentBlink.id && DatabaseService.getAllBlinks()?.some(b => b.id.toLowerCase() === currentBlink.id.toLowerCase()))
+      (userBlinkId && currentBlink.recipient && userBlinkId.toLowerCase() === currentBlink.recipient.toLowerCase())
     )
   );
 

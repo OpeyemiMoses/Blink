@@ -229,12 +229,12 @@ const server = http.createServer((req, res) => {
           stats: data.stats || { taps: 0, completed: 0, volumeUsdc: 0 },
         };
 
-        const existingIdx = blinksDb.findIndex(b => b.id === cleanId);
+        const existingIdx = blinksDb.findIndex(b => b.id.toLowerCase() === cleanId);
         if (existingIdx >= 0) {
           const existing = blinksDb[existingIdx];
-          const incomingRequester = (data.creatorAddress || data.recipient || '').trim();
-          const existingCreator = (existing.creatorAddress || existing.recipient || '').trim();
-          if (existingCreator && incomingRequester && existingCreator !== incomingRequester) {
+          const incomingRequester = (data.creatorAddress || data.recipient || data.requesterAddress || '').trim().toLowerCase();
+          const existingCreator = (existing.creatorAddress || existing.recipient || '').trim().toLowerCase();
+          if (existingCreator && (!incomingRequester || existingCreator !== incomingRequester)) {
             return sendJson(res, 403, { success: false, error: 'Unauthorized: Only the creator can edit this Blink' });
           }
           blinksDb[existingIdx] = { ...blinksDb[existingIdx], ...newBlink, updatedAt: Date.now() };
@@ -264,10 +264,10 @@ const server = http.createServer((req, res) => {
         const existingIdx = blinksDb.findIndex(b => b.id.toLowerCase() === blinkId);
         if (existingIdx >= 0) {
           const existing = blinksDb[existingIdx];
-          const incomingRequester = (data.creatorAddress || data.requesterAddress || data.recipient || '').trim();
-          const existingCreator = (existing.creatorAddress || existing.recipient || '').trim();
+          const incomingRequester = (data.creatorAddress || data.requesterAddress || data.recipient || '').trim().toLowerCase();
+          const existingCreator = (existing.creatorAddress || existing.recipient || '').trim().toLowerCase();
 
-          if (existingCreator && incomingRequester && existingCreator.toLowerCase() !== incomingRequester.toLowerCase()) {
+          if (existingCreator && (!incomingRequester || existingCreator !== incomingRequester)) {
             return sendJson(res, 403, { success: false, error: 'Unauthorized: Only the creator can delete this Blink' });
           }
 
