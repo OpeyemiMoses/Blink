@@ -1,0 +1,1269 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+  Image,
+  ActivityIndicator,
+} from 'react-native';
+import {
+  ArrowUpRight,
+  ArrowDownLeft,
+  RefreshCw,
+  ExternalLink,
+  ShieldCheck,
+  Wallet,
+  Clock,
+  Key,
+  Copy,
+  Send,
+  Plus,
+  FileText,
+  Tag,
+  CheckCircle2,
+  Activity,
+} from 'lucide-react-native';
+import { SolanaService, EnrichedTransactionInfo } from '../services/solanaService';
+import { UserProfileService } from '../services/userProfileService';
+import { PriceService } from '../services/priceService';
+import { BlinkIdService } from '../services/blinkIdService';
+import { WalletAccount } from '../services/walletProviderService';
+import { LinkedAction, SolanaActionMetadata } from '../types';
+import { PhantomIcon, SolflareIcon, BackpackIcon, CoinbaseIcon } from '../components/WalletIcons';
+import { SolanaCoinLogo, UsdcCoinLogo, BlinkBrandMark } from '../components/BrandLogos';
+import { PrivyIcon } from '../components/PrivyIcon';
+import { usePrivy } from '@privy-io/react-auth';
+import { useExportWallet } from '@privy-io/react-auth/solana';
+import { useTheme } from '../theme/ThemeContext';
+import { ToastService } from '../services/toastService';
+import { ReceiptService } from '../services/receiptService';
+import { ReceiptModal } from '../components/ReceiptModal';
+import { TransactionReceipt } from '../types';
+
+interface PocketScreenProps {
+  activePublicKey: string | null;
+  activeAccount: WalletAccount | null;
+  onOpenManageWallet: () => void;
+  onOpenTap: () => void;
+  onOpenSend: () => void;
+  onOpenReceive: () => void;
+  onExecuteAction: (action: SolanaActionMetadata, link: LinkedAction) => void;
+  onOpenProfile?: () => void;
+  refreshTrigger: number;
+}
+
+export const PocketScreen: React.FC<PocketScreenProps> = ({
+  activePublicKey,
+  activeAccount,
+  onOpenManageWallet,
+  onOpenTap,
+  onOpenSend,
+  onOpenReceive,
+  onExecuteAction,
+  onOpenProfile,
+  refreshTrigger,
+}) => {
+  const { colors, isDark } = useTheme();
+  const {
+    login,
+    logout,
+    authenticated,
+  } = usePrivy();
+  const { exportWallet } = useExportWallet();
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+
+  const handleExportKey = async () => {
+    if (!activePublicKey) {
+      ToastService.error('No connected Solana wallet.');
+      return;
+    }
+    setIsExporting(true);
+    try {
+      await exportWallet({ address: activePublicKey });
+    } catch (err: any) {
+      console.warn('Privy wallet export flow:', err);
+      if (err?.message && !err.message.toLowerCase().includes('closed')) {
+        ToastService.error(err.message || 'Could not export wallet');
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const [balance, setBalance] = useState<number>(() => {
+    if (activePublicKey) {
+      const cached = SolanaService.getCachedSol(activePublicKey);
+      if (cached !== null) return cached;
+    }
+    return 0;
+  });
+  const [usdcBalance, setUsdcBalance] = useState<number>(() => {
+    if (activePublicKey) {
+      const cached = SolanaService.getCachedUsdc(activePublicKey);
+      if (cached !== null) return cached;
+    }
+    return 0;
+  });
+  const [solPrice, setSolPrice] = useState<number>(() => PriceService.getSolPriceSync());
+  const [loading, setLoading] = useState<boolean>(false);
+  const [signatures, setSignatures] = useState<EnrichedTransactionInfo[]>([]);
+  const [isAirdropping, setIsAirdropping] = useState<boolean>(false);
+  const [selectedReceipt, setSelectedReceipt] = useState<TransactionReceipt | null>(null);
+  const [dateFilter, setDateFilter] = useState<'90d' | '30d' | '7d' | '24h'>('90d');
+
+  const userProfile = UserProfileService.getProfile();
+  const connectedLabel = userProfile.displayName || userProfile.username || activeAccount?.name || 'Solana Wallet';
+  const userBlinkId = useMemo(() => {
+    return BlinkIdService.formatBlinkId(userProfile.username || userProfile.displayName, activePublicKey || undefined);
+  }, [userProfile.username, userProfile.displayName, activePublicKey]);
+
+  useEffect(() => {
+    const unsub = PriceService.subscribe((p) => setSolPrice(p));
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (activePublicKey) {
+      const cachedSol = SolanaService.getCachedSol(activePublicKey);
+      const cachedUsdc = SolanaService.getCachedUsdc(activePublicKey);
+      if (cachedSol !== null) setBalance(cachedSol);
+      if (cachedUsdc !== null) setUsdcBalance(cachedUsdc);
+    }
+  }, [activePublicKey]);
+
+  useEffect(() => {
+    if (activePublicKey && userBlinkId) {
+      BlinkIdService.registerBlinkId(userBlinkId, activePublicKey, connectedLabel, userProfile.avatarUrl);
+    }
+  }, [activePublicKey, userBlinkId, connectedLabel, userProfile.avatarUrl]);
+
+  const loadOnChainData = async (showLoading = true) => {
+    if (!activePublicKey) {
+      setBalance(0);
+      setUsdcBalance(0);
+      setSignatures([]);
+      return;
+    }
+    if (showLoading) setLoading(true);
+    try {
+      const [bal, usdc] = await Promise.all([
+        SolanaService.getBalance(activePublicKey, showLoading),
+        SolanaService.getUsdcBalance(activePublicKey, showLoading),
+      ]);
+      if (typeof bal === 'number' && !isNaN(bal)) {
+        setBalance(bal);
+      }
+      if (typeof usdc === 'number' && !isNaN(usdc)) {
+        setUsdcBalance(usdc);
+      }
+
+      const sigs = await SolanaService.getEnrichedRecentTransactions(activePublicKey, 50);
+
+      // Fetch cloud receipts for this wallet address in background to catch incoming transfers from other users
+      ReceiptService.fetchCloudReceiptsForAddress(activePublicKey).catch(() => {});
+
+      // Instantly merge local receipts so sent/received items appear at 0 milliseconds
+      const localReceipts = ReceiptService.getAllReceipts();
+      const existingSigSet = new Set(sigs.map((s) => s.signature));
+
+      // If any on-chain signature matches a receipt with full metadata, enrich it directly
+      for (const sig of sigs) {
+        const cachedRcpt = ReceiptService.getReceiptBySignature(sig.signature);
+        if (cachedRcpt && cachedRcpt.amount > 0) {
+          if (!sig.amountSol && !sig.amountUsdc) {
+            if (cachedRcpt.token === 'SOL') {
+              sig.amountSol = cachedRcpt.amount;
+              sig.token = 'SOL';
+            } else {
+              sig.amountUsdc = cachedRcpt.amount;
+              sig.token = 'USDC';
+            }
+          }
+          if (cachedRcpt.payerAddress && (cachedRcpt.payerAddress === activePublicKey || cachedRcpt.payerAddress.toLowerCase() === activePublicKey.toLowerCase())) {
+            sig.direction = 'send';
+          } else if (cachedRcpt.recipientAddress && (cachedRcpt.recipientAddress === activePublicKey || cachedRcpt.recipientAddress.toLowerCase() === activePublicKey.toLowerCase())) {
+            sig.direction = 'receive';
+          } else if (sig.direction === 'unknown' || !sig.direction) {
+            sig.direction = cachedRcpt.payerAddress === activePublicKey ? 'send' : 'receive';
+          }
+          if (!sig.counterparty) {
+            sig.counterparty = sig.direction === 'send' ? cachedRcpt.recipientAddress : cachedRcpt.payerAddress;
+          }
+        }
+      }
+
+      const syntheticFromReceipts: EnrichedTransactionInfo[] = localReceipts
+        .filter((r) => r.signature && !existingSigSet.has(r.signature))
+        .filter((r) =>
+          (r.payerAddress && (r.payerAddress === activePublicKey || r.payerAddress.toLowerCase() === activePublicKey.toLowerCase())) ||
+          (r.recipientAddress && (r.recipientAddress === activePublicKey || r.recipientAddress.toLowerCase() === activePublicKey.toLowerCase()))
+        )
+        .map((r) => {
+          const isSend = Boolean(r.payerAddress && (r.payerAddress === activePublicKey || r.payerAddress.toLowerCase() === activePublicKey.toLowerCase()));
+          return {
+            signature: r.signature,
+            slot: 0,
+            err: r.status === 'failed' ? true : null,
+            memo: r.blinkTitle || null,
+            blockTime: Math.floor(r.timestamp / 1000),
+            direction: isSend ? 'send' : 'receive',
+            amountSol: r.token === 'SOL' ? r.amount : null,
+            amountUsdc: r.token === 'USDC' ? r.amount : null,
+            token: r.token,
+            counterparty: isSend ? r.recipientAddress : r.payerAddress,
+          };
+        });
+
+      const combined = [...syntheticFromReceipts, ...sigs].sort(
+        (a, b) => (b.blockTime || 0) - (a.blockTime || 0)
+      );
+
+      if (combined.length > 0) {
+        setSignatures(combined);
+      }
+    } catch (err) {
+      console.warn('Error loading Solana data (retaining last verified balance):', err);
+    } finally {
+      if (showLoading) setLoading(false);
+    }
+  };
+
+  const filteredSignatures = useMemo(() => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const filtered = signatures.filter((sig) => {
+      if (!sig.blockTime) return true;
+      const ageSec = Math.max(0, nowSec - sig.blockTime);
+      switch (dateFilter) {
+        case '24h':
+          return ageSec <= 86400;
+        case '7d':
+          return ageSec <= 7 * 86400;
+        case '30d':
+          return ageSec <= 30 * 86400;
+        case '90d':
+        default:
+          return ageSec <= 90 * 86400;
+      }
+    });
+    // On 90-day default, never show empty if wallet has existing transactions
+    if (dateFilter === '90d' && filtered.length === 0 && signatures.length > 0) {
+      return signatures;
+    }
+    return filtered;
+  }, [signatures, dateFilter]);
+
+  const handleRequestAirdrop = async () => {
+    if (!activePublicKey) {
+      ToastService.error('Please connect a wallet first.');
+      return;
+    }
+    setIsAirdropping(true);
+    try {
+      await SolanaService.requestAirdrop(activePublicKey);
+      ToastService.success('Airdropped 1 SOL on Devnet!');
+      await loadOnChainData(true);
+    } catch (err: any) {
+      console.warn('Airdrop failed or rate limited:', err);
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        try {
+          await navigator.clipboard.writeText(activePublicKey);
+        } catch {}
+      }
+      ToastService.info('Copied wallet address! Opening official Solana faucet...');
+      if (typeof window !== 'undefined') {
+        window.open('https://faucet.solana.com', '_blank');
+      }
+    } finally {
+      setIsAirdropping(false);
+    }
+  };
+
+  // Continuous auto-detection of incoming/outgoing transactions without requiring manual refresh
+  useEffect(() => {
+    if (!activePublicKey) return;
+
+    loadOnChainData(true);
+
+    // Live auto-polling every 8 seconds to automatically catch incoming transfers
+    const interval = setInterval(() => {
+      loadOnChainData(false);
+    }, 8000);
+
+    // Instant listener for when user sends, receives, or executes any transaction
+    const handleTxUpdate = () => {
+      loadOnChainData(false);
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('tapblink_tx_updated', handleTxUpdate);
+      window.addEventListener('blink_balance_refresh', handleTxUpdate);
+      window.addEventListener('focus', handleTxUpdate);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('tapblink_tx_updated', handleTxUpdate);
+        window.removeEventListener('blink_balance_refresh', handleTxUpdate);
+        window.removeEventListener('focus', handleTxUpdate);
+      }
+    };
+  }, [activePublicKey, refreshTrigger]);
+
+  const solUsdValue = Number((balance * solPrice).toFixed(2));
+  const usdcUsdValue = usdcBalance;
+  const totalUsdValue = Number((solUsdValue + usdcUsdValue).toFixed(2));
+
+  return (
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.bg }]}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        activePublicKey ? (
+          <RefreshControl refreshing={loading} onRefresh={loadOnChainData} tintColor={colors.accent} />
+        ) : undefined
+      }
+    >
+      {/* Wallet Balance Hero Section */}
+      {activeAccount ? (
+        <View style={styles.heroSection}>
+          <View style={styles.heroBalanceCol}>
+            <Text style={[styles.heroAmount, { color: colors.textPrimary }]}>
+              ${totalUsdValue.toFixed(2)}
+            </Text>
+            <View style={styles.gainRow}>
+              <Text style={[styles.gainText, { color: colors.textSecondary }]}>
+                ● {balance > 0 ? `${balance.toFixed(4)} SOL` : '0.0000 SOL'} • {usdcBalance > 0 ? `${usdcBalance.toFixed(2)} USDC` : '0.00 USDC'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Quick Action Buttons */}
+          <View style={styles.heroActionsRow}>
+            <TouchableOpacity style={styles.depositBtn} onPress={onOpenReceive} activeOpacity={0.8}>
+              <ArrowDownLeft size={15} color="#FFFFFF" strokeWidth={2.5} />
+              <Text style={styles.depositBtnText}>Deposit</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.secondaryBtn} onPress={onOpenSend} activeOpacity={0.8}>
+              <ArrowUpRight size={15} color="#FFFFFF" strokeWidth={2.5} />
+              <Text style={styles.secondaryBtnText}>Send</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        /* Disconnected State Hero Card */
+        <View style={[styles.disconnectedCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <BlinkBrandMark size={52} />
+          <Text style={[styles.disconnectedTitle, { color: colors.textPrimary }]}>Sign In to Blink</Text>
+          <Text style={[styles.disconnectedSub, { color: colors.textSecondary }]}>
+            Sign in with Privy using Google, Apple, Email, or your Solana wallet. Non-custodial embedded Solana keys are provisioned instantly.
+          </Text>
+          <TouchableOpacity
+            style={styles.connectWalletBtn}
+            onPress={login}
+            activeOpacity={0.8}
+          >
+            <PrivyIcon size={16} />
+            <Text style={styles.connectWalletBtnText}>Sign In with Privy</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Connected Account Card */}
+      {activeAccount && (
+        <View style={[styles.accountCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <View style={[styles.accountCardLeft, { flex: 1 }]}>
+            {activeAccount.name === 'Phantom' && <PhantomIcon size={22} />}
+            {activeAccount.name === 'Solflare' && <SolflareIcon size={22} />}
+            {activeAccount.name === 'Backpack' && <BackpackIcon size={22} />}
+            {activeAccount.name === 'Coinbase Wallet' && <CoinbaseIcon size={22} />}
+            {!['Phantom', 'Solflare', 'Backpack', 'Coinbase Wallet'].includes(activeAccount.name) && (
+              <Wallet size={22} color={colors.accent} />
+            )}
+            <View style={{ marginLeft: 10, flex: 1 }}>
+              {/* Unique Blink ID with Copy Button */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    backgroundColor: 'rgba(20, 241, 149, 0.12)',
+                    borderColor: 'rgba(20, 241, 149, 0.3)',
+                    borderWidth: 1,
+                    paddingHorizontal: 8,
+                    paddingVertical: 2,
+                    borderRadius: 6,
+                  }}
+                >
+                  <Tag size={10} color="#14F195" />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#14F195' }}>{userBlinkId}</Text>
+                </View>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                      navigator.clipboard.writeText(userBlinkId);
+                      ToastService.success(`Copied unique Blink ID (${userBlinkId})! Anyone can send directly to this ID.`);
+                    }
+                  }}
+                  activeOpacity={0.7}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: 2, paddingHorizontal: 6 }}
+                >
+                  <Copy size={11} color={colors.accent} />
+                  <Text style={{ fontSize: 10, color: colors.accent, fontWeight: '600' }}>Copy ID</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 2 }}>
+                Unique Blink ID
+              </Text>
+
+              {/* Solana On-chain Address */}
+              <TouchableOpacity
+                onPress={() => {
+                  if (activePublicKey && typeof navigator !== 'undefined' && navigator.clipboard) {
+                    navigator.clipboard.writeText(activePublicKey);
+                    ToastService.success('Solana address copied to clipboard!');
+                  }
+                }}
+                activeOpacity={0.7}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 }}
+              >
+                <Text style={[styles.accountKey, { color: colors.textSecondary }]}>
+                  {activePublicKey ? `${activePublicKey.slice(0, 6)}...${activePublicKey.slice(-6)}` : ''}
+                </Text>
+                <Copy size={10} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.accountCardRight}>
+            {authenticated && (
+              <TouchableOpacity
+                style={[
+                  styles.switchBtn,
+                  {
+                    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                    borderColor: 'rgba(245, 158, 11, 0.35)',
+                    borderWidth: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                  },
+                ]}
+                onPress={handleExportKey}
+                disabled={isExporting}
+                activeOpacity={0.7}
+              >
+                <Key size={12} color="#F59E0B" />
+                <Text style={[styles.switchBtnText, { color: '#F59E0B', fontWeight: '700' }]}>
+                  {isExporting ? '...' : 'Export'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.switchBtn}
+              onPress={() => {
+                logout();
+                ToastService.info('Signed out of wallet');
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.switchBtnText}>Sign Out</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.refreshIconBtn}
+              onPress={() => {
+                loadOnChainData();
+                ToastService.info('Refreshing wallet balance...');
+              }}
+              activeOpacity={0.7}
+            >
+              <RefreshCw size={13} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Live Detected Devnet Balance & Faucet Card */}
+      {activeAccount && (
+        <View style={[styles.balanceCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <View style={styles.balanceCardHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={styles.liveDot} />
+              <Text style={[styles.balanceWalletLabel, { color: colors.textSecondary }]}>
+                Connected: {connectedLabel}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => {
+                loadOnChainData();
+                ToastService.info('Refreshing wallet balance...');
+              }}
+              disabled={loading}
+              style={styles.balanceRefreshBtn}
+              activeOpacity={0.7}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="#14F195" />
+              ) : (
+                <Text style={[styles.balanceRefreshText, { color: colors.accent }]}>Refresh</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.balanceMainRow}>
+            <View>
+              <Text style={[styles.balanceSubTitle, { color: colors.textMuted }]}>Detected Devnet Balances</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
+                <Text style={[styles.balanceNumber, { color: colors.textPrimary }]}>
+                  {balance > 0 ? `${balance.toFixed(4)} SOL` : '0.0000 SOL'}
+                </Text>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textMuted }}>+</Text>
+                <Text style={[styles.balanceNumber, { color: '#2775CA' }]}>
+                  {usdcBalance > 0 ? `${usdcBalance.toFixed(2)} USDC` : '0.00 USDC'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 6 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  if (typeof window !== 'undefined') {
+                    window.open('https://faucet.solana.com', '_blank');
+                  }
+                }}
+                activeOpacity={0.7}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                  paddingVertical: 5,
+                  paddingHorizontal: 9,
+                  backgroundColor: colors.surfaceHover || '#1A1C24',
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: colors.border || '#232733',
+                }}
+              >
+                <Text style={{ fontSize: 10, color: colors.accent, fontWeight: '600' }}>
+                  SOL Faucet
+                </Text>
+                <ExternalLink size={9} color={colors.accent} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  if (activePublicKey && typeof navigator !== 'undefined' && navigator.clipboard) {
+                    navigator.clipboard.writeText(activePublicKey);
+                  }
+                  ToastService.info('Copied address! Opening Circle Devnet USDC faucet...');
+                  if (typeof window !== 'undefined') {
+                    window.open('https://faucet.circle.com', '_blank');
+                  }
+                }}
+                activeOpacity={0.7}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                  paddingVertical: 5,
+                  paddingHorizontal: 9,
+                  backgroundColor: 'rgba(39, 117, 202, 0.12)',
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: 'rgba(39, 117, 202, 0.3)',
+                }}
+              >
+                <Text style={{ fontSize: 10, color: '#2775CA', fontWeight: '600' }}>
+                  USDC Faucet
+                </Text>
+                <ExternalLink size={9} color="#2775CA" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Holdings Section */}
+      <View style={styles.sectionHeader}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Assets & Balances</Text>
+      </View>
+
+      <View style={styles.holdingsList}>
+        {/* SOL Holding */}
+        <View style={[styles.holdingItem, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <View style={styles.holdingItemLeft}>
+            <SolanaCoinLogo size={42} />
+            <View style={{ marginLeft: 12 }}>
+              <Text style={[styles.holdingSymbol, { color: colors.textPrimary }]}>SOL</Text>
+              <Text style={[styles.holdingName, { color: colors.textSecondary }]}>Solana Native</Text>
+            </View>
+          </View>
+          <View style={styles.holdingItemRight}>
+            <Text style={[styles.holdingPrice, { color: colors.textPrimary }]}>${solUsdValue.toFixed(2)}</Text>
+            <Text style={[styles.holdingBalance, { color: colors.textMuted }]}>
+              {balance > 0 ? `${balance.toFixed(4)} SOL` : '0.00 SOL'}
+            </Text>
+          </View>
+        </View>
+
+        {/* USDC Holding */}
+        <View style={[styles.holdingItem, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <View style={styles.holdingItemLeft}>
+            <UsdcCoinLogo size={42} />
+            <View style={{ marginLeft: 12 }}>
+              <Text style={[styles.holdingSymbol, { color: colors.textPrimary }]}>USDC</Text>
+              <Text style={[styles.holdingName, { color: colors.textSecondary }]}>Circle USD Coin</Text>
+            </View>
+          </View>
+          <View style={styles.holdingItemRight}>
+            <Text style={[styles.holdingPrice, { color: colors.textPrimary }]}>${usdcBalance.toFixed(2)}</Text>
+            <Text style={[styles.holdingBalance, { color: colors.textMuted }]}>
+              {usdcBalance > 0 ? `${usdcBalance.toFixed(2)} USDC` : '0.00 USDC'}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* On-Chain Ledger & History */}
+      <View style={styles.sectionHeader}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Clock size={14} color={colors.textSecondary} />
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>On-Chain Ledger</Text>
+          <View style={styles.devnetTag}>
+            <Text style={styles.devnetTagText}>Devnet</Text>
+          </View>
+        </View>
+        {activePublicKey && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => window.open?.(`https://solscan.io/account/${activePublicKey}?cluster=devnet`, '_blank')}
+              style={styles.solscanLink}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.solscanLinkText}>Solscan (Devnet)</Text>
+              <ExternalLink size={11} color={colors.accent} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => window.open?.(`https://explorer.solana.com/address/${activePublicKey}?cluster=devnet`, '_blank')}
+              style={styles.solscanLink}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.solscanLinkText}>Explorer</Text>
+              <ExternalLink size={11} color={colors.accent} />
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* 90-Day Range Filter Selector */}
+      {activePublicKey && (
+        <View style={styles.filterRow}>
+          {(['90d', '30d', '7d', '24h'] as const).map((tab) => {
+            const isActive = dateFilter === tab;
+            const label = tab === '90d' ? '90 Days' : tab === '30d' ? '30 Days' : tab === '7d' ? '7 Days' : '24 Hours';
+            return (
+              <TouchableOpacity
+                key={tab}
+                style={[
+                  styles.filterTab,
+                  {
+                    backgroundColor: isActive ? colors.accent : colors.bgCardAlt,
+                    borderColor: isActive ? colors.accent : colors.border,
+                  },
+                ]}
+                onPress={() => setDateFilter(tab)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.filterTabText,
+                    { color: isActive ? '#FFFFFF' : colors.textSecondary },
+                  ]}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
+      {filteredSignatures.length === 0 ? (
+        <View style={[styles.emptyCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No Transactions in Selected Timeframe</Text>
+          <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
+            {signatures.length > 0
+              ? 'No transactions found within this specific filter. Switch to "90 Days" to view your older transaction receipts.'
+              : 'Physical Blink payments and SOL transfers made with this wallet will appear here with cryptographic signatures.'}
+          </Text>
+          {signatures.length > 0 && dateFilter !== '90d' && (
+            <TouchableOpacity
+              style={[styles.resetFilterBtn, { backgroundColor: colors.accent }]}
+              onPress={() => setDateFilter('90d')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.resetFilterBtnText}>Show All (90 Days)</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : (
+        <View style={styles.txList}>
+          {filteredSignatures.map((sig, idx) => {
+            const isSend = sig.direction === 'send';
+            const isReceive = sig.direction === 'receive';
+            const dirLabel = isSend ? 'Sent' : isReceive ? 'Received' : 'Transaction';
+            const dirColor = isSend ? '#EF4444' : isReceive ? '#10B981' : colors.textSecondary;
+            const amountPrefix = isSend ? '-' : isReceive ? '+' : '';
+
+            // Time ago
+            let timeLabel = '';
+            if (sig.blockTime) {
+              const diffSec = Math.floor(Date.now() / 1000 - sig.blockTime);
+              if (diffSec < 60) timeLabel = 'Just now';
+              else if (diffSec < 3600) timeLabel = `${Math.floor(diffSec / 60)}m ago`;
+              else if (diffSec < 86400) timeLabel = `${Math.floor(diffSec / 3600)}h ago`;
+              else timeLabel = `${Math.floor(diffSec / 86400)}d ago`;
+            }
+
+            return (
+              <TouchableOpacity
+                key={sig.signature}
+                style={styles.txItem}
+                onPress={() => {
+                  if (activePublicKey) {
+                    const rcpt = ReceiptService.getOrCreateReceiptForTx(sig, activePublicKey);
+                    setSelectedReceipt(rcpt);
+                    // Asynchronously fetch complete receipt from cloud or on-chain parser
+                    ReceiptService.getReceiptAsync(sig.signature, activePublicKey).then((upgraded) => {
+                      if (upgraded) {
+                        setSelectedReceipt(upgraded);
+                      }
+                    });
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.txItemLeft}>
+                  <View style={[
+                    styles.txBadge,
+                    sig.err
+                      ? styles.txBadgeErr
+                      : isSend
+                      ? styles.txBadgeSend
+                      : isReceive
+                      ? styles.txBadgeOk
+                      : styles.txBadgeNeutral,
+                  ]}>
+                    {sig.err ? (
+                      <Clock size={16} color="#EF4444" strokeWidth={2.2} />
+                    ) : isSend ? (
+                      <ArrowUpRight size={16} color="#EF4444" strokeWidth={2.5} />
+                    ) : isReceive ? (
+                      <ArrowDownLeft size={16} color="#10B981" strokeWidth={2.5} />
+                    ) : (
+                      <Activity size={16} color={colors.textSecondary} strokeWidth={2} />
+                    )}
+                  </View>
+                  <View style={{ marginLeft: 12, flex: 1 }}>
+                    <Text style={[styles.txTitle, { color: colors.textPrimary }]}>
+                      {dirLabel}
+                    </Text>
+                    {sig.counterparty ? (
+                      <Text style={[styles.txHash, { color: colors.textMuted }]}>
+                        {isSend ? 'To' : 'From'}: {sig.counterparty.slice(0, 6)}...{sig.counterparty.slice(-4)}
+                      </Text>
+                    ) : (
+                      <Text style={[styles.txHash, { color: colors.textMuted }]}>
+                        {`${sig.signature.slice(0, 8)}...${sig.signature.slice(-6)}`}
+                      </Text>
+                    )}
+                    {timeLabel ? (
+                      <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 2 }}>
+                        {timeLabel}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+
+                <View style={styles.txItemRight}>
+                  {sig.token === 'USDC' && sig.amountUsdc !== null && sig.amountUsdc !== undefined ? (
+                    <Text style={[styles.txStatus, { color: dirColor, fontWeight: '800', fontSize: 14 }]}>
+                      {amountPrefix}${sig.amountUsdc.toFixed(2)} USDC
+                    </Text>
+                  ) : sig.amountSol !== null ? (
+                    <Text style={[styles.txStatus, { color: dirColor, fontWeight: '800', fontSize: 14 }]}>
+                      {amountPrefix}{sig.amountSol.toFixed(4)} SOL
+                    </Text>
+                  ) : (
+                    <Text style={[styles.txStatus, sig.err ? styles.txStatusErr : styles.txStatusOk]}>
+                      {sig.err ? 'Failed' : 'Confirmed'}
+                    </Text>
+                  )}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                    <FileText size={11} color={colors.accent} />
+                    <Text style={{ fontSize: 11, color: colors.accent, fontWeight: '700' }}>
+                      Receipt
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
+      {/* Expanded Transaction Receipt Modal */}
+      <ReceiptModal
+        visible={!!selectedReceipt}
+        receipt={selectedReceipt}
+        viewerAddress={activePublicKey}
+        onClose={() => setSelectedReceipt(null)}
+      />
+
+      <View style={{ height: 100 }} />
+    </ScrollView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#07080B',
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 32,
+    maxWidth: 680,
+    width: '100%',
+    marginHorizontal: 'auto',
+  },
+  heroSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  heroBalanceCol: {
+    flex: 1,
+  },
+  heroAmount: {
+    color: '#FFFFFF',
+    fontSize: 34,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+  },
+  gainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  gainText: {
+    color: '#10B981',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  solSubtext: {
+    color: '#64748B',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  heroActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  depositBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#5B67F6',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 16,
+    shadowColor: '#5B67F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  depositBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  secondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#12141F',
+    borderWidth: 1,
+    borderColor: '#222636',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+  },
+  secondaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  disconnectedCard: {
+    backgroundColor: '#0F111A',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#1D212E',
+    padding: 24,
+    alignItems: 'center',
+    textAlign: 'center',
+    marginVertical: 16,
+  },
+  disconnectedTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    marginTop: 14,
+  },
+  disconnectedSub: {
+    color: '#94A3B8',
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginVertical: 10,
+    maxWidth: 340,
+  },
+  connectWalletBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#5B67F6',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginTop: 8,
+  },
+  connectWalletBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  accountCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#0F111A',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1D212E',
+    padding: 14,
+    marginBottom: 20,
+  },
+  accountCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  accountName: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  accountKey: {
+    color: '#64748B',
+    fontSize: 12,
+    fontFamily: 'monospace',
+    marginTop: 2,
+  },
+  accountCardRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  switchBtn: {
+    backgroundColor: '#181B27',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  switchBtnText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  refreshIconBtn: {
+    backgroundColor: '#181B27',
+    padding: 6,
+    borderRadius: 8,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    marginTop: 10,
+    paddingHorizontal: 2,
+  },
+  sectionTitle: {
+    color: '#94A3B8',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  solscanLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  solscanLinkText: {
+    color: '#5B67F6',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  holdingsList: {
+    backgroundColor: '#0F111A',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#1D212E',
+    overflow: 'hidden',
+    marginBottom: 20,
+  },
+  holdingItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#171A25',
+  },
+  holdingItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  holdingSymbol: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  holdingName: {
+    color: '#64748B',
+    fontSize: 12,
+    marginTop: 1,
+  },
+  holdingItemRight: {
+    alignItems: 'flex-end',
+  },
+  holdingPrice: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  holdingBalance: {
+    color: '#10B981',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  emptyCard: {
+    backgroundColor: '#0F111A',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#1D212E',
+    padding: 24,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  emptySub: {
+    color: '#64748B',
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+    maxWidth: 320,
+  },
+  txList: {
+    backgroundColor: '#0F111A',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#1D212E',
+    overflow: 'hidden',
+  },
+  txItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#171A25',
+  },
+  txItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  txBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  txBadgeOk: {
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+  },
+  txBadgeSend: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+  },
+  txBadgeNeutral: {
+    backgroundColor: 'rgba(148, 163, 184, 0.12)',
+  },
+  txBadgeErr: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+  },
+  txTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  txHash: {
+    color: '#64748B',
+    fontSize: 12,
+    fontFamily: 'monospace',
+    marginTop: 2,
+  },
+  txItemRight: {
+    alignItems: 'flex-end',
+  },
+  txStatus: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  txStatusOk: {
+    color: '#10B981',
+  },
+  txStatusErr: {
+    color: '#EF4444',
+  },
+  txBlock: {
+    color: '#64748B',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  balanceCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 20,
+    marginTop: 8,
+  },
+  balanceCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+  },
+  balanceWalletLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  balanceRefreshBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  balanceRefreshText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  balanceMainRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  balanceSubTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  balanceNumber: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+  },
+  airdropBtn: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  airdropBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  devnetTag: {
+    backgroundColor: 'rgba(20, 241, 149, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(20, 241, 149, 0.3)',
+  },
+  devnetTagText: {
+    color: '#14F195',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+    flexWrap: 'wrap',
+  },
+  filterTab: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  filterTabText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  resetFilterBtn: {
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignSelf: 'center',
+  },
+  resetFilterBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+});
