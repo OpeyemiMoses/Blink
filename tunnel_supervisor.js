@@ -20,9 +20,15 @@ function startTunnel() {
 
   let urlDetected = false;
 
+  let isRateLimited = false;
+
   const handleOutput = (data) => {
     const text = data.toString();
     process.stdout.write(text);
+
+    if (text.includes('status 429')) {
+      isRateLimited = true;
+    }
 
     // Look for trycloudflare.com URL
     const match = text.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
@@ -39,7 +45,7 @@ function startTunnel() {
 
     // Check for edge revocation or unrecoverable error
     if (text.includes('Unauthorized: Tunnel not found') || text.includes('Error shutting down control stream')) {
-      console.warn('[TunnelSupervisor] Detected expired/revoked tunnel from Cloudflare edge. Restarting in 3s...');
+      console.warn('[TunnelSupervisor] Detected expired/revoked tunnel from Cloudflare edge. Restarting...');
       cleanupAndRestart();
     }
   };
@@ -48,9 +54,10 @@ function startTunnel() {
   child.stderr.on('data', handleOutput);
 
   child.on('exit', (code, signal) => {
-    console.log(`[TunnelSupervisor] cloudflared exited (code: ${code}, signal: ${signal}).`);
+    const delay = isRateLimited ? 15000 : 3000;
+    console.log(`[TunnelSupervisor] cloudflared exited (code: ${code}, signal: ${signal}). Re-trying in ${delay / 1000}s...`);
     if (!isStopping) {
-      setTimeout(startTunnel, 3000);
+      setTimeout(startTunnel, delay);
     }
   });
 }

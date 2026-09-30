@@ -224,7 +224,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({
                   </Text>
                 </View>
                 <Text style={[styles.moverGain, { color: colors.accent }]}>
-                  {blink.token === 'SOL' ? `${blink.amount} SOL` : `$${blink.amount.toFixed(2)} USDC`}
+                  {blink.token === 'SOL' ? `${blink.amount} SOL` : (blink.token === 'SKR' ? `${blink.amount} SKR` : `$${blink.amount.toFixed(2)} USDC`)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -332,7 +332,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({
               {/* Right Value & Stats */}
               <View style={styles.itemRight}>
                 <Text style={[styles.itemPrice, { color: colors.textPrimary }]}>
-                  {blink.token === 'SOL' ? `${blink.amount} SOL` : `$${blink.amount.toFixed(2)} USDC`}
+                  {blink.token === 'SOL' ? `${blink.amount} SOL` : (blink.token === 'SKR' ? `${blink.amount} SKR` : `$${blink.amount.toFixed(2)} USDC`)}
                 </Text>
                 <Text style={styles.itemGain}>
                   {blink.stats.taps} taps • {blink.stats.completed} settled

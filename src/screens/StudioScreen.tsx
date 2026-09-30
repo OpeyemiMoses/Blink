@@ -224,7 +224,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       setBlinks(prev =>
         prev.map(b => (b.id.toLowerCase() === id.toLowerCase() ? { ...b, ...updated } : b))
       );
-      showToast(`Price updated to $${updated.amount.toFixed(2)} ${updated.token}`);
+      const formatted = updated.token === 'SOL' ? `${updated.amount} SOL` : (updated.token === 'SKR' ? `${updated.amount} SKR` : `$${updated.amount.toFixed(2)} USDC`);
+      showToast(`Price updated to ${formatted}`);
     } else {
       showToast('Failed to update Blink price.');
     }
@@ -564,7 +565,9 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                   accessibilityLabel="Edit Blink price"
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Text style={[styles.cardAmount, { color: colors.textPrimary }]}>${blink.amount.toFixed(2)}</Text>
+                    <Text style={[styles.cardAmount, { color: colors.textPrimary }]}>
+                      {blink.token === 'SOL' ? `${blink.amount} SOL` : (blink.token === 'SKR' ? `${blink.amount} SKR` : `$${blink.amount.toFixed(2)}`)}
+                    </Text>
                     <Edit3 size={12} color={colors.accent} />
                   </View>
                   <Text style={[styles.cardToken, { color: colors.textMuted }]}>{blink.token}</Text>

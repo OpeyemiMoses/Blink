@@ -449,9 +449,10 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
         : currentBlink.amount;
 
       // 1. Pre-flight balance check before biometrics or transaction construction
-      const [freshSol, freshUsdc] = await Promise.all([
+      const [freshSol, freshUsdc, freshSkr] = await Promise.all([
         SolanaService.getBalance(activeAccount.publicKey, true),
         SolanaService.getUsdcBalance(activeAccount.publicKey, true),
+        SolanaService.getSkrBalance(activeAccount.publicKey, true),
       ]);
       setWalletBalanceSol(freshSol);
       setWalletBalanceUsdc(freshUsdc);
@@ -461,6 +462,21 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       if (currentBlink.token === 'USDC') {
         if (freshUsdc < effectiveAmount) {
           const msg = `Insufficient USDC balance. You have $${freshUsdc.toFixed(2)} USDC, but this Blink requires $${effectiveAmount.toFixed(2)} USDC.`;
+          setError(msg);
+          ToastService.error(msg);
+          setAuthorizing(false);
+          return;
+        }
+        if (freshSol < MIN_GAS_SOL) {
+          const msg = `Insufficient SOL for network fee. You need at least 0.00001 SOL for Solana gas, but have ${freshSol.toFixed(4)} SOL.`;
+          setError(msg);
+          ToastService.error(msg);
+          setAuthorizing(false);
+          return;
+        }
+      } else if (currentBlink.token === 'SKR') {
+        if (freshSkr < effectiveAmount) {
+          const msg = `Insufficient SKR balance. You have ${freshSkr.toFixed(2)} SKR, but this Blink requires ${effectiveAmount.toFixed(2)} SKR.`;
           setError(msg);
           ToastService.error(msg);
           setAuthorizing(false);
@@ -486,7 +502,9 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
 
       const priceLabel = currentBlink.token === 'SOL'
         ? `${effectiveAmount} SOL`
-        : `$${effectiveAmount.toFixed(2)} USDC`;
+        : (currentBlink.token === 'SKR'
+          ? `${effectiveAmount} SKR`
+          : `$${effectiveAmount.toFixed(2)} USDC`);
 
       // 2. Invoke the real on-device biometric scanner (Android fingerprint / Face ID)
       const bioResult = await BiometricService.authenticate(
@@ -597,7 +615,9 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
 
       const displayPaid = currentBlink.token === 'SOL'
         ? `${checkoutAmount} SOL`
-        : `$${checkoutAmount.toFixed(2)} USDC`;
+        : (currentBlink.token === 'SKR'
+          ? `${checkoutAmount} SKR`
+          : `$${checkoutAmount.toFixed(2)} USDC`);
       ToastService.success(`Payment of ${displayPaid} confirmed on-chain.`);
 
       // Automatically refresh live balance of recipient and sender as SOL lands

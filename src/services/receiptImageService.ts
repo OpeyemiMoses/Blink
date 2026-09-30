@@ -133,7 +133,9 @@ export class ReceiptImageService {
     const amountY = 250;
     const rawAmount = receipt.token === 'SOL'
       ? `${receipt.amount.toFixed(4)} SOL`
-      : `$${receipt.amount.toFixed(2)} USDC`;
+      : (receipt.token === 'SKR'
+        ? `${receipt.amount.toFixed(2)} SKR`
+        : `$${receipt.amount.toFixed(2)} USDC`);
     const formattedAmount = isReceive ? `+${rawAmount}` : `-${rawAmount}`;
 
     ctx.fillStyle = isReceive ? '#059669' : '#DC2626';

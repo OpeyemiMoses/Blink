@@ -222,10 +222,11 @@ export const TapScanScreen: React.FC<TapScanScreenProps> = ({
     try {
       const senderPubkeyStr = activeAcc.publicKey;
 
-      // 1. Live Pre-flight balance verification (SOL, USDC, and network fee)
-      const [freshSol, freshUsdc] = await Promise.all([
+      // 1. Live Pre-flight balance verification (SOL, USDC, SKR, and network fee)
+      const [freshSol, freshUsdc, freshSkr] = await Promise.all([
         SolanaService.getBalance(senderPubkeyStr, true),
         SolanaService.getUsdcBalance(senderPubkeyStr, true),
+        SolanaService.getSkrBalance(senderPubkeyStr, true),
       ]);
       setUserBalanceSol(freshSol);
       setUserBalanceUsdc(freshUsdc);
@@ -235,6 +236,21 @@ export const TapScanScreen: React.FC<TapScanScreenProps> = ({
       if (resolvedBlink.token === 'USDC') {
         if (freshUsdc < resolvedBlink.amount) {
           const msg = `Insufficient USDC balance. You have $${freshUsdc.toFixed(2)} USDC, but this Blink requires $${resolvedBlink.amount.toFixed(2)} USDC.`;
+          setError(msg);
+          ToastService.error(msg);
+          setAuthorizing(false);
+          return;
+        }
+        if (freshSol < MIN_GAS_SOL) {
+          const msg = `Insufficient SOL for network fee. You need at least 0.00001 SOL for Solana gas, but have ${freshSol.toFixed(4)} SOL.`;
+          setError(msg);
+          ToastService.error(msg);
+          setAuthorizing(false);
+          return;
+        }
+      } else if (resolvedBlink.token === 'SKR') {
+        if (freshSkr < resolvedBlink.amount) {
+          const msg = `Insufficient SKR balance. You have ${freshSkr.toFixed(2)} SKR, but this Blink requires ${resolvedBlink.amount.toFixed(2)} SKR.`;
           setError(msg);
           ToastService.error(msg);
           setAuthorizing(false);
@@ -259,8 +275,13 @@ export const TapScanScreen: React.FC<TapScanScreenProps> = ({
       }
 
       // 2. Biometric / Fingerprint confirmation
+      const priceLabel = resolvedBlink.token === 'SOL'
+        ? `${resolvedBlink.amount} SOL`
+        : (resolvedBlink.token === 'SKR'
+          ? `${resolvedBlink.amount} SKR`
+          : `$${resolvedBlink.amount.toFixed(2)} USDC`);
       const isAuth = await BiometricService.authenticate(
-        `Authorize ${resolvedBlink.token === 'SOL' ? `${resolvedBlink.amount} SOL` : `$${resolvedBlink.amount.toFixed(2)} USDC`} to ${resolvedBlink.name}`
+        `Authorize ${priceLabel} to ${resolvedBlink.name}`
       );
       if (!isAuth.success) {
         throw new Error(isAuth.error || 'Biometric authorization cancelled or failed.');
@@ -280,6 +301,13 @@ export const TapScanScreen: React.FC<TapScanScreenProps> = ({
       if (resolvedBlink.token === 'USDC') {
         // Native SPL USDC transfer on Solana network
         transaction = await SolanaService.buildUsdcTransferTransaction(
+          senderPubkey,
+          recipientPubkey,
+          resolvedBlink.amount
+        );
+      } else if (resolvedBlink.token === 'SKR') {
+        // Native SPL SKR transfer on Solana network
+        transaction = await SolanaService.buildSkrTransferTransaction(
           senderPubkey,
           recipientPubkey,
           resolvedBlink.amount
@@ -344,7 +372,9 @@ export const TapScanScreen: React.FC<TapScanScreenProps> = ({
 
       const displayPaid = resolvedBlink.token === 'SOL'
         ? `${resolvedBlink.amount} SOL`
-        : `$${resolvedBlink.amount.toFixed(2)} USDC`;
+        : (resolvedBlink.token === 'SKR'
+          ? `${resolvedBlink.amount} SKR`
+          : `$${resolvedBlink.amount.toFixed(2)} USDC`);
       ToastService.success(`Payment of ${displayPaid} confirmed on-chain.`);
 
       // Refresh balances automatically as funds land

@@ -227,7 +227,7 @@ export const SavedBlinksScreen: React.FC<SavedBlinksScreenProps> = ({
 
                 <View style={styles.cardRight}>
                   <Text style={[styles.priceText, { color: colors.textPrimary }]}>
-                    {blink.token === 'SOL' ? `${blink.amount} SOL` : `$${blink.amount.toFixed(2)}`}
+                    {blink.token === 'SOL' ? `${blink.amount} SOL` : (blink.token === 'SKR' ? `${blink.amount} SKR` : `$${blink.amount.toFixed(2)}`)}
                   </Text>
                   {blink.token !== 'SOL' && (
                     <Text style={[styles.tokenSubtext, { color: colors.accent }]}>{blink.token}</Text>

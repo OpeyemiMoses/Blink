@@ -118,7 +118,9 @@ export class PrintableCardService {
     const pricePillY = 225;
     const priceText = blink.token === 'SOL'
       ? `${blink.amount} SOL`
-      : `$${blink.amount.toFixed(2)} USDC`;
+      : (blink.token === 'SKR'
+        ? `${blink.amount} SKR`
+        : `$${blink.amount.toFixed(2)} USDC`);
 
     ctx.font = '800 22px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     const priceMetrics = ctx.measureText(priceText);
