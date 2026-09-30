@@ -1,18 +1,16 @@
+import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { Wallet, Sparkles, Shield, Sun, Moon, User, HelpCircle } from 'lucide-react-native';
+import { Bell, Settings, User } from 'lucide-react-native';
 import { WalletAccount } from '../services/walletProviderService';
-import { PhantomIcon, SolflareIcon, BackpackIcon, CoinbaseIcon } from './WalletIcons';
 import { BlinkBrandMark } from './BrandLogos';
-import { PrivyIcon } from './PrivyIcon';
 import { useTheme } from '../theme/ThemeContext';
 
 interface HeaderProps {
   network: string;
   activeAccount: WalletAccount | null;
-  onToggleNetwork?: () => void;
-  onOpenWalletConnect?: () => void;
-  onOpenAbout?: () => void;
-  onToggleTheme?: () => void;
+  onOpenNotifications?: () => void;
+  unreadNotificationsCount?: number;
+  onOpenSettings?: () => void;
   onOpenProfile?: () => void;
   avatarUrl?: string;
   isDark?: boolean;
@@ -21,13 +19,11 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   network,
   activeAccount,
-  onToggleNetwork,
-  onOpenWalletConnect,
-  onOpenAbout,
-  onToggleTheme,
+  onOpenNotifications,
+  unreadNotificationsCount = 0,
+  onOpenSettings,
   onOpenProfile,
   avatarUrl,
-  isDark,
 }) => {
   const { colors } = useTheme();
 
@@ -40,20 +36,32 @@ export const Header: React.FC<HeaderProps> = ({
           <Text style={[styles.brandTitle, { color: colors.textPrimary }]}>Blink</Text>
         </View>
 
-        {/* Right Controls: Only Theme Toggle and Profile Picture */}
+        {/* Right Controls: Notifications, Settings, Profile Avatar */}
         <View style={styles.rightControls}>
-          {/* Theme Toggle */}
-          {onToggleTheme && (
+          {/* Notifications Bell */}
+          {onOpenNotifications && (
             <TouchableOpacity
-              style={[styles.themeToggle, { backgroundColor: colors.bgPill, borderColor: colors.border }]}
-              onPress={onToggleTheme}
+              style={[styles.iconHeaderBtn, { backgroundColor: colors.bgPill, borderColor: colors.border }]}
+              onPress={onOpenNotifications}
               activeOpacity={0.7}
-              accessibilityLabel={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              accessibilityLabel="Open Notifications"
             >
-              {isDark
-                ? <Sun size={14} color={colors.textSecondary} />
-                : <Moon size={14} color={colors.textSecondary} />
-              }
+              <Bell size={15} color={colors.textSecondary} />
+              {unreadNotificationsCount > 0 && (
+                <View style={[styles.badgeDot, { backgroundColor: colors.accent }]} />
+              )}
+            </TouchableOpacity>
+          )}
+
+          {/* Settings Gear */}
+          {onOpenSettings && (
+            <TouchableOpacity
+              style={[styles.iconHeaderBtn, { backgroundColor: colors.bgPill, borderColor: colors.border }]}
+              onPress={onOpenSettings}
+              activeOpacity={0.7}
+              accessibilityLabel="Open App Settings"
+            >
+              <Settings size={15} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
 
@@ -105,77 +113,32 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.4,
   },
-  aboutPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderWidth: 1,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 20,
-    marginLeft: 4,
-  },
-  aboutPillText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
   rightControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
-  networkPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 5,
-  },
-  networkDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  networkText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  themeToggle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  iconHeaderBtn: {
+    position: 'relative',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  walletBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 13,
-    paddingVertical: 7,
-    borderRadius: 20,
-    gap: 6,
-  },
-  walletBtnConnected: {
-    borderWidth: 1,
-    paddingHorizontal: 10,
-  },
-  connectBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  addressTextConnected: {
-    fontSize: 12,
-    fontWeight: '700',
-    fontFamily: 'monospace',
+  badgeDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   profileAvatarBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     overflow: 'hidden',
     borderWidth: 1.5,
     alignItems: 'center',
@@ -184,7 +147,7 @@ const styles = StyleSheet.create({
   avatarImg: {
     width: '100%',
     height: '100%',
-    borderRadius: 16,
+    borderRadius: 17,
   },
   avatarFallback: {
     width: '100%',

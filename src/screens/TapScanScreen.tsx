@@ -32,6 +32,7 @@ import { NfcService } from '../services/nfcService';
 import { PhysicalBlinkRegistry, PhysicalBlink } from '../services/physicalBlinkRegistry';
 import { WalletProviderService, WalletAccount } from '../services/walletProviderService';
 import { SolanaService } from '../services/solanaService';
+import { NotificationService } from '../services/notificationService';
 import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { BiometricService } from '../services/biometricService';
 import { ToastService } from '../services/toastService';
@@ -365,6 +366,8 @@ export const TapScanScreen: React.FC<TapScanScreenProps> = ({
         verifiedDomain: resolvedBlink.verifiedDomain,
       };
       ReceiptService.saveReceipt(rcpt);
+      NotificationService.notifyPaymentSent(resolvedBlink.amount, resolvedBlink.token, resolvedBlink.recipient, sig);
+      NotificationService.notifyBlinkPaid(resolvedBlink.name, resolvedBlink.amount, resolvedBlink.token, activeAccount.publicKey, sig, resolvedBlink.id);
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('blink_tx_updated', { detail: rcpt }));

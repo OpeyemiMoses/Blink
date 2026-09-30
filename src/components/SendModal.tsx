@@ -11,6 +11,7 @@ import { PhysicalBlinkRegistry } from '../services/physicalBlinkRegistry';
 import { BlinkIdService } from '../services/blinkIdService';
 import { PriceService } from '../services/priceService';
 import { ReceiptService } from '../services/receiptService';
+import { NotificationService } from '../services/notificationService';
 import { ReceiptModal } from './ReceiptModal';
 import { TransactionReceipt } from '../types';
 
@@ -268,6 +269,7 @@ export const SendModal: React.FC<SendModalProps> = ({
         method: 'send',
       };
       ReceiptService.saveReceipt(rcpt);
+      NotificationService.notifyPaymentSent(numAmount, selectedToken, targetRecipient, sig);
 
       // Optimistically update cached balance so UI reflects new balance immediately
       const currentSol = SolanaService.getCachedSol(senderPublicKey) ?? 0;

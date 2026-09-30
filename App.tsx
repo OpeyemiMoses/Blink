@@ -33,6 +33,9 @@ import { ReceiveModal } from './src/components/ReceiveModal';
 import { SeedVaultModal } from './src/components/SeedVaultModal';
 import { ReceiptModal } from './src/components/ReceiptModal';
 import { AboutBlinkModal } from './src/components/AboutBlinkModal';
+import { NotificationsModal } from './src/components/NotificationsModal';
+import { SettingsModal } from './src/components/SettingsModal';
+import { NotificationService } from './src/services/notificationService';
 import { LaunchSplashScreen } from './src/components/LaunchSplashScreen';
 import { WelcomeAuthScreen } from './src/components/WelcomeAuthScreen';
 
@@ -140,6 +143,19 @@ function BlinkMainApp() {
   const [receiptModalVisible, setReceiptModalVisible] = useState(false);
   const [createBlinkModalVisible, setCreateBlinkModalVisible] = useState(false);
   const [pickUsernameModalVisible, setPickUsernameModalVisible] = useState(false);
+  const [notificationsModalVisible, setNotificationsModalVisible] = useState(false);
+  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(() => NotificationService.getUnreadCount());
+
+  useEffect(() => {
+    const handleNotifsUpdate = () => {
+      setUnreadNotificationsCount(NotificationService.getUnreadCount());
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('tapblink_notifications_updated', handleNotifsUpdate);
+      return () => window.removeEventListener('tapblink_notifications_updated', handleNotifsUpdate);
+    }
+  }, []);
 
   // Active action
   const [pendingAction, setPendingAction] = useState<SolanaActionMetadata | null>(null);
@@ -730,7 +746,9 @@ function BlinkMainApp() {
               onToggleNetwork={toggleNetwork}
               onOpenWalletConnect={login}
               onOpenAbout={() => setAboutModalVisible(true)}
-              onToggleTheme={toggleTheme}
+              onOpenNotifications={() => setNotificationsModalVisible(true)}
+              unreadNotificationsCount={unreadNotificationsCount}
+              onOpenSettings={() => setSettingsModalVisible(true)}
               isDark={isDark}
               onOpenProfile={handleOpenProfile}
               avatarUrl={userProfile.avatarUrl}
@@ -934,6 +952,19 @@ function BlinkMainApp() {
           (user?.email?.address ? user.email.address.split('@')[0] : '')
         }
         initialAvatarUrl={userProfile.avatarUrl}
+      />
+
+      {/* Notifications Modal */}
+      <NotificationsModal
+        visible={notificationsModalVisible}
+        onClose={() => setNotificationsModalVisible(false)}
+      />
+
+      {/* Settings Modal */}
+      <SettingsModal
+        visible={settingsModalVisible}
+        onClose={() => setSettingsModalVisible(false)}
+        activeAccount={activeAccount}
       />
 
       {/* Universal Floating Toast Feedback System */}

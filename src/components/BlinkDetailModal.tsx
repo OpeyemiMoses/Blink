@@ -43,6 +43,7 @@ import { NfcService } from '../services/nfcService';
 import { CoffeeShopLogo, MusicianLogo, HackerHouseLogo, BlinkBrandMark } from './BrandLogos';
 import { WalletProviderService } from '../services/walletProviderService';
 import { SolanaService } from '../services/solanaService';
+import { NotificationService } from '../services/notificationService';
 import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { BiometricService } from '../services/biometricService';
 import { useTheme } from '../theme/ThemeContext';
@@ -612,6 +613,8 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
         verifiedDomain: currentBlink.verifiedDomain,
       };
       ReceiptService.saveReceipt(rcpt);
+      NotificationService.notifyPaymentSent(checkoutAmount, currentBlink.token, currentBlink.recipient, sig);
+      NotificationService.notifyBlinkPaid(currentBlink.name, checkoutAmount, currentBlink.token, activeAccount.publicKey, sig, currentBlink.id);
 
       const displayPaid = currentBlink.token === 'SOL'
         ? `${checkoutAmount} SOL`

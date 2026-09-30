@@ -36,7 +36,7 @@ export const ReceiveModal: React.FC<ReceiveModalProps> = ({
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <ArrowDownLeft size={18} color="#5B67F6" strokeWidth={2.5} />
-              <Text style={styles.title}>Receive SOL & USDC</Text>
+              <Text style={styles.title}>Receive SOL, USDC & SKR</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
               <X size={16} color="#9CA3AF" />
@@ -44,18 +44,22 @@ export const ReceiveModal: React.FC<ReceiveModalProps> = ({
           </View>
 
           <Text style={styles.subtitle}>
-            Scan QR code or copy your address to receive SOL or USDC on the Solana network directly to this wallet.
+            Scan QR code or copy your address to receive SOL, USDC, or SKR on the Solana network directly to this wallet.
           </Text>
 
           {/* Supported Tokens on Solana Network */}
           <View style={styles.tokensRow}>
             <View style={styles.tokenTag}>
               <View style={[styles.tokenDot, { backgroundColor: '#818CF8' }]} />
-              <Text style={styles.tokenTagText}>SOL (Native)</Text>
+              <Text style={styles.tokenTagText}>SOL</Text>
             </View>
             <View style={styles.tokenTag}>
               <View style={[styles.tokenDot, { backgroundColor: '#2775CA' }]} />
-              <Text style={styles.tokenTagText}>USDC (Solana SPL)</Text>
+              <Text style={styles.tokenTagText}>USDC</Text>
+            </View>
+            <View style={styles.tokenTag}>
+              <View style={[styles.tokenDot, { backgroundColor: '#14F195' }]} />
+              <Text style={styles.tokenTagText}>SKR</Text>
             </View>
           </View>
 

@@ -65,7 +65,7 @@ export const CreateBlinkModal: React.FC<CreateBlinkModalProps> = ({
   const [name, setName] = useState('');
   const [actionType, setActionType] = useState<ActionType>('tip');
   const [amount, setAmount] = useState('5.00');
-  const [token, setToken] = useState<'USDC' | 'SOL'>('USDC');
+  const [token, setToken] = useState<'USDC' | 'SOL' | 'SKR'>('USDC');
   const [recipient, setRecipient] = useState('');
   const [description, setDescription] = useState('');
   const [physicalId, setPhysicalId] = useState('');
@@ -330,7 +330,7 @@ export const CreateBlinkModal: React.FC<CreateBlinkModalProps> = ({
                     </View>
                   </View>
 
-                  <View style={[styles.fieldGroup, { flex: 1 }]}>
+                  <View style={[styles.fieldGroup, { flex: 1.2 }]}>
                     <Text style={[styles.label, { color: colors.textSecondary }]}>TOKEN</Text>
                     <View style={styles.tokenToggleRow}>
                       <TouchableOpacity
@@ -352,6 +352,16 @@ export const CreateBlinkModal: React.FC<CreateBlinkModalProps> = ({
                         onPress={() => setToken('SOL')}
                       >
                         <Text style={[styles.tokenToggleText, { color: token === 'SOL' ? '#FFFFFF' : colors.textMuted }]}>SOL</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.tokenToggleBtn,
+                          { borderColor: colors.border, backgroundColor: colors.bgCardAlt },
+                          token === 'SKR' && [styles.tokenToggleBtnActive, { backgroundColor: colors.accent, borderColor: colors.accent }],
+                        ]}
+                        onPress={() => setToken('SKR')}
+                      >
+                        <Text style={[styles.tokenToggleText, { color: token === 'SKR' ? '#FFFFFF' : colors.textMuted }]}>SKR</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
