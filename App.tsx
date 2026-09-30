@@ -21,6 +21,8 @@ import { PocketScreen } from './src/screens/PocketScreen';
 import { TapScanScreen } from './src/screens/TapScanScreen';
 import { StudioScreen } from './src/screens/StudioScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
+import { NotificationsScreen } from './src/screens/NotificationsScreen';
+import { SettingsScreen } from './src/screens/SettingsScreen';
 
 import { FloatingMobileNav, TabKey } from './src/components/FloatingMobileNav';
 import { DesktopSidebar } from './src/components/DesktopSidebar';
@@ -644,9 +646,9 @@ function BlinkMainApp() {
             activeAccount={activeAccount}
             onOpenWalletConnect={login}
             onOpenAbout={() => setAboutModalVisible(true)}
-            onOpenNotifications={() => setNotificationsModalVisible(true)}
+            onOpenNotifications={() => setCurrentTab('notifications')}
             unreadNotificationsCount={unreadNotificationsCount}
-            onOpenSettings={() => setSettingsModalVisible(true)}
+            onOpenSettings={() => setCurrentTab('settings')}
             onToggleTheme={toggleTheme}
             isDark={isDark}
           />
@@ -711,6 +713,14 @@ function BlinkMainApp() {
               />
             )}
 
+            {currentTab === 'notifications' && (
+              <NotificationsScreen onSelectTab={setCurrentTab} />
+            )}
+
+            {currentTab === 'settings' && (
+              <SettingsScreen activeAccount={activeAccount} onOpenWalletConnect={login} />
+            )}
+
             {currentTab === 'profile' && (
               authenticated && activeAccount ? (
                 <ProfileScreen
@@ -748,9 +758,9 @@ function BlinkMainApp() {
             onToggleNetwork={toggleNetwork}
             onOpenWalletConnect={login}
             onOpenAbout={() => setAboutModalVisible(true)}
-            onOpenNotifications={() => setNotificationsModalVisible(true)}
+            onOpenNotifications={() => setCurrentTab('notifications')}
             unreadNotificationsCount={unreadNotificationsCount}
-            onOpenSettings={() => setSettingsModalVisible(true)}
+            onOpenSettings={() => setCurrentTab('settings')}
             isDark={isDark}
             onOpenProfile={handleOpenProfile}
             avatarUrl={userProfile.avatarUrl}
@@ -813,6 +823,14 @@ function BlinkMainApp() {
                 onOpenProfile={handleOpenProfile}
                 refreshTrigger={refreshTrigger}
               />
+            )}
+
+            {currentTab === 'notifications' && (
+              <NotificationsScreen onSelectTab={setCurrentTab} />
+            )}
+
+            {currentTab === 'settings' && (
+              <SettingsScreen activeAccount={activeAccount} onOpenWalletConnect={login} />
             )}
 
             {currentTab === 'profile' && (
@@ -953,19 +971,6 @@ function BlinkMainApp() {
           (user?.email?.address ? user.email.address.split('@')[0] : '')
         }
         initialAvatarUrl={userProfile.avatarUrl}
-      />
-
-      {/* Notifications Modal */}
-      <NotificationsModal
-        visible={notificationsModalVisible}
-        onClose={() => setNotificationsModalVisible(false)}
-      />
-
-      {/* Settings Modal */}
-      <SettingsModal
-        visible={settingsModalVisible}
-        onClose={() => setSettingsModalVisible(false)}
-        activeAccount={activeAccount}
       />
 
       {/* Universal Floating Toast Feedback System */}

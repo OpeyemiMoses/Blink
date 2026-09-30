@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native
 import { Home, Radio, Store, Wallet, User, Bookmark, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useTheme } from '../theme/ThemeContext';
 
-export type TabKey = 'markets' | 'saved' | 'tap' | 'studio' | 'wallet' | 'profile';
+export type TabKey = 'markets' | 'saved' | 'tap' | 'studio' | 'wallet' | 'profile' | 'notifications' | 'settings';
 
 interface FloatingMobileNavProps {
   currentTab: TabKey;
