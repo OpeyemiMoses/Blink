@@ -644,6 +644,9 @@ function BlinkMainApp() {
             activeAccount={activeAccount}
             onOpenWalletConnect={login}
             onOpenAbout={() => setAboutModalVisible(true)}
+            onOpenNotifications={() => setNotificationsModalVisible(true)}
+            unreadNotificationsCount={unreadNotificationsCount}
+            onOpenSettings={() => setSettingsModalVisible(true)}
             onToggleTheme={toggleTheme}
             isDark={isDark}
           />
@@ -739,21 +742,19 @@ function BlinkMainApp() {
       ) : (
         /* Mobile Viewport with Floating Bottom Nav Capsule */
         <View style={styles.mobileLayout}>
-          {currentTab !== 'markets' && (
-            <Header
-              network={network}
-              activeAccount={activeAccount}
-              onToggleNetwork={toggleNetwork}
-              onOpenWalletConnect={login}
-              onOpenAbout={() => setAboutModalVisible(true)}
-              onOpenNotifications={() => setNotificationsModalVisible(true)}
-              unreadNotificationsCount={unreadNotificationsCount}
-              onOpenSettings={() => setSettingsModalVisible(true)}
-              isDark={isDark}
-              onOpenProfile={handleOpenProfile}
-              avatarUrl={userProfile.avatarUrl}
-            />
-          )}
+          <Header
+            network={network}
+            activeAccount={activeAccount}
+            onToggleNetwork={toggleNetwork}
+            onOpenWalletConnect={login}
+            onOpenAbout={() => setAboutModalVisible(true)}
+            onOpenNotifications={() => setNotificationsModalVisible(true)}
+            unreadNotificationsCount={unreadNotificationsCount}
+            onOpenSettings={() => setSettingsModalVisible(true)}
+            isDark={isDark}
+            onOpenProfile={handleOpenProfile}
+            avatarUrl={userProfile.avatarUrl}
+          />
 
           <View style={styles.mobileContentArea}>
             {currentTab === 'markets' && (

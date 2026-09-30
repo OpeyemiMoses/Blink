@@ -15,6 +15,8 @@ import {
   Moon,
   BookOpen,
   HelpCircle,
+  Bell,
+  Settings,
 } from 'lucide-react-native';
 import { BlinkBrandMark } from './BrandLogos';
 import { PhantomIcon, SolflareIcon, BackpackIcon, CoinbaseIcon } from './WalletIcons';
@@ -31,6 +33,9 @@ interface DesktopSidebarProps {
   onToggleNetwork: () => void;
   onOpenWalletConnect: () => void;
   onOpenAbout: () => void;
+  onOpenNotifications?: () => void;
+  unreadNotificationsCount?: number;
+  onOpenSettings?: () => void;
   onToggleTheme?: () => void;
   isDark?: boolean;
   isCollapsed?: boolean;
@@ -45,6 +50,9 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
   onToggleNetwork,
   onOpenWalletConnect,
   onOpenAbout,
+  onOpenNotifications,
+  unreadNotificationsCount = 0,
+  onOpenSettings,
   onToggleTheme,
   isDark: isDarkProp,
   isCollapsed: externalCollapsed,
@@ -171,26 +179,52 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
           {!isCollapsed && <Text style={[styles.networkText, { color: colors.textSecondary }]}>Solana Devnet</Text>}
         </View>
 
-        {/* Theme Toggle Button */}
-        {onToggleTheme && (
+        {/* Notifications Button */}
+        {onOpenNotifications && (
           <TouchableOpacity
             style={[
               styles.themeToggleRow,
               isCollapsed && styles.themeToggleRowCollapsed,
               { backgroundColor: colors.bgPill, borderColor: colors.border },
             ]}
-            onPress={onToggleTheme}
+            onPress={onOpenNotifications}
             activeOpacity={0.7}
-            accessibilityLabel={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            accessibilityLabel="Notifications"
           >
-            {isDark
-              ? <Sun size={14} color={colors.textSecondary} />
-              : <Moon size={14} color={colors.textSecondary} />
-            }
+            <View style={{ position: 'relative' }}>
+              <Bell size={14} color={colors.textSecondary} />
+              {unreadNotificationsCount > 0 && (
+                <View style={{ position: 'absolute', top: -2, right: -2, width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accent }} />
+              )}
+            </View>
             {!isCollapsed && (
-              <Text style={[styles.themeToggleText, { color: colors.textSecondary }]}>
-                {isDark ? 'Light Mode' : 'Dark Mode'}
-              </Text>
+              <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={[styles.themeToggleText, { color: colors.textSecondary }]}>Notifications</Text>
+                {unreadNotificationsCount > 0 && (
+                  <View style={{ backgroundColor: colors.accent, borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1 }}>
+                    <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>{unreadNotificationsCount}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {/* Settings Button */}
+        {onOpenSettings && (
+          <TouchableOpacity
+            style={[
+              styles.themeToggleRow,
+              isCollapsed && styles.themeToggleRowCollapsed,
+              { backgroundColor: colors.bgPill, borderColor: colors.border },
+            ]}
+            onPress={onOpenSettings}
+            activeOpacity={0.7}
+            accessibilityLabel="App Settings"
+          >
+            <Settings size={14} color={colors.textSecondary} />
+            {!isCollapsed && (
+              <Text style={[styles.themeToggleText, { color: colors.textSecondary }]}>Settings</Text>
             )}
           </TouchableOpacity>
         )}

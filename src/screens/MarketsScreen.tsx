@@ -142,44 +142,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.bg }]} contentContainerStyle={styles.content}>
-      {/* Top Bar: shows logo on mobile; on desktop where nav bar has the logo, only 1 logo is shown */}
-      <View style={[styles.topBar, hideBrandLogo && styles.topBarRightOnly]}>
-        {!hideBrandLogo && (
-          <View style={styles.topBarLeft}>
-            <BlinkBrandMark size={36} />
-          </View>
-        )}
 
-        <View style={styles.topBarRight}>
-          {/* Theme Toggle Button */}
-          <TouchableOpacity
-            style={[styles.themeToggleBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-            onPress={toggleTheme}
-            activeOpacity={0.8}
-            accessibilityLabel="Toggle Light / Dark mode"
-          >
-            {isDark ? <Sun size={15} color="#F1F5F9" /> : <Moon size={15} color="#0F1117" />}
-          </TouchableOpacity>
-
-          {/* Profile Avatar Button */}
-          {onOpenProfile && (
-            <TouchableOpacity
-              style={[styles.profileAvatarBtn, { borderColor: colors.border }]}
-              onPress={onOpenProfile}
-              activeOpacity={0.8}
-              accessibilityLabel="Open Profile and Identity"
-            >
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatarImg} />
-              ) : (
-                <View style={[styles.avatarFallback, { backgroundColor: colors.accentSoft }]}>
-                  <User size={15} color={colors.accent} />
-                </View>
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
 
       {/* Hero Balance & Action Buttons */}
       <View style={styles.heroSection}>
