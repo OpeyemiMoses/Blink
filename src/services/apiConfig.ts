@@ -7,7 +7,7 @@ import { Platform } from 'react-native';
  */
 
 // Fallback production backend URL if EXPO_PUBLIC_API_URL is not set
-const DEFAULT_CLOUD_API_URL = 'https://blink-production-3a6d.up.railway.app';
+const DEFAULT_CLOUD_API_URL = 'https://blink-production-5c36.up.railway.app';
 
 export function getApiBaseUrl(): string {
   // 1. If explicit environment variable is set at build/runtime
