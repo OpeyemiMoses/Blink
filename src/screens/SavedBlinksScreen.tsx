@@ -20,11 +20,11 @@ import {
 } from 'lucide-react-native';
 import { PhysicalBlink, PhysicalBlinkRegistry } from '../services/physicalBlinkRegistry';
 import { DatabaseService } from '../services/databaseService';
+import { PriceService } from '../services/priceService';
 import { useTheme } from '../theme/ThemeContext';
 import {
   BlinkBrandMark,
   CoffeeShopLogo,
-  MusicianLogo,
   HackerHouseLogo,
 } from '../components/BrandLogos';
 
@@ -47,6 +47,13 @@ export const SavedBlinksScreen: React.FC<SavedBlinksScreenProps> = ({
   );
   // Subscribe to global ToastService
   const [toast, setToast] = useState<import('../services/toastService').ToastMessage | null>(null);
+  const [, setPriceTick] = useState(0);
+
+  useEffect(() => {
+    const unsub = PriceService.subscribe(() => setPriceTick(prev => prev + 1));
+    return () => unsub();
+  }, []);
+
   useEffect(() => {
     const unsubscribe = ToastService.subscribe(setToast);
     return unsubscribe;
@@ -57,6 +64,13 @@ export const SavedBlinksScreen: React.FC<SavedBlinksScreenProps> = ({
   };
 
   const reloadBookmarks = (e?: any) => {
+    if (e?.type === 'blink_deleted' || e?.type === 'tapblink_blink_deleted') {
+      const delId = (e.detail?.id || '').toLowerCase();
+      if (delId) {
+        setSavedBlinks(prev => prev.filter(b => b.id.toLowerCase() !== delId));
+      }
+      return;
+    }
     const detail = e?.detail;
     if (detail && detail.id && !Array.isArray(detail)) {
       setSavedBlinks(prev =>
@@ -79,11 +93,15 @@ export const SavedBlinksScreen: React.FC<SavedBlinksScreenProps> = ({
       window.addEventListener('blink_database_updated', reloadBookmarks);
       window.addEventListener('blink_registry_updated', reloadBookmarks);
       window.addEventListener('blink_updated', reloadBookmarks);
+      window.addEventListener('blink_deleted', reloadBookmarks);
+      window.addEventListener('tapblink_blink_deleted', reloadBookmarks);
       return () => {
         window.removeEventListener('blink_bookmarks_updated', reloadBookmarks);
         window.removeEventListener('blink_database_updated', reloadBookmarks);
         window.removeEventListener('blink_registry_updated', reloadBookmarks);
         window.removeEventListener('blink_updated', reloadBookmarks);
+        window.removeEventListener('blink_deleted', reloadBookmarks);
+        window.removeEventListener('tapblink_blink_deleted', reloadBookmarks);
       };
     }
   }, []);
@@ -114,11 +132,20 @@ export const SavedBlinksScreen: React.FC<SavedBlinksScreenProps> = ({
     }
   };
 
-  const getBlinkIcon = (id: string) => {
-    if (id.includes('coffee')) return <CoffeeShopLogo size={40} />;
-    if (id.includes('tip') || id.includes('music')) return <MusicianLogo size={40} />;
-    if (id.includes('pass') || id.includes('event')) return <HackerHouseLogo size={40} />;
-    return <BlinkBrandMark size={40} />;
+  const getBlinkIcon = (id: string, b?: PhysicalBlink) => {
+    if (b?.imageUrl) {
+      return (
+        <Image
+          source={{ uri: b.imageUrl }}
+          style={{ width: 40, height: 40, borderRadius: 10 }}
+          resizeMode="cover"
+        />
+      );
+    }
+    const cleanId = id.toLowerCase();
+    if (cleanId.includes('coffee')) return <CoffeeShopLogo size={40} />;
+    if (cleanId.includes('pass') || cleanId.includes('event')) return <HackerHouseLogo size={40} />;
+    return <BlinkBrandMark size={36} />;
   };
 
   return (
@@ -198,7 +225,7 @@ export const SavedBlinksScreen: React.FC<SavedBlinksScreenProps> = ({
                 activeOpacity={0.8}
               >
                 <View style={styles.cardLeft}>
-                  {getBlinkIcon(blink.id)}
+                  {getBlinkIcon(blink.id, blink)}
                   <View style={{ marginLeft: 12, flex: 1 }}>
                     <View style={styles.titleRow}>
                       <Text style={[styles.cardTitle, { color: colors.textPrimary }]} numberOfLines={1}>
@@ -227,10 +254,16 @@ export const SavedBlinksScreen: React.FC<SavedBlinksScreenProps> = ({
 
                 <View style={styles.cardRight}>
                   <Text style={[styles.priceText, { color: colors.textPrimary }]}>
-                    {blink.token === 'SOL' ? `${blink.amount} SOL` : (blink.token === 'SKR' ? `${blink.amount} SKR` : `$${blink.amount.toFixed(2)}`)}
+                    {PriceService.getLiveBlinkDetails(blink).displayString}
                   </Text>
-                  {blink.token !== 'SOL' && (
-                    <Text style={[styles.tokenSubtext, { color: colors.accent }]}>{blink.token}</Text>
+                  {blink.token === 'SKR' ? (
+                    <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, marginTop: 2, alignSelf: 'flex-end' }}>
+                      <Text style={{ fontSize: 9, fontWeight: '800', color: '#10B981' }}>10% OFF</Text>
+                    </View>
+                  ) : (
+                    blink.token !== 'SOL' && (
+                      <Text style={[styles.tokenSubtext, { color: colors.accent }]}>{blink.token}</Text>
+                    )
                   )}
                 </View>
               </TouchableOpacity>
@@ -302,7 +335,7 @@ const styles = StyleSheet.create({
   },
   toastText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   headerSection: {
@@ -323,12 +356,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   heading: {
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: '800',
     letterSpacing: -0.3,
   },
   subheading: {
-    fontSize: 12,
+    fontSize: 10,
     marginTop: 2,
   },
   createPillBtn: {
@@ -341,7 +374,7 @@ const styles = StyleSheet.create({
   },
   createPillBtnText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   emptyCard: {
@@ -361,12 +394,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
     marginBottom: 8,
   },
   emptyDesc: {
-    fontSize: 13,
+    fontSize: 11,
     textAlign: 'center',
     maxWidth: 420,
     lineHeight: 18,
@@ -383,7 +416,7 @@ const styles = StyleSheet.create({
   },
   exploreBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   secondaryCreateBtn: {
@@ -393,7 +426,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   secondaryCreateBtnText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
   },
   listContainer: {
@@ -421,7 +454,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   cardTitle: {
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '700',
   },
   verifiedDomainBadge: {
@@ -439,7 +472,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   cardDesc: {
-    fontSize: 12,
+    fontSize: 10,
     marginTop: 4,
     lineHeight: 16,
   },
@@ -461,7 +494,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   slugText: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   cardRight: {
@@ -469,11 +502,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   priceText: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
   },
   tokenSubtext: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   cardFooter: {
@@ -494,7 +527,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   footerActionText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   iconActionBtn: {

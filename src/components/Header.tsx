@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   brandTitle: {
-    fontSize: 19,
+    fontSize: 14,
     fontWeight: '800',
     letterSpacing: -0.4,
   },

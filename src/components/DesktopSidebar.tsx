@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import {
-  Home,
+  Layers,
   Bookmark,
   Radio,
   Store,
@@ -13,10 +13,10 @@ import {
   Shield,
   Sun,
   Moon,
-  BookOpen,
   HelpCircle,
   Bell,
   Settings,
+  TrendingUp,
 } from 'lucide-react-native';
 import { BlinkBrandMark } from './BrandLogos';
 import { PhantomIcon, SolflareIcon, BackpackIcon, CoinbaseIcon } from './WalletIcons';
@@ -32,7 +32,7 @@ interface DesktopSidebarProps {
   network: string;
   onToggleNetwork: () => void;
   onOpenWalletConnect: () => void;
-  onOpenAbout: () => void;
+  onOpenAbout?: () => void;
   onOpenNotifications?: () => void;
   unreadNotificationsCount?: number;
   onOpenSettings?: () => void;
@@ -71,11 +71,10 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
   };
 
   const navItems = [
-    { key: 'markets' as const, label: 'Markets & Blinks', icon: Home },
-    { key: 'saved' as const, label: 'Saved / Bookmarks', icon: Bookmark },
+    { key: 'markets' as const, label: 'My Blinks', icon: Layers },
+    { key: 'studio' as const, label: 'Blink Studio', icon: TrendingUp },
     { key: 'tap' as const, label: 'NFC Tap & Scan', icon: Radio },
-    { key: 'studio' as const, label: 'Blink Studio', icon: Store },
-    { key: 'wallet' as const, label: 'Wallet & Ledger', icon: Wallet },
+    { key: 'wallet' as const, label: 'Pocket & Ledger', icon: Wallet },
     ...(activeAccount ? [{ key: 'profile' as const, label: 'Profile & Socials', icon: User }] : []),
   ];
 
@@ -137,28 +136,6 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
           );
         })}
       </View>
-
-      {/* Documentation & Help Centre Trigger */}
-      <TouchableOpacity
-        style={[
-          styles.explainerBtn,
-          isCollapsed && styles.explainerBtnCollapsed,
-          { backgroundColor: colors.accentSoft, borderColor: colors.accentBorder },
-        ]}
-        onPress={onOpenAbout}
-        activeOpacity={0.7}
-        accessibilityLabel="Documentation & Help Centre"
-      >
-        <BookOpen size={16} color={colors.accent} />
-        {!isCollapsed && (
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={[styles.explainerText, { color: colors.accent }]}>Docs & Help Centre</Text>
-            <View style={{ backgroundColor: colors.accent, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2 }}>
-              <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>GUIDE</Text>
-            </View>
-          </View>
-        )}
-      </TouchableOpacity>
 
       {/* Bottom Footer */}
       <View style={[
@@ -317,7 +294,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   brandTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '900',
     letterSpacing: -0.3,
   },
@@ -369,7 +346,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   navBtnText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
   },
   explainerBtn: {
@@ -390,7 +367,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   explainerText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   footerSection: {
@@ -425,7 +402,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   networkText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
   },
   themeToggleRow: {
@@ -446,7 +423,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   themeToggleText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   walletBtn: {
@@ -475,12 +452,12 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   walletAddress: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   connectWalletText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '800',
   },
   bottomCollapseRow: {
@@ -492,7 +469,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   bottomCollapseText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
   },
 });

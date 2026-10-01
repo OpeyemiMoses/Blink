@@ -120,6 +120,7 @@ interface ThemeContextValue {
   theme: Theme;
   colors: ThemeColors;
   toggleTheme: () => void;
+  setTheme: (t: Theme) => void;
   isDark: boolean;
 }
 
@@ -127,38 +128,40 @@ const ThemeContext = createContext<ThemeContextValue>({
   theme: 'dark',
   colors: darkTheme,
   toggleTheme: () => {},
+  setTheme: () => {},
   isDark: true,
 });
 
 const THEME_STORAGE_KEY = 'blink_app_theme_v1';
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setTheme] = useState<Theme>('dark');
+  const [theme, setThemeState] = useState<Theme>('dark');
 
   // Restore persisted theme on mount
   useEffect(() => {
     if (typeof window !== 'undefined' && window.localStorage) {
       const saved = window.localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
       if (saved === 'light' || saved === 'dark') {
-        setTheme(saved);
+        setThemeState(saved);
       }
     }
   }, []);
 
+  const setTheme = (next: Theme) => {
+    setThemeState(next);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(THEME_STORAGE_KEY, next);
+    }
+  };
+
   const toggleTheme = () => {
-    setTheme((prev) => {
-      const next = prev === 'dark' ? 'light' : 'dark';
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(THEME_STORAGE_KEY, next);
-      }
-      return next;
-    });
+    setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
   const colors = theme === 'dark' ? darkTheme : lightTheme;
 
   return (
-    <ThemeContext.Provider value={{ theme, colors, toggleTheme, isDark: theme === 'dark' }}>
+    <ThemeContext.Provider value={{ theme, colors, toggleTheme, setTheme, isDark: theme === 'dark' }}>
       {children}
     </ThemeContext.Provider>
   );

@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
 import { PhysicalBlink, PhysicalBlinkRegistry } from './physicalBlinkRegistry';
+import { PriceService } from './priceService';
 import { BLINK_LOGO_CROPPED_BLACK_DATA_URI } from '../constants/brandLogoAssets';
 
 export class PrintableCardService {
@@ -102,25 +103,31 @@ export class PrintableCardService {
     ctx.lineTo(width - 60, 142);
     ctx.stroke();
 
-    // 6. Blink Name (Large, Bold, Centered)
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#0F172A';
-    ctx.font = '800 34px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    
-    // Auto-wrap title if too long
+    // 6. Blink Name with Logo next to it
     const nameText = blink.name || 'Solana Blink';
-    if (nameText.length > 28) {
-      ctx.font = '800 28px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.font = nameText.length > 24 ? '800 26px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : '800 32px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    
+    const textMetrics = ctx.measureText(nameText);
+    const badgeSize = 32;
+    const gap = 10;
+    const totalRowWidth = badgeSize + gap + textMetrics.width;
+    const startX = (width - totalRowWidth) / 2;
+    const nameY = 195;
+
+    // Draw logo badge next to name
+    if (logoImg.complete && logoImg.naturalWidth > 0) {
+      const badgeAspect = 273 / 365;
+      const bW = Math.round(badgeSize * badgeAspect);
+      ctx.drawImage(logoImg, startX, nameY - 25, bW, badgeSize);
     }
-    ctx.fillText(nameText, width / 2, 195);
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#0F172A';
+    ctx.fillText(nameText, startX + badgeSize + gap, nameY);
 
     // 7. Amount & Currency Tag (Prominent Pill)
     const pricePillY = 225;
-    const priceText = blink.token === 'SOL'
-      ? `${blink.amount} SOL`
-      : (blink.token === 'SKR'
-        ? `${blink.amount} SKR`
-        : `$${blink.amount.toFixed(2)} USDC`);
+    const priceText = PriceService.getLiveBlinkDetails(blink).displayString;
 
     ctx.font = '800 22px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     const priceMetrics = ctx.measureText(priceText);
@@ -192,7 +199,7 @@ export class PrintableCardService {
       const domainY = metaStartY + 56;
       ctx.font = '700 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
       ctx.fillStyle = '#059669';
-      ctx.fillText(`✓ Verified Domain: ${blink.verifiedDomain}`, width / 2, domainY);
+      ctx.fillText(`Verified Domain: ${blink.verifiedDomain}`, width / 2, domainY);
     }
 
     // Blink ID
@@ -236,6 +243,83 @@ export class PrintableCardService {
       return true;
     } catch (err) {
       console.error('Failed to download printable card image:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Opens an isolated high-resolution print window and triggers browser Print dialog
+   */
+  static async printCard(blink: PhysicalBlink): Promise<boolean> {
+    try {
+      const dataUrl = await this.generateCardDataUrl(blink);
+      if (typeof window === 'undefined') return false;
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        return this.downloadCard(blink);
+      }
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Blink Stand Card - ${blink.name}</title>
+            <style>
+              @page {
+                size: A4 portrait;
+                margin: 0;
+              }
+              body {
+                margin: 0;
+                padding: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 100vh;
+                background-color: #f8fafc;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+              }
+              .placard-container {
+                max-width: 580px;
+                width: 100%;
+                text-align: center;
+              }
+              img {
+                max-width: 100%;
+                height: auto;
+                box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+                border-radius: 12px;
+              }
+              @media print {
+                body {
+                  background: #FFFFFF;
+                  padding: 0;
+                }
+                img {
+                  box-shadow: none;
+                  border-radius: 0;
+                  max-height: 96vh;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="placard-container">
+              <img src="${dataUrl}" alt="Printable Blink Stand Card" />
+            </div>
+            <script>
+              window.onload = function() {
+                setTimeout(function() {
+                  window.print();
+                }, 350);
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      return true;
+    } catch (err) {
+      console.error('Failed to open print dialog:', err);
       return false;
     }
   }

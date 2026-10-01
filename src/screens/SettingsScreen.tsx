@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Switch,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Settings,
@@ -18,6 +20,7 @@ import {
   Check,
   AlertTriangle,
   LogOut,
+  Fingerprint,
 } from 'lucide-react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { usePrivy } from '@privy-io/react-auth';
@@ -25,6 +28,7 @@ import { useExportWallet } from '@privy-io/react-auth/solana';
 import { UserProfileService } from '../services/userProfileService';
 import { ToastService } from '../services/toastService';
 import { WalletAccount } from '../services/walletProviderService';
+import { BiometricService } from '../services/biometricService';
 
 interface SettingsScreenProps {
   activeAccount: WalletAccount | null;
@@ -35,11 +39,31 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   activeAccount,
   onOpenWalletConnect,
 }) => {
-  const { colors, isDark, toggleTheme } = useTheme();
+  const { colors, isDark, toggleTheme, setTheme } = useTheme();
   const { logout, authenticated } = usePrivy();
   const { exportWallet } = useExportWallet();
   const [isExporting, setIsExporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [bioEnabled, setBioEnabled] = useState<boolean>(() => BiometricService.isBiometricsEnabled());
+  const [isAuthenticatingBio, setIsAuthenticatingBio] = useState<boolean>(false);
+
+  const handleToggleBiometrics = async (targetState: boolean) => {
+    if (bioEnabled === targetState || isAuthenticatingBio) return;
+    setIsAuthenticatingBio(true);
+    try {
+      const res = await BiometricService.toggleBiometricsWithAuth(targetState);
+      if (res.success) {
+        setBioEnabled(targetState);
+        ToastService.success(targetState ? 'Biometric security enabled (ON)' : 'Biometric security disabled (OFF)');
+      } else {
+        ToastService.error(res.error || 'Biometric authentication failed or cancelled.');
+      }
+    } catch (err: any) {
+      ToastService.error(err?.message || 'Biometric verification failed.');
+    } finally {
+      setIsAuthenticatingBio(false);
+    }
+  };
 
   const handleExportKey = async () => {
     if (!activeAccount?.publicKey) {
@@ -61,18 +85,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
   const handleDeleteAccount = () => {
     try {
-      // 1. Clear local user profile and cached credentials
       UserProfileService.resetProfile();
-
-      // 2. Clear localStorage items
       if (typeof window !== 'undefined') {
         localStorage.removeItem('tapblink_user_profile_v1');
         localStorage.removeItem('justblink_user_profile_v2');
       }
-
-      // 3. Log out via Privy
       logout();
-
       setShowDeleteConfirm(false);
       ToastService.success('Account deleted and local session cleared.');
     } catch (err) {
@@ -97,57 +115,55 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </View>
       </View>
 
-      {/* Appearance & Theme Section */}
-      <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-        <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>APPEARANCE & THEME</Text>
-        <Text style={[styles.sectionExplainer, { color: colors.textMuted }]}>
-          Choose your preferred theme. Changes update instantly across all screens.
-        </Text>
-
-        <View style={styles.themeToggleRow}>
-          <TouchableOpacity
-            style={[
-              styles.themeOptionCard,
-              { backgroundColor: colors.bgCardAlt, borderColor: colors.border },
-              !isDark && [styles.themeOptionActive, { borderColor: colors.accent, backgroundColor: colors.accentSoft }],
-            ]}
-            onPress={() => {
-              if (isDark) toggleTheme();
-            }}
-            activeOpacity={0.8}
-          >
-            <Sun size={24} color={!isDark ? colors.accent : colors.textSecondary} />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.themeOptionTitle, { color: !isDark ? colors.accent : colors.textPrimary }]}>
-                Light Mode
-              </Text>
-              <Text style={[styles.themeOptionSub, { color: colors.textSecondary }]}>Clean bright layout</Text>
+        {/* Appearance & Preferences Section */}
+        <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>APPEARANCE & THEME</Text>
+          
+          <View style={[styles.networkRow, { backgroundColor: colors.bgCardAlt, borderColor: colors.border, justifyContent: 'space-between' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+              {isDark ? <Moon size={22} color={colors.accent} /> : <Sun size={22} color={colors.accent} />}
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.networkTitle, { color: colors.textPrimary }]}>Dark Mode</Text>
+                <Text style={[styles.networkSub, { color: colors.textSecondary }]}>
+                  {isDark ? 'Dark theme active' : 'Light theme active'}
+                </Text>
+              </View>
             </View>
-            {!isDark && <Check size={18} color={colors.accent} />}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.themeOptionCard,
-              { backgroundColor: colors.bgCardAlt, borderColor: colors.border },
-              isDark && [styles.themeOptionActive, { borderColor: colors.accent, backgroundColor: colors.accentSoft }],
-            ]}
-            onPress={() => {
-              if (!isDark) toggleTheme();
-            }}
-            activeOpacity={0.8}
-          >
-            <Moon size={24} color={isDark ? colors.accent : colors.textSecondary} />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.themeOptionTitle, { color: isDark ? colors.accent : colors.textPrimary }]}>
-                Dark Mode
-              </Text>
-              <Text style={[styles.themeOptionSub, { color: colors.textSecondary }]}>Modern sleek dark layout</Text>
-            </View>
-            {isDark && <Check size={18} color={colors.accent} />}
-          </TouchableOpacity>
+            <Switch
+              value={isDark}
+              onValueChange={(val) => setTheme(val ? 'dark' : 'light')}
+              trackColor={{ false: '#334155', true: colors.accent }}
+              thumbColor={isDark ? '#FFFFFF' : '#F4F3F4'}
+            />
+          </View>
         </View>
-      </View>
+
+        {/* Biometric Security Section */}
+        <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>BIOMETRIC SECURITY</Text>
+
+          <View style={[styles.networkRow, { backgroundColor: colors.bgCardAlt, borderColor: colors.border, justifyContent: 'space-between' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+              <Fingerprint size={22} color={bioEnabled ? colors.accent : colors.textMuted} />
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={[styles.networkTitle, { color: colors.textPrimary }]}>Turn on Biometrics</Text>
+                  {isAuthenticatingBio && <ActivityIndicator size="small" color={colors.accent} />}
+                </View>
+                <Text style={[styles.networkSub, { color: colors.textSecondary }]}>
+                  {bioEnabled ? 'ON' : 'OFF'}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={bioEnabled}
+              onValueChange={(val) => handleToggleBiometrics(val)}
+              disabled={isAuthenticatingBio}
+              trackColor={{ false: '#334155', true: colors.accent }}
+              thumbColor={bioEnabled ? '#FFFFFF' : '#F4F3F4'}
+            />
+          </View>
+        </View>
 
       {/* Network Environment Section */}
       <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
@@ -162,7 +178,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </View>
           <View style={styles.activeDotBadge}>
             <View style={styles.greenDot} />
-            <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981' }}>Connected</Text>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: '#10B981' }}>Connected</Text>
           </View>
         </View>
       </View>
@@ -186,7 +202,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 </Text>
               </View>
             </View>
-            <Text style={{ fontSize: 13, fontWeight: '800', color: '#F59E0B' }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#F59E0B' }}>
               {isExporting ? 'Exporting...' : 'Export'}
             </Text>
           </TouchableOpacity>
@@ -244,105 +260,105 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: 6,
-    paddingTop: 12,
+    paddingHorizontal: 8,
+    paddingTop: 8,
     paddingBottom: 100,
     maxWidth: 800,
     marginHorizontal: 'auto',
     width: '100%',
-    gap: 16,
+    gap: 6,
   },
   headerCard: {
-    borderRadius: 20,
+    borderRadius: 12,
     borderWidth: 1,
-    padding: 20,
+    padding: 8,
   },
   headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 10,
   },
   iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   screenTitle: {
-    fontSize: 22,
+    fontSize: 14,
     fontWeight: '800',
     letterSpacing: -0.4,
   },
   screenSub: {
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: 9.5,
+    marginTop: 1,
   },
   sectionCard: {
-    borderRadius: 20,
+    borderRadius: 12,
     borderWidth: 1,
-    padding: 20,
-    gap: 14,
+    padding: 10,
+    gap: 6,
   },
   sectionLabel: {
-    fontSize: 11,
+    fontSize: 9.5,
     fontWeight: '800',
     letterSpacing: 0.6,
   },
   sectionExplainer: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 9.5,
+    lineHeight: 14,
   },
   themeToggleRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 6,
   },
   themeOptionCard: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     borderWidth: 1.5,
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 10,
+    padding: 8,
   },
   themeOptionActive: {
     borderWidth: 1.5,
   },
   themeOptionTitle: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '800',
   },
   themeOptionSub: {
-    fontSize: 10,
-    marginTop: 2,
+    fontSize: 9.5,
+    marginTop: 1,
   },
   networkRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 10,
+    padding: 8,
   },
   networkTitle: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '800',
   },
   networkSub: {
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: 9.5,
+    marginTop: 1,
   },
   activeDotBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     backgroundColor: 'rgba(16, 185, 129, 0.12)',
     borderColor: 'rgba(16, 185, 129, 0.3)',
     borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
   greenDot: {
     width: 6,
@@ -355,32 +371,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderRadius: 14,
-    padding: 16,
+    borderRadius: 10,
+    padding: 8,
   },
   exportTitle: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '800',
   },
   exportSub: {
-    fontSize: 11,
-    marginTop: 2,
-    lineHeight: 15,
+    fontSize: 9.5,
+    marginTop: 1,
+    lineHeight: 14,
   },
   deleteCardBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
     backgroundColor: 'rgba(239, 68, 68, 0.08)',
     borderColor: 'rgba(239, 68, 68, 0.3)',
     borderWidth: 1,
-    borderRadius: 14,
-    paddingVertical: 14,
+    borderRadius: 10,
+    paddingVertical: 8,
   },
   deleteCardBtnText: {
     color: '#EF4444',
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '800',
   },
   deleteConfirmCard: {
@@ -392,12 +408,12 @@ const styles = StyleSheet.create({
   },
   deleteConfirmTitle: {
     color: '#EF4444',
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '800',
   },
   deleteConfirmSub: {
     color: '#EF4444',
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 17,
     marginBottom: 16,
     opacity: 0.9,
@@ -415,7 +431,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.2)',
   },
   cancelDeleteText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
   },
   confirmDeleteBtn: {
@@ -430,7 +446,7 @@ const styles = StyleSheet.create({
   },
   confirmDeleteText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
 });

@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 export type NfcStatus = 'idle' | 'listening' | 'tag_detected' | 'beaming' | 'error';
 
 export interface NfcPayload {
@@ -12,6 +14,25 @@ export interface NfcPayload {
 
 type TagCallback = (payload: NfcPayload) => void;
 
+let NfcManager: any = null;
+let NfcTech: any = null;
+let Ndef: any = null;
+
+try {
+  if (Platform.OS !== 'web') {
+    // Dynamically require react-native-nfc-manager for native APK builds
+    const nfcModule = require('react-native-nfc-manager');
+    NfcManager = nfcModule.default || nfcModule.NfcManager;
+    NfcTech = nfcModule.NfcTech;
+    Ndef = nfcModule.Ndef;
+    if (NfcManager && typeof NfcManager.start === 'function') {
+      NfcManager.start().catch((err: any) => console.warn('NfcManager start error:', err));
+    }
+  }
+} catch (e) {
+  console.warn('Native NFC Manager loading omitted:', e);
+}
+
 export class NfcService {
   private static status: NfcStatus = 'idle';
   private static listeners: TagCallback[] = [];
@@ -21,6 +42,7 @@ export class NfcService {
   }
 
   static isHardwareSupported(): boolean {
+    if (Platform.OS !== 'web' && NfcManager) return true;
     return typeof window !== 'undefined' && 'NDEFReader' in window;
   }
 
@@ -37,13 +59,37 @@ export class NfcService {
   static async startListening(): Promise<boolean> {
     this.status = 'listening';
 
-    // Check if Web NFC is supported (Chromium / Seeker mobile browser)
+    // 1. Native APK (Android/iOS via react-native-nfc-manager)
+    if (Platform.OS !== 'web' && NfcManager && NfcTech && Ndef) {
+      try {
+        await NfcManager.requestTechnology(NfcTech.Ndef);
+        const tag = await NfcManager.getTag();
+        if (tag && tag.ndefMessage && tag.ndefMessage.length > 0) {
+          const payloadUrl = Ndef.uri.decodePayload(tag.ndefMessage[0].payload);
+          if (payloadUrl) {
+            this.handleTagDetected({
+              type: 'solana-action',
+              url: payloadUrl
+            });
+          }
+        }
+        return true;
+      } catch (err) {
+        console.warn('Native NFC listener error:', err);
+      } finally {
+        try {
+          await NfcManager.cancelTechnologyRequest();
+        } catch {}
+      }
+    }
+
+    // 2. Web NFC (Chromium / Seeker mobile browser)
     if (typeof window !== 'undefined' && 'NDEFReader' in window) {
       try {
         // @ts-expect-error Web NFC API
         const ndef = new window.NDEFReader();
         await ndef.scan();
-        // @ts-expect-error Web NFC API
+        // @ts-ignore Web NFC API
         ndef.addEventListener('reading', ({ message }: any) => {
           for (const record of message.records) {
             if (record.recordType === 'url' || record.recordType === 'text') {
@@ -67,6 +113,9 @@ export class NfcService {
 
   static stopListening(): void {
     this.status = 'idle';
+    if (Platform.OS !== 'web' && NfcManager) {
+      NfcManager.cancelTechnologyRequest().catch(() => {});
+    }
   }
 
   /**
@@ -89,8 +138,38 @@ export class NfcService {
   /**
    * Beam an action out over NFC (Host Card Emulation / NDEF Write).
    */
-  static async beamAction(actionUrl: string): Promise<boolean> {
+  static async beamAction(actionUrl: string): Promise<{ success: boolean; error?: string; isUnsupported?: boolean }> {
     this.status = 'beaming';
+
+    // 1. Native APK (Android / Solana Seeker APK via react-native-nfc-manager)
+    if (Platform.OS !== 'web' && NfcManager && NfcTech && Ndef) {
+      try {
+        await NfcManager.requestTechnology(NfcTech.Ndef);
+        const bytes = Ndef.encodeMessage([Ndef.uriRecord(actionUrl)]);
+        if (bytes) {
+          await NfcManager.ndefHandler.writeNdefMessage(bytes);
+        }
+        if (typeof window !== 'undefined' && 'navigator' in window && 'vibrate' in navigator) {
+          navigator.vibrate([100, 50, 100]);
+        }
+        this.status = 'idle';
+        return { success: true };
+      } catch (err: any) {
+        console.warn('Native NFC write error:', err);
+        this.status = 'error';
+        const msg = err?.message || String(err);
+        if (msg.includes('cancelled') || msg.includes('cancel')) {
+          return { success: false, error: 'NFC writing cancelled.' };
+        }
+        return { success: false, error: msg || 'Hold blank NFC tag to back of phone and try again.' };
+      } finally {
+        try {
+          await NfcManager.cancelTechnologyRequest();
+        } catch {}
+      }
+    }
+
+    // 2. Web NFC (Chromium / Seeker Browser)
     if (typeof window !== 'undefined' && 'NDEFReader' in window) {
       try {
         // @ts-expect-error Web NFC API
@@ -98,25 +177,42 @@ export class NfcService {
         await ndef.write({
           records: [{ recordType: 'url', data: actionUrl }]
         });
-      } catch (err) {
+        if (typeof window !== 'undefined' && 'navigator' in window && 'vibrate' in navigator) {
+          navigator.vibrate([100, 50, 100]);
+        }
+        this.status = 'idle';
+        return { success: true };
+      } catch (err: any) {
         console.warn('Web NFC write error:', err);
+        this.status = 'error';
+        const msg = err?.message || String(err);
+        if (msg.includes('user_cancel') || msg.includes('AbortError') || msg.includes('cancel')) {
+          return { success: false, error: 'NFC writing cancelled.' };
+        }
+        return { success: false, error: msg || 'Hold blank NFC tag closer to the back of your phone and try again.' };
       }
     }
-    return true;
+
+    this.status = 'idle';
+    return {
+      success: false,
+      isUnsupported: true,
+      error: 'NFC Tag Writing requires an Android phone/Seeker device with NFC enabled.',
+    };
   }
 
   /**
    * Write tag helper used by Blink Studio and Detail views.
    */
-  static async writeTag(opts: { url: string; title?: string; id?: string }): Promise<{ success: boolean; message: string }> {
+  static async writeTag(opts: { url: string; title?: string; id?: string }): Promise<{ success: boolean; message: string; isUnsupported?: boolean }> {
     try {
-      const ok = await this.beamAction(opts.url);
-      if (ok) {
-        return { success: true, message: `Action "${opts.title || opts.id || 'Blink'}" programmed to physical NFC tag.` };
+      const res = await this.beamAction(opts.url);
+      if (res.success) {
+        return { success: true, message: `Blink "${opts.title || opts.id || 'Blink'}" successfully written to physical NFC tag!` };
       }
+      return { success: false, isUnsupported: res.isUnsupported, message: res.error || 'NFC tag write failed.' };
     } catch (err: any) {
       return { success: false, message: err?.message || 'Could not write NFC tag.' };
     }
-    return { success: false, message: 'NFC tag write failed.' };
   }
 }

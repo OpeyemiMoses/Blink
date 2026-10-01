@@ -124,13 +124,13 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#FFFFFF',
-    fontSize: 22,
+    fontSize: 15,
     fontWeight: '800',
     marginBottom: 4,
   },
   subtitle: {
     color: '#9CA3AF',
-    fontSize: 13,
+    fontSize: 11,
     lineHeight: 18,
   },
   inputCard: {
@@ -155,14 +155,14 @@ const styles = StyleSheet.create({
   },
   currencySymbol: {
     color: '#00F0FF',
-    fontSize: 32,
+    fontSize: 21,
     fontWeight: '900',
     marginRight: 6,
   },
   amountInput: {
     flex: 1,
     color: '#FFFFFF',
-    fontSize: 36,
+    fontSize: 20,
     fontWeight: '900',
     padding: 0,
   },
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   },
   tokenBtnText: {
     color: '#6B7280',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   tokenBtnTextActive: {
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     borderWidth: 1,
     borderColor: '#232A3D',
   },
@@ -229,13 +229,13 @@ const styles = StyleSheet.create({
   },
   beamTitle: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     marginBottom: 2,
   },
   beamSub: {
     color: '#9CA3AF',
-    fontSize: 11,
+    fontSize: 10,
   },
   statusDot: {
     width: 8,
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
   },
   previewTitle: {
     color: '#6B7280',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
   },
@@ -275,12 +275,12 @@ const styles = StyleSheet.create({
   },
   previewAmount: {
     color: '#FFFFFF',
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: '800',
   },
   previewDesc: {
     color: '#9CA3AF',
-    fontSize: 12,
+    fontSize: 10,
   },
   previewUrl: {
     color: '#00F0FF',

@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '800',
     color: '#FFFFFF',
   },
@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: '#94A3B8',
-    fontSize: 12,
+    fontSize: 10,
   },
   errorOverlay: {
     position: 'absolute',
@@ -388,12 +388,12 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     color: '#EF4444',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   errorSub: {
     color: '#94A3B8',
-    fontSize: 12,
+    fontSize: 10,
     textAlign: 'center',
     lineHeight: 16,
   },
@@ -410,12 +410,12 @@ const styles = StyleSheet.create({
   retryBtnText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 12,
+    fontSize: 10,
   },
   instruction: {
     textAlign: 'center',
     color: '#64748B',
-    fontSize: 11,
+    fontSize: 10,
     marginTop: 10,
   },
   controlRow: {
@@ -437,7 +437,7 @@ const styles = StyleSheet.create({
   },
   controlBtnText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
 });

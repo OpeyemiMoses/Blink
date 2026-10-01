@@ -266,7 +266,7 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
                 Search Results ({searchResults.length})
               </Text>
               <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Text style={{ fontSize: 12, color: colors.accent, fontWeight: '700' }}>Clear Search</Text>
+                <Text style={{ fontSize: 10, color: colors.accent, fontWeight: '700' }}>Clear Search</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={{ maxHeight: 240 }} showsVerticalScrollIndicator={true}>
@@ -294,7 +294,7 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({
                 ))
               ) : (
                 <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-                  <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                  <Text style={{ color: colors.textMuted, fontSize: 11 }}>
                     No matching articles found for "{searchQuery}". Try searching for "NFC", "Privy", "API", or "Faucet".
                   </Text>
                 </View>
@@ -841,7 +841,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
     letterSpacing: -0.3,
   },
@@ -856,7 +856,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   subtitle: {
-    fontSize: 12,
+    fontSize: 10,
     marginTop: 2,
   },
   closeBtn: {
@@ -884,7 +884,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 11,
     outlineStyle: 'none' as any,
   },
   searchResultsContainer: {
@@ -899,7 +899,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   searchResultsTitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   searchResultCard: {
@@ -915,17 +915,17 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   searchResultCategory: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
   },
   searchResultItemTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     marginBottom: 2,
   },
   searchResultSnippet: {
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 16,
   },
   bodyWrapper: {
@@ -976,7 +976,7 @@ const styles = StyleSheet.create({
   },
   navItemActive: {},
   navItemText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
     flex: 1,
   },
@@ -1000,12 +1000,12 @@ const styles = StyleSheet.create({
     gap: 18,
   },
   sectionTitle: {
-    fontSize: 22,
+    fontSize: 15,
     fontWeight: '800',
     letterSpacing: -0.4,
   },
   sectionSubtitle: {
-    fontSize: 14,
+    fontSize: 12,
     lineHeight: 20,
   },
   heroCard: {
@@ -1022,15 +1022,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   heroTitle: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
   },
   heroBody: {
-    fontSize: 13,
+    fontSize: 11,
     lineHeight: 20,
   },
   blockHeading: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
     marginTop: 6,
   },
@@ -1049,12 +1049,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   paradigmTag: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
   paradigmCode: {
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 18,
   },
   paradigmDivider: {
@@ -1079,11 +1079,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   featureTitle: {
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '700',
   },
   featureDesc: {
-    fontSize: 13,
+    fontSize: 11,
     lineHeight: 18,
   },
   guideCard: {
@@ -1098,11 +1098,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   guideCardTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
   },
   guideText: {
-    fontSize: 13,
+    fontSize: 11,
     lineHeight: 19,
   },
   calloutBox: {
@@ -1112,7 +1112,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   calloutTitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   antennaRow: {
@@ -1122,11 +1122,11 @@ const styles = StyleSheet.create({
   },
   antennaText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 17,
   },
   stepItemTitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
     marginTop: 4,
   },
@@ -1142,7 +1142,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   chipText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
   },
   studioStepCard: {
@@ -1165,15 +1165,15 @@ const styles = StyleSheet.create({
   },
   stepBadgeText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '800',
   },
   studioStepTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
   },
   studioStepBody: {
-    fontSize: 13,
+    fontSize: 11,
     lineHeight: 19,
   },
   actionTypeGrid: {
@@ -1187,11 +1187,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   actionTypeTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   actionTypeDesc: {
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 16,
   },
   tipBanner: {
@@ -1204,7 +1204,7 @@ const styles = StyleSheet.create({
   },
   tipBannerText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 17,
   },
   primaryActionBtn: {
@@ -1218,7 +1218,7 @@ const styles = StyleSheet.create({
   },
   primaryActionText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '800',
   },
   secondaryActionBtn: {
@@ -1231,7 +1231,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   secondaryActionText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   bulletList: {
@@ -1245,7 +1245,7 @@ const styles = StyleSheet.create({
   },
   bulletText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 17,
   },
   faucetBox: {
@@ -1256,11 +1256,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   faucetTitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   faucetDesc: {
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 18,
   },
   codeSnippetRow: {
@@ -1273,7 +1273,7 @@ const styles = StyleSheet.create({
   },
   codeSnippetText: {
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 12,
+    fontSize: 10,
     flex: 1,
   },
   copyBtn: {
@@ -1291,7 +1291,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   faqQuestion: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     flex: 1,
   },
@@ -1301,11 +1301,11 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   faqAnswerText: {
-    fontSize: 13,
+    fontSize: 11,
     lineHeight: 19,
   },
   codeBlockLabel: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
     marginTop: 8,
   },
@@ -1315,7 +1315,7 @@ const styles = StyleSheet.create({
   },
   codeBlockContent: {
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 12,
+    fontSize: 10,
     color: '#38BDF8',
     lineHeight: 18,
   },
@@ -1328,7 +1328,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   footerHelpText: {
-    fontSize: 12,
+    fontSize: 10,
     flex: 1,
   },
   footerLinks: {
@@ -1346,7 +1346,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   footerLinkText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   footerDoneBtn: {
@@ -1356,7 +1356,7 @@ const styles = StyleSheet.create({
   },
   footerDoneText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '800',
   },
 });

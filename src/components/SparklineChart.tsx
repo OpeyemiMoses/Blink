@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
     borderColor: '#2D354A',
   },
   tfText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: '#64748B',
   },

@@ -40,6 +40,7 @@ import { useExportWallet } from '@privy-io/react-auth/solana';
 import { useTheme } from '../theme/ThemeContext';
 import { ToastService } from '../services/toastService';
 import { ReceiptService } from '../services/receiptService';
+import { NotificationService } from '../services/notificationService';
 import { ReceiptModal } from '../components/ReceiptModal';
 import { TransactionReceipt } from '../types';
 
@@ -119,7 +120,10 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
   const [signatures, setSignatures] = useState<EnrichedTransactionInfo[]>([]);
   const [isAirdropping, setIsAirdropping] = useState<boolean>(false);
   const [selectedReceipt, setSelectedReceipt] = useState<TransactionReceipt | null>(null);
-  const [dateFilter, setDateFilter] = useState<'90d' | '30d' | '7d' | '24h'>('90d');
+  const [dateFilter, setDateFilter] = useState<'all' | '90d' | '30d' | '7d' | '24h'>('all');
+
+  const knownSignaturesRef = React.useRef<Set<string>>(new Set());
+  const isInitialLoadRef = React.useRef<boolean>(true);
 
   const userProfile = UserProfileService.getProfile();
   const connectedLabel = userProfile.displayName || userProfile.username || activeAccount?.name || 'Solana Wallet';
@@ -156,27 +160,30 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
     }
     if (showLoading) setLoading(true);
     try {
-      const [bal, usdc, skr] = await Promise.all([
+      // 1. Fetch balances, enriched transactions, and cloud receipts in parallel with fault tolerance
+      const [balRes, usdcRes, skrRes, sigsRes, cloudReceiptsRes] = await Promise.allSettled([
         SolanaService.getBalance(activePublicKey, showLoading),
         SolanaService.getUsdcBalance(activePublicKey, showLoading),
         SolanaService.getSkrBalance(activePublicKey, showLoading),
+        SolanaService.getEnrichedRecentTransactions(activePublicKey, 50),
+        ReceiptService.fetchCloudReceiptsForAddress(activePublicKey),
       ]);
-      if (typeof bal === 'number' && !isNaN(bal)) {
-        setBalance(bal);
+
+      if (balRes.status === 'fulfilled' && typeof balRes.value === 'number' && !isNaN(balRes.value)) {
+        setBalance(balRes.value);
       }
-      if (typeof usdc === 'number' && !isNaN(usdc)) {
-        setUsdcBalance(usdc);
+      if (usdcRes.status === 'fulfilled' && typeof usdcRes.value === 'number' && !isNaN(usdcRes.value)) {
+        setUsdcBalance(usdcRes.value);
       }
-      if (typeof skr === 'number' && !isNaN(skr)) {
-        setSkrBalance(skr);
+      if (skrRes.status === 'fulfilled' && typeof skrRes.value === 'number' && !isNaN(skrRes.value)) {
+        setSkrBalance(skrRes.value);
       }
 
-      const sigs = await SolanaService.getEnrichedRecentTransactions(activePublicKey, 50);
+      const sigs: EnrichedTransactionInfo[] = sigsRes.status === 'fulfilled' && Array.isArray(sigsRes.value)
+        ? sigsRes.value
+        : [];
 
-      // Fetch cloud receipts for this wallet address in background to catch incoming transfers from other users
-      ReceiptService.fetchCloudReceiptsForAddress(activePublicKey).catch(() => {});
-
-      // Instantly merge local receipts so sent/received items appear at 0 milliseconds
+      // 2. Instantly merge local + cloud receipts
       const localReceipts = ReceiptService.getAllReceipts();
       const existingSigSet = new Set(sigs.map((s) => s.signature));
 
@@ -219,11 +226,11 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
             slot: 0,
             err: r.status === 'failed' ? true : null,
             memo: r.blinkTitle || null,
-            blockTime: Math.floor(r.timestamp / 1000),
+            blockTime: Math.floor((r.timestamp || Date.now()) / 1000),
             direction: isSend ? 'send' : 'receive',
             amountSol: r.token === 'SOL' ? r.amount : null,
             amountUsdc: r.token === 'USDC' ? r.amount : null,
-            token: r.token,
+            token: r.token || 'SOL',
             counterparty: isSend ? r.recipientAddress : r.payerAddress,
           };
         });
@@ -232,9 +239,74 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
         (a, b) => (b.blockTime || 0) - (a.blockTime || 0)
       );
 
-      if (combined.length > 0) {
-        setSignatures(combined);
+      try {
+        if (!isInitialLoadRef.current) {
+          // ONLY notify for BRAND NEW real-time incoming transactions that arrive DURING active polling
+          const existingNotifs = NotificationService.getNotifications();
+          const notifSigSet = new Set(existingNotifs.map((n) => n.signature).filter(Boolean));
+          const nowSec = Math.floor(Date.now() / 1000);
+
+          for (const item of combined) {
+            const isFreshTx = item.blockTime ? (nowSec - item.blockTime < 600) : true;
+            const shouldEvaluate = !isInitialLoadRef.current
+              ? !knownSignaturesRef.current.has(item.signature)
+              : (isFreshTx && !knownSignaturesRef.current.has(item.signature));
+
+            if (item.signature && shouldEvaluate && !notifSigSet.has(item.signature)) {
+              if (item.direction === 'receive' && !item.err) {
+                const cachedRcpt = ReceiptService.getReceiptBySignature(item.signature);
+                const amt = cachedRcpt?.amount || (item.token === 'SOL' ? (item.amountSol || 0) : (item.amountUsdc || 0));
+                const tok = (cachedRcpt?.token || (item.token as 'SOL' | 'USDC' | 'SKR')) || 'SOL';
+                const payer = cachedRcpt?.payerAddress || item.counterparty || 'Solana Wallet';
+
+                let isRealBlinkSale = false;
+                let blinkTitle = '';
+
+                // STRICT check: a transaction is only a Blink Sale if the stored receipt
+                // explicitly carries a blinkId. Memo heuristics and amount-matching are
+                // too imprecise and tag normal P2P transfers as sales.
+                if (cachedRcpt?.blinkId) {
+                  isRealBlinkSale = true;
+                  const foundBlink = PhysicalBlinkRegistry.getBlinkById(cachedRcpt.blinkId);
+                  blinkTitle = foundBlink?.name || cachedRcpt.blinkTitle || 'Blink Sale';
+                }
+
+                if (amt > 0) {
+                  if (isRealBlinkSale) {
+                    NotificationService.notifyBlinkPaid(
+                      blinkTitle || 'Blink Sale',
+                      amt,
+                      tok,
+                      payer,
+                      item.signature,
+                      cachedRcpt?.blinkId
+                    );
+                  } else {
+                    NotificationService.notifyPaymentReceived(
+                      amt,
+                      tok,
+                      payer,
+                      item.signature
+                    );
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // Seed all known signatures into the reference set
+        combined.forEach((item) => {
+          if (item.signature) {
+            knownSignaturesRef.current.add(item.signature);
+          }
+        });
+      } catch (notifErr) {
+        console.warn('Non-fatal notification processing warning:', notifErr);
       }
+      isInitialLoadRef.current = false;
+
+      setSignatures(combined);
     } catch (err) {
       console.warn('Error loading Solana data (retaining last verified balance):', err);
     } finally {
@@ -243,6 +315,9 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
   };
 
   const filteredSignatures = useMemo(() => {
+    if (dateFilter === 'all') {
+      return signatures;
+    }
     const nowSec = Math.floor(Date.now() / 1000);
     const filtered = signatures.filter((sig) => {
       if (!sig.blockTime) return true;
@@ -259,10 +334,6 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
           return ageSec <= 90 * 86400;
       }
     });
-    // On 90-day default, never show empty if wallet has existing transactions
-    if (dateFilter === '90d' && filtered.length === 0 && signatures.length > 0) {
-      return signatures;
-    }
     return filtered;
   }, [signatures, dateFilter]);
 
@@ -298,10 +369,10 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
 
     loadOnChainData(true);
 
-    // Live auto-polling every 8 seconds to automatically catch incoming transfers
+    // Live auto-polling every 3.5 seconds to automatically catch incoming transfers
     const interval = setInterval(() => {
       loadOnChainData(false);
-    }, 8000);
+    }, 3500);
 
     // Instant listener for when user sends, receives, or executes any transaction
     const handleTxUpdate = () => {
@@ -355,7 +426,7 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
           <View style={styles.heroActionsRow}>
             <TouchableOpacity style={styles.depositBtn} onPress={onOpenReceive} activeOpacity={0.8}>
               <ArrowDownLeft size={15} color="#FFFFFF" strokeWidth={2.5} />
-              <Text style={styles.depositBtnText}>Deposit</Text>
+              <Text style={styles.depositBtnText}>Receive / Deposit</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.secondaryBtn} onPress={onOpenSend} activeOpacity={0.8}>
@@ -411,7 +482,7 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
                   }}
                 >
                   <Tag size={10} color="#14F195" />
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#14F195' }}>{userBlinkId}</Text>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#14F195' }}>{userBlinkId}</Text>
                 </View>
 
                 <TouchableOpacity
@@ -525,7 +596,7 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
                 <Text style={[styles.balanceNumber, { color: colors.textPrimary }]}>
                   {balance > 0 ? `${balance.toFixed(4)} SOL` : '0.0000 SOL'}
                 </Text>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textMuted }}>+</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted }}>+</Text>
                 <Text style={[styles.balanceNumber, { color: '#2775CA' }]}>
                   {usdcBalance > 0 ? `${usdcBalance.toFixed(2)} USDC` : '0.00 USDC'}
                 </Text>
@@ -661,6 +732,19 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
         {activePublicKey && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity
+              onPress={() => loadOnChainData(true)}
+              style={[styles.solscanLink, { backgroundColor: colors.bgCardAlt, borderColor: colors.border, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }]}
+              activeOpacity={0.7}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color={colors.accent} style={{ transform: [{ scale: 0.75 }] }} />
+              ) : (
+                <RefreshCw size={11} color={colors.accent} />
+              )}
+              <Text style={[styles.solscanLinkText, { color: colors.accent, fontWeight: '600' }]}>Refresh</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               onPress={() => window.open?.(`https://solscan.io/account/${activePublicKey}?cluster=devnet`, '_blank')}
               style={styles.solscanLink}
               activeOpacity={0.7}
@@ -680,12 +764,12 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
         )}
       </View>
 
-      {/* 90-Day Range Filter Selector */}
+      {/* Transaction Range Filter Selector */}
       {activePublicKey && (
         <View style={styles.filterRow}>
-          {(['90d', '30d', '7d', '24h'] as const).map((tab) => {
+          {(['all', '90d', '30d', '7d', '24h'] as const).map((tab) => {
             const isActive = dateFilter === tab;
-            const label = tab === '90d' ? '90 Days' : tab === '30d' ? '30 Days' : tab === '7d' ? '7 Days' : '24 Hours';
+            const label = tab === 'all' ? 'All' : tab === '90d' ? '90 Days' : tab === '30d' ? '30 Days' : tab === '7d' ? '7 Days' : '24 Hours';
             return (
               <TouchableOpacity
                 key={tab}
@@ -714,21 +798,53 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
       )}
 
       {filteredSignatures.length === 0 ? (
-        <View style={[styles.emptyCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-          <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No Transactions in Selected Timeframe</Text>
-          <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
-            {signatures.length > 0
-              ? 'No transactions found within this specific filter. Switch to "90 Days" to view your older transaction receipts.'
-              : 'Physical Blink payments and SOL transfers made with this wallet will appear here with cryptographic signatures.'}
-          </Text>
-          {signatures.length > 0 && dateFilter !== '90d' && (
-            <TouchableOpacity
-              style={[styles.resetFilterBtn, { backgroundColor: colors.accent }]}
-              onPress={() => setDateFilter('90d')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.resetFilterBtnText}>Show All (90 Days)</Text>
-            </TouchableOpacity>
+        <View style={styles.emptyStateWrap}>
+          {signatures.length === 0 && !loading ? (
+            // Fresh wallet — no transactions at all
+            <View style={[styles.emptyCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+              <View style={[styles.emptyIconCircle, { backgroundColor: 'rgba(91,103,246,0.1)', borderColor: 'rgba(91,103,246,0.25)' }]}>
+                <Activity size={32} color={colors.accent} strokeWidth={1.5} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Your wallet is ready</Text>
+              <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
+                Receive some SOL or USDC to get started. All Blink payments and transfers will appear here.
+              </Text>
+              <View style={styles.emptyActions}>
+                <TouchableOpacity
+                  style={[styles.emptyActionBtn, { backgroundColor: colors.accent }]}
+                  onPress={onOpenReceive}
+                  activeOpacity={0.85}
+                >
+                  <ArrowDownLeft size={14} color="#FFF" strokeWidth={2.5} />
+                  <Text style={styles.emptyActionBtnText}>Receive / Deposit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.emptyActionBtnSecondary, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
+                  onPress={onOpenTap}
+                  activeOpacity={0.85}
+                >
+                  <Tag size={14} color={colors.accent} strokeWidth={2} />
+                  <Text style={[styles.emptyActionBtnSecondaryText, { color: colors.accent }]}>Tap a Blink</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            // Has transactions but filtered out
+            <View style={[styles.emptyCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No Transactions in Timeframe</Text>
+              <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
+                No transactions found within this filter. Switch to "All" to see your full history.
+              </Text>
+              {dateFilter !== 'all' && (
+                <TouchableOpacity
+                  style={[styles.resetFilterBtn, { backgroundColor: colors.accent }]}
+                  onPress={() => setDateFilter('all')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.resetFilterBtnText}>Show All Transactions</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           )}
         </View>
       ) : (
@@ -769,33 +885,44 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
                 activeOpacity={0.7}
               >
                 <View style={styles.txItemLeft}>
+                  {/* Direction badge */}
                   <View style={[
                     styles.txBadge,
                     sig.err
-                      ? styles.txBadgeErr
+                      ? { backgroundColor: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.2)' }
                       : isSend
-                      ? styles.txBadgeSend
+                      ? { backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.18)' }
                       : isReceive
-                      ? styles.txBadgeOk
-                      : styles.txBadgeNeutral,
+                      ? { backgroundColor: 'rgba(16,185,129,0.1)', borderColor: 'rgba(16,185,129,0.2)' }
+                      : { backgroundColor: colors.bgCardAlt, borderColor: colors.border },
                   ]}>
                     {sig.err ? (
-                      <Clock size={16} color="#EF4444" strokeWidth={2.2} />
+                      <Clock size={17} color="#EF4444" strokeWidth={2.2} />
                     ) : isSend ? (
-                      <ArrowUpRight size={16} color="#EF4444" strokeWidth={2.5} />
+                      <ArrowUpRight size={17} color="#EF4444" strokeWidth={2.5} />
                     ) : isReceive ? (
-                      <ArrowDownLeft size={16} color="#10B981" strokeWidth={2.5} />
+                      <ArrowDownLeft size={17} color="#10B981" strokeWidth={2.5} />
                     ) : (
-                      <Activity size={16} color={colors.textSecondary} strokeWidth={2} />
+                      <Activity size={17} color={colors.textSecondary} strokeWidth={2} />
                     )}
                   </View>
                   <View style={{ marginLeft: 12, flex: 1 }}>
-                    <Text style={[styles.txTitle, { color: colors.textPrimary }]}>
-                      {dirLabel}
-                    </Text>
+                    {/* Direction label as bold pill */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      <Text style={[styles.txTitle, { color: dirColor, fontWeight: '800' }]}>
+                        {dirLabel}
+                      </Text>
+                      {sig.memo && !sig.memo.toLowerCase().includes('transfer') && (
+                        <View style={{ backgroundColor: 'rgba(91,103,246,0.1)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                          <Text style={{ fontSize: 9, color: colors.accent, fontWeight: '700' }} numberOfLines={1}>
+                            {sig.memo.slice(0, 20)}{sig.memo.length > 20 ? '…' : ''}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                     {sig.counterparty ? (
                       <Text style={[styles.txHash, { color: colors.textMuted }]}>
-                        {isSend ? 'To' : 'From'}: {sig.counterparty.slice(0, 6)}...{sig.counterparty.slice(-4)}
+                        {isSend ? '→' : '←'} {sig.counterparty.slice(0, 8)}...{sig.counterparty.slice(-4)}
                       </Text>
                     ) : (
                       <Text style={[styles.txHash, { color: colors.textMuted }]}>
@@ -812,23 +939,24 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
 
                 <View style={styles.txItemRight}>
                   {sig.token === 'USDC' && sig.amountUsdc !== null && sig.amountUsdc !== undefined ? (
-                    <Text style={[styles.txStatus, { color: dirColor, fontWeight: '800', fontSize: 14 }]}>
-                      {amountPrefix}${sig.amountUsdc.toFixed(2)} USDC
+                    <Text style={[styles.txStatus, { color: dirColor, fontWeight: '900', fontSize: 14 }]}>
+                      {amountPrefix}${sig.amountUsdc.toFixed(2)}
                     </Text>
-                  ) : sig.amountSol !== null ? (
-                    <Text style={[styles.txStatus, { color: dirColor, fontWeight: '800', fontSize: 14 }]}>
-                      {amountPrefix}{sig.amountSol.toFixed(4)} SOL
+                  ) : sig.amountSol !== null && sig.amountSol !== undefined ? (
+                    <Text style={[styles.txStatus, { color: dirColor, fontWeight: '900', fontSize: 14 }]}>
+                      {amountPrefix}{sig.amountSol.toFixed(4)}
                     </Text>
                   ) : (
                     <Text style={[styles.txStatus, sig.err ? styles.txStatusErr : styles.txStatusOk]}>
                       {sig.err ? 'Failed' : 'Confirmed'}
                     </Text>
                   )}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                    <FileText size={11} color={colors.accent} />
-                    <Text style={{ fontSize: 11, color: colors.accent, fontWeight: '700' }}>
-                      Receipt
-                    </Text>
+                  <Text style={{ fontSize: 10, color: colors.textMuted, fontWeight: '600', textAlign: 'right' }}>
+                    {sig.token === 'USDC' ? 'USDC' : sig.token === 'SKR' ? 'SKR' : 'SOL'}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 }}>
+                    <FileText size={10} color={colors.accent} />
+                    <Text style={{ fontSize: 9, color: colors.accent, fontWeight: '700' }}>Receipt</Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -876,7 +1004,7 @@ const styles = StyleSheet.create({
   },
   heroAmount: {
     color: '#FFFFFF',
-    fontSize: 34,
+    fontSize: 20,
     fontWeight: '800',
     letterSpacing: -0.6,
   },
@@ -888,12 +1016,12 @@ const styles = StyleSheet.create({
   },
   gainText: {
     color: '#10B981',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   solSubtext: {
     color: '#64748B',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
   },
   heroActionsRow: {
@@ -918,7 +1046,7 @@ const styles = StyleSheet.create({
   },
   depositBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: -0.2,
   },
@@ -935,7 +1063,7 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
   },
   disconnectedCard: {
@@ -950,13 +1078,13 @@ const styles = StyleSheet.create({
   },
   disconnectedTitle: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
     marginTop: 14,
   },
   disconnectedSub: {
     color: '#94A3B8',
-    fontSize: 13,
+    fontSize: 11,
     textAlign: 'center',
     lineHeight: 18,
     marginVertical: 10,
@@ -974,7 +1102,7 @@ const styles = StyleSheet.create({
   },
   connectWalletBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   accountCard: {
@@ -982,11 +1110,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#0F111A',
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#1D212E',
-    padding: 14,
-    marginBottom: 20,
+    padding: 8,
+    marginBottom: 8,
   },
   accountCardLeft: {
     flexDirection: 'row',
@@ -994,12 +1122,12 @@ const styles = StyleSheet.create({
   },
   accountName: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   accountKey: {
     color: '#64748B',
-    fontSize: 12,
+    fontSize: 10,
     fontFamily: 'monospace',
     marginTop: 2,
   },
@@ -1010,31 +1138,31 @@ const styles = StyleSheet.create({
   },
   switchBtn: {
     backgroundColor: '#181B27',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
   },
   switchBtnText: {
     color: '#94A3B8',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   refreshIconBtn: {
     backgroundColor: '#181B27',
-    padding: 6,
-    borderRadius: 8,
+    padding: 5,
+    borderRadius: 6,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    marginTop: 10,
+    marginBottom: 8,
+    marginTop: 4,
     paddingHorizontal: 2,
   },
   sectionTitle: {
     color: '#94A3B8',
-    fontSize: 13,
+    fontSize: 10.5,
     fontWeight: '700',
     letterSpacing: 0.3,
   },
@@ -1045,23 +1173,23 @@ const styles = StyleSheet.create({
   },
   solscanLinkText: {
     color: '#5B67F6',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   holdingsList: {
     backgroundColor: '#0F111A',
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#1D212E',
     overflow: 'hidden',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   holdingItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#171A25',
   },
@@ -1071,12 +1199,12 @@ const styles = StyleSheet.create({
   },
   holdingSymbol: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 11.5,
     fontWeight: '700',
   },
   holdingName: {
     color: '#64748B',
-    fontSize: 12,
+    fontSize: 9.5,
     marginTop: 1,
   },
   holdingItemRight: {
@@ -1084,39 +1212,86 @@ const styles = StyleSheet.create({
   },
   holdingPrice: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 11.5,
     fontWeight: '700',
   },
   holdingBalance: {
     color: '#10B981',
-    fontSize: 12,
+    fontSize: 9.5,
     fontWeight: '600',
     marginTop: 1,
   },
   emptyCard: {
     backgroundColor: '#0F111A',
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#1D212E',
-    padding: 24,
+    padding: 18,
     alignItems: 'center',
   },
   emptyTitle: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '700',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   emptySub: {
     color: '#64748B',
-    fontSize: 13,
+    fontSize: 10,
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 16,
     maxWidth: 320,
   },
+  emptyStateWrap: {
+    marginHorizontal: 4,
+  },
+  emptyIconCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  emptyActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+    width: '100%',
+  },
+  emptyActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingVertical: 11,
+    borderRadius: 12,
+  },
+  emptyActionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  emptyActionBtnSecondary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingVertical: 11,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  emptyActionBtnSecondaryText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+
   txList: {
     backgroundColor: '#0F111A',
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#1D212E',
     overflow: 'hidden',
@@ -1125,8 +1300,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#171A25',
   },
@@ -1155,12 +1330,12 @@ const styles = StyleSheet.create({
   },
   txTitle: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   txHash: {
     color: '#64748B',
-    fontSize: 12,
+    fontSize: 10,
     fontFamily: 'monospace',
     marginTop: 2,
   },
@@ -1168,7 +1343,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   txStatus: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   txStatusOk: {
@@ -1179,21 +1354,21 @@ const styles = StyleSheet.create({
   },
   txBlock: {
     color: '#64748B',
-    fontSize: 11,
+    fontSize: 10,
     marginTop: 2,
   },
   balanceCard: {
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
-    padding: 16,
-    marginBottom: 20,
-    marginTop: 8,
+    padding: 12,
+    marginBottom: 8,
+    marginTop: 4,
   },
   balanceCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   liveDot: {
     width: 8,
@@ -1202,7 +1377,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
   },
   balanceWalletLabel: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.3,
   },
@@ -1212,7 +1387,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   balanceRefreshText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   balanceMainRow: {
@@ -1221,12 +1396,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   balanceSubTitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     marginBottom: 4,
   },
   balanceNumber: {
-    fontSize: 22,
+    fontSize: 15,
     fontWeight: '800',
     letterSpacing: -0.4,
   },
@@ -1241,7 +1416,7 @@ const styles = StyleSheet.create({
   },
   airdropBtnText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   devnetTag: {
@@ -1270,7 +1445,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   filterTabText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   resetFilterBtn: {
@@ -1282,7 +1457,7 @@ const styles = StyleSheet.create({
   },
   resetFilterBtnText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
 });

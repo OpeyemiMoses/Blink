@@ -1,53 +1,60 @@
-# Session Memory — TapBlink / Seeker Project
-**Saved:** 2026-09-29T23:34
+# TapBlink Session Memory
+
+## Project
+Expo/React Native mobile app — Solana Blink payments with NFC & QR.  
+Workspace: `/Users/user/.gemini/antigravity-ide/scratch/seeker-tapblink`
+
+## Active Tunnels
+- **localtunnel**: `https://wise-peas-brake.loca.lt` (Password: `105.120.128.249`)
+- **cloudflared**: `https://adelaide-barriers-capacity-treated.trycloudflare.com`
+- **node server**: task-2636 serving `dist/` on `http://localhost:3000`
 
 ---
 
-## Core Operational Directives (Strict Enforcement)
-
-1. **Always Save Memory on Task Completion:** Update and persist `session_memory.md` after EVERY task or response without exception.
-2. **Always Provide Mobile Test URL:** Provide the active HTTPS tunnel URL after every rebuild for instant mobile preview.
-3. **No Printable Stickers / Placards:** Removed all printable card/sticker placard previews and download options across the app (`CreateBlinkModal.tsx`, `StudioScreen.tsx`).
-4. **Instant Modal Dismissal on Delete:**
-   - Deleting a Blink instantly invokes `onClose()`, resetting `selectedDetailBlink` state to `null` with 0ms delay.
-   - `App.tsx` and `BlinkDetailModal.tsx` listen to deletion window events (`blink_deleted`, `tapblink_blink_deleted`) and auto-dismiss the modal page, seamlessly returning the user to the exact screen they opened the Blink from (`MarketsScreen`, `StudioScreen`, etc.).
-5. **Strict Creator-Only Editing & Deletion:**
-   - Non-creators cannot see or invoke Edit or Delete buttons anywhere (`BlinkDetailModal.tsx`, `StudioScreen.tsx`).
-   - `server.js` validates creator matching case-insensitively (`incomingRequester === existingCreator`) and rejects unauthorized edit or deletion attempts with HTTP 403.
-6. **Global Cross-Device Deletion Sync:**
-   - When a creator deletes a Blink, `server.js` adds the ID to `deletedBlinksDb` (`server_deleted_db.json`).
-   - Every client device running `PhysicalBlinkRegistry.syncFromCloud()` automatically purges tombstoned IDs from `this.globalCloudBlinks`, `this.blinks`, `DatabaseService`, and `localStorage` across all user sessions globally.
-7. **Scrollable Mobile Search & Filter Bars:** The search bar and category filter pills in `MarketsScreen.tsx` are wrapped in a horizontal `ScrollView` so no text, input fields, or pills get cut off on mobile viewports.
-8. **No Mocked or Pre-populated Default Blinks:** All seeded, mocked, and default blinks (`DEFAULT_GLOBAL_BLINKS`, `DEFAULT_FALLBACKS`, `server_db.json`) are completely removed from both backend and frontend. The app operates with a clean slate for real user-created Blinks.
-9. **No "Choose from Gallery" button anywhere:** Avatar changes are strictly via camera or 3D Mascot selector.
-10. **No inline alert/toast banners:** Use `ToastService` exclusively.
-11. **Profile Edit Form Hidden by Default:** Collapses once saved; pencil icon toggles display.
-12. **3D Toy / Lego Mascot Avatars as Default:** All new accounts receive one of the 6 colorful 3D Toy/Lego mascot avatars from `assets/avatars/` (`mascot_purple.png`, `mascot_green.png`, `mascot_pink.png`, `mascot_cyan.png`, `mascot_orange.png`, `mascot_gold.png`) at random until they choose to change it.
-13. **Clean Header & Hero Cards (No Subtext / Redundant Sign Out Pills):**
-    - Subtext balance lines (`● X.XXXX SOL • XX.XX USDC`) removed from balance hero cards in `PocketScreen.tsx` and `MarketsScreen.tsx`.
-    - Redundant top header `Sign Out` button pills removed from `ProfileScreen.tsx` and `PocketScreen.tsx` header actions.
-14. **Near End-to-End Mobile Padding:** Container horizontal padding is reduced to `6px` across all screens so cards and content expand near end-to-edge on mobile viewports.
-15. **Real On-Chain Transactions (Zero Mock Signatures):** Every transaction must be broadcasted to Solana Devnet RPC and confirmed on-chain. Never return fake random string signatures (`sol_...` or random base58). Explorer and Solscan links must point strictly to Solana Devnet (`?cluster=devnet`).
-16. **Strict Clipboard Accuracy:** If clipboard write fails or user cancels the OS share sheet, never display "link copied". Only confirm when copying actually succeeded.
-17. **Live Spot Price Feed & Real Math:** Cumulative portfolio balances strictly derive from real-time live APIs (Coinbase API for SOL spot rates, DexScreener API for SKR rates) with automatic purging of legacy hardcoded price caches (`$142.50`).
+## Hackathon Intelligence ("Clock In" — Solana Mobile Hackathon)
+- **Source**: `https://solanamobile.radiant.nexus/` (Radiants DAO & Solana Mobile)
+- **Submissions Close**: **October 8, 2026, 23:59 UTC (Hard Deadline: ~7 days remaining)**
+- **Prize Pool**: $135k USDC total ($30k 1st, $25k 2nd, etc.) + **$10,000 in $SKR** for Best SKR Integration + Matched ORE Prize (up to $30k) + Seeker devices + 1-on-1 Call with Anatoly Yakovenko (Toly)
+- **Judging Panel**: Anatoly Yakovenko (Solana Labs), Mert (Helius), Chase (Solana Foundation), Akshay & Beeman (Solana Mobile), Voynich & A2nkF (Ethelsec)
+- **Judging Criteria (25% each)**:
+  1. Stickiness & PMF (25%)
+  2. User Experience (25%)
+  3. Innovation / X-factor (25%)
+  4. Presentation & Demo Quality (25%)
+- **Mandatory Deliverables**:
+  1. Functional Android APK (Must run on physical device / emulator)
+  2. GitHub Repository (connected via Radiants Align GitHub App)
+  3. 3-minute max Demo Video
+  4. Pitch Deck / brief presentation
+- **Audit Findings**:
+  - Strengths: Daily "Clock In" streak fits theme & PMF perfectly; deep $SKR live pricing + 10% discount targets the $10k SKR prize directly; physical NFC/QR bridges phone hardware.
+  - Critical Gaps: Need standalone Android APK build (`eas build -p android --profile preview`); wire native Mobile Wallet Adapter (`@solana-mobile/mobile-wallet-adapter-protocol`) for Android Seed Vault signing; record 3-min demo video; build 6-slide deck.
 
 ---
 
-## Project Location
-`/Users/user/.gemini/antigravity-ide/scratch/seeker-tapblink`
+## Completed Features
 
----
+### SKR Discount / Rebate System
+- SKR blink payments get 10% off — price set in USDC, backend queries live SKR price, applies 10% discount.
+- Price updates live via `PriceService.subscribe()` throughout all screens.
+- Fixed: SKR price dynamic back-calculation from stored SKR using `(storedSKR × livePrice) / 0.9`, rounded to $0.50.
+- Applied in `loadRegistry()` (physicalBlinkRegistry) and `resolve()` URL parsing for QR codes without `baseUsdc` param.
+- `TapScanScreen` success toast uses live `checkoutAmount` for SKR.
 
-## Active Servers & Tunnel Status
-- **Backend & Static App Server:** `server.js` running on Port 3000 (`node server.js`) — Active (Task `task-11664`)
-- **Self-Healing Cloudflare Tunnel URL:** `https://flag-riding-faq-stats.trycloudflare.com` — Active (Supervised by `tunnel_supervisor.js`, Task `task-11118`)
-- **Direct Local Network (Wi-Fi) URL:** `http://192.168.1.194:3000`
+### Streak / Daily Clock-In System
+- Users clock in daily to earn +1% off every 10-day streak on SKR Blink payments.
+- Streak is displayed on Profile screen via FAB icon (floating bottom-right).
+- FAB is transparent when streak not active, raised above nav bar.
+- Streak copy: "Clock in daily to earn +1% off every 10-day streak.."
 
----
+### Blink Cards & Custom Image Upload
+- `MusicianLogo` removed; replaced with `imageUrl` or `<BlinkBrandMark />` fallback.
+- `CreateBlinkModal.tsx` & `StudioScreen.tsx`: Image picker (HTML5 camera/upload, compressed to 480px JPEG dataURL).
 
-## Latest Update: Complete Removal of Printable Card Stickers / Placards
-
-### 1. Requirements & Fix Summary
-- **Sticker / Placard Removal:**
-  - Removed "Placard Preview Card" and "Save Printable Card Image (PNG)" from [`CreateBlinkModal.tsx`](file:///Users/user/.gemini/antigravity-ide/scratch/seeker-tapblink/src/components/CreateBlinkModal.tsx).
-  - Removed "Print Card" action button and "Save Printable Card Image (PNG)" from [`StudioScreen.tsx`](file:///Users/user/.gemini/antigravity-ide/scratch/seeker-tapblink/src/screens/StudioScreen.tsx).
+### UI & Styling Standards
+- Text field fonts globally reduced to 11px / 10px.
+- Avatar picker: camera icon only on Profile screen.
+- Toasts strictly via `ToastService`.
+- Profile edit form collapsed by default, pencil icon toggles.
+- Mascot vector avatars default for new profiles.
+- No emojis in UI text.

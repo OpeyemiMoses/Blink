@@ -8,9 +8,13 @@ export interface PhysicalBlink {
   amount: number;
   token: 'USDC' | 'SOL' | 'SKR';
   recipient: string;
+  creatorAddress?: string;
+  owner?: string;
   description: string;
   verifiedDomain?: string;
   visibility?: BlinkVisibility; // 'global' (Explore feed, shareable anywhere) or 'physical' (on-site tap, private POS)
+  baseUsdcAmount?: number;
+  imageUrl?: string;
   createdAt: number;
   updatedAt: number;
   stats: {
@@ -21,12 +25,15 @@ export interface PhysicalBlink {
 }
 
 import { DatabaseService } from './databaseService';
+import { PriceService } from './priceService';
 
 const STORAGE_REGISTRY_KEY = 'justblink_physical_registry';
+const LEGACY_STORAGE_KEY = 'blink_physical_registry';
 
 export class PhysicalBlinkRegistry {
   private static blinks: PhysicalBlink[] = [];
   private static globalCloudBlinks: PhysicalBlink[] = [];
+  private static tombstonedDeletedIds = new Set<string>();
   private static isSyncing = false;
 
   /**
@@ -40,7 +47,17 @@ export class PhysicalBlinkRegistry {
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.blinks)) {
-          this.globalCloudBlinks = data.blinks;
+          // Register tombstones from server
+          if (Array.isArray(data.deletedIds)) {
+            for (const dId of data.deletedIds) {
+              this.tombstonedDeletedIds.add(String(dId).toLowerCase().trim());
+            }
+          }
+
+          // Filter out any tombstoned IDs immediately
+          this.globalCloudBlinks = data.blinks.filter(
+            (b: PhysicalBlink) => b && b.id && !this.tombstonedDeletedIds.has(b.id.toLowerCase().trim())
+          );
           let current = this.loadRegistry();
           let changed = false;
 
@@ -54,31 +71,44 @@ export class PhysicalBlinkRegistry {
             DatabaseService.deleteBlink(mId);
           }
 
-          // Purge any globally deleted Blinks tombstoned by cloud server
-          if (Array.isArray(data.deletedIds) && data.deletedIds.length > 0) {
-            for (const delId of data.deletedIds) {
-              const cleanDel = String(delId).toLowerCase().trim();
-              const beforeLen = current.length;
-              current = current.filter(b => b.id.toLowerCase() !== cleanDel);
-              this.globalCloudBlinks = this.globalCloudBlinks.filter(b => b.id.toLowerCase() !== cleanDel);
-              if (current.length < beforeLen) changed = true;
-              DatabaseService.deleteBlink(cleanDel);
-            }
+          // Purge any globally deleted Blinks tombstoned locally or by cloud server
+          for (const delId of this.tombstonedDeletedIds) {
+            const cleanDel = String(delId).toLowerCase().trim();
+            const beforeLen = current.length;
+            current = current.filter(b => b.id.toLowerCase() !== cleanDel);
+            this.globalCloudBlinks = this.globalCloudBlinks.filter(b => b.id.toLowerCase() !== cleanDel);
+            if (current.length < beforeLen) changed = true;
+            DatabaseService.deleteBlink(cleanDel);
           }
 
           if (data.blinks.length === 0) {
-            // Cloud has 0 blinks, keep only user blinks or set to empty
-            current = current.filter(b => !!b.creatorAddress);
+            current = current.filter(b => !!(b as any).creatorAddress || !!b.recipient);
             this.blinks = current;
             this.saveRegistry();
           } else {
-            for (const cb of data.blinks) {
+            for (const cb of this.globalCloudBlinks) {
+              if (this.tombstonedDeletedIds.has(cb.id.toLowerCase())) continue;
               const existingIdx = current.findIndex(b => b.id.toLowerCase() === cb.id.toLowerCase());
               if (existingIdx >= 0) {
-                current[existingIdx] = { ...current[existingIdx], ...cb };
+                const existing = current[existingIdx];
+                const maxTaps = Math.max(existing.stats?.taps || 0, cb.stats?.taps || 0);
+                const maxCompleted = Math.max(existing.stats?.completed || 0, cb.stats?.completed || 0);
+                const maxVolume = Math.max(existing.stats?.volumeUsdc || 0, cb.stats?.volumeUsdc || 0);
+
+                current[existingIdx] = {
+                  ...existing,
+                  ...cb,
+                  stats: {
+                    taps: maxTaps,
+                    completed: maxCompleted,
+                    volumeUsdc: maxVolume,
+                  },
+                };
+                DatabaseService.saveBlink(current[existingIdx]);
                 changed = true;
               } else {
                 current.unshift(cb);
+                DatabaseService.saveBlink(cb);
                 changed = true;
               }
             }
@@ -128,14 +158,9 @@ export class PhysicalBlinkRegistry {
       return [...this.blinks];
     }
 
-    // 1. Try loading from DatabaseService first
-    const dbBlinks = DatabaseService.getAllBlinks();
-    if (dbBlinks && dbBlinks.length > 0) {
-      this.blinks = dbBlinks;
-      return [...this.blinks];
-    }
-
-    // 2. Check localStorage and sanitize
+    // Combine items from memory (this.blinks), DatabaseService, globalCloudBlinks, and localStorage
+    const dbBlinks = DatabaseService.getAllBlinks() || [];
+    let localStored: PhysicalBlink[] = [];
     if (typeof window !== 'undefined' && window.localStorage) {
       const stored =
         window.localStorage.getItem('blink_physical_registry') ||
@@ -143,18 +168,66 @@ export class PhysicalBlinkRegistry {
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) {
-            this.blinks = parsed;
-            this.saveRegistry();
-            return [...this.blinks];
-          }
+          if (Array.isArray(parsed)) localStored = parsed;
         } catch {}
       }
     }
 
-    this.blinks = [];
+    const map = new Map<string, PhysicalBlink>();
+
+    // Merge in order: memory -> localStored -> dbBlinks -> globalCloudBlinks
+    const allSources = [...this.blinks, ...localStored, ...dbBlinks, ...this.globalCloudBlinks];
+    for (const b of allSources) {
+      if (!b || !b.id) continue;
+      const key = b.id.trim().toLowerCase();
+      if (this.tombstonedDeletedIds.has(key)) continue;
+
+      // Ensure SKR Blinks always have a valid baseUsdcAmount.
+      // For legacy blinks without it, back-calculate from the stored SKR amount
+      // using the live SKR price reversed through the 10% discount.
+      if (b.token === 'SKR') {
+        if (!b.baseUsdcAmount || b.baseUsdcAmount <= 0) {
+          const liveSkrPrice = PriceService.getSkrPriceSync();
+          if (b.id === 'tip-jar') {
+            b.baseUsdcAmount = 4.0;
+          } else if (b.amount > 0 && liveSkrPrice > 0) {
+            // Reverse: stored SKR amount was discounted USDC / skrPrice
+            // So original USDC = storedSKR * skrPrice / discountMultiplier (0.9 for 10% off)
+            // Round to nearest $0.50 for clean display
+            const reversedUsdc = (b.amount * liveSkrPrice) / 0.9;
+            b.baseUsdcAmount = Math.max(0.5, Math.round(reversedUsdc * 2) / 2);
+          } else {
+            b.baseUsdcAmount = 4.0; // last-resort fallback
+          }
+        }
+      }
+
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, { ...b });
+      } else {
+        // Merge stats keeping max values
+        const maxTaps = Math.max(existing.stats?.taps || 0, b.stats?.taps || 0);
+        const maxCompleted = Math.max(existing.stats?.completed || 0, b.stats?.completed || 0);
+        const maxVolume = Math.max(existing.stats?.volumeUsdc || 0, b.stats?.volumeUsdc || 0);
+
+        map.set(key, {
+          ...existing,
+          ...b,
+          baseUsdcAmount: b.baseUsdcAmount || existing.baseUsdcAmount || (key === 'tip-jar' ? 4.0 : undefined),
+          stats: {
+            taps: maxTaps,
+            completed: maxCompleted,
+            volumeUsdc: maxVolume,
+          },
+          updatedAt: Math.max(existing.updatedAt || 0, b.updatedAt || 0),
+        });
+      }
+    }
+
+    this.blinks = Array.from(map.values());
     this.saveRegistry();
-    return [];
+    return [...this.blinks];
   }
 
   private static saveRegistry(): void {
@@ -181,13 +254,52 @@ export class PhysicalBlinkRegistry {
   }
 
   /**
+   * Check if a Blink ID is already in use by another creator.
+   */
+  static isIdTakenByOther(id: string, myAddress?: string): boolean {
+    const cleanId = id.trim().toLowerCase();
+    const myClean = (myAddress || '').trim().toLowerCase();
+    const list = this.loadRegistry();
+    const existing = list.find(b => b.id.toLowerCase() === cleanId && !this.tombstonedDeletedIds.has(b.id.toLowerCase())) ||
+      this.globalCloudBlinks.find(b => b.id.toLowerCase() === cleanId && !this.tombstonedDeletedIds.has(b.id.toLowerCase()));
+    if (!existing) return false;
+    const existingCreator = (existing.creatorAddress || existing.recipient || '').trim().toLowerCase();
+    if (!myClean) return true;
+    return existingCreator !== myClean;
+  }
+
+  /**
+   * Return all registered blinks matching a given ID or query, allowing payers to choose
+   * the exact creator they want to pay if multiple creators use the same ID name.
+   */
+  static resolveAll(idOrQuery: string): PhysicalBlink[] {
+    const list = this.loadRegistry();
+    const clean = idOrQuery.trim().toLowerCase().replace(/^.*\/t\//, '').split('?')[0];
+    const results: PhysicalBlink[] = [];
+    const seen = new Set<string>();
+
+    for (const b of [...list, ...this.globalCloudBlinks]) {
+      if (!b || !b.id || this.tombstonedDeletedIds.has(b.id.toLowerCase())) continue;
+      if (b.id.toLowerCase() === clean || (b.name && b.name.toLowerCase().includes(clean))) {
+        const uniqueKey = `${b.id.toLowerCase()}::${(b.creatorAddress || b.recipient).toLowerCase()}`;
+        if (!seen.has(uniqueKey)) {
+          seen.add(uniqueKey);
+          results.push(b);
+        }
+      }
+    }
+    return results;
+  }
+
+  /**
    * Resolve a Physical ID, tag payload, or URL into a programmed Action.
    * Supports:
    * 1. Direct ID matching (local or cloud)
    * 2. URL with embedded parameters (/t/<id>?name=...&amount=...&recipient=...)
-   * 3. Cloud query for remote direct links
+   * 3. Scoped @creator/id syntax
+   * 4. Disambiguation by creator address
    */
-  static resolve(idOrUrl: string): PhysicalBlink | null {
+  static resolve(idOrUrl: string, creatorAddress?: string): PhysicalBlink | null {
     const list = this.loadRegistry();
     const clean = idOrUrl.trim();
 
@@ -205,11 +317,29 @@ export class PhysicalBlinkRegistry {
             name: decodeURIComponent(params.get('name') || 'Solana Action'),
             actionType: (params.get('type') as ActionType) || 'payment',
             amount: parseFloat(params.get('amount') || '0.01') || 0.01,
-            token: (params.get('token') as 'USDC' | 'SOL') || 'SOL',
+            token: (params.get('token') as 'USDC' | 'SOL' | 'SKR') || 'SOL',
             recipient: params.get('recipient') || '',
+            creatorAddress: params.get('creator') || params.get('recipient') || '',
             description: decodeURIComponent(params.get('desc') || 'Physical Solana Blink transaction'),
             verifiedDomain: params.get('domain') ? decodeURIComponent(params.get('domain')!) : undefined,
             visibility: (params.get('visibility') as BlinkVisibility) || 'physical',
+            baseUsdcAmount: (() => {
+              const rawBaseUsdc = params.get('baseUsdc') ? parseFloat(params.get('baseUsdc')!) : null;
+              if (rawBaseUsdc && rawBaseUsdc > 0) return rawBaseUsdc;
+              // Fallback: back-calculate from stored SKR amount using live price
+              const rawAmount = parseFloat(params.get('amount') || '0');
+              const rawToken = params.get('token') || 'SOL';
+              if (rawToken === 'SKR' && rawAmount > 0) {
+                const liveSkrPrice = PriceService.getSkrPriceSync();
+                if (liveSkrPrice > 0) {
+                  const reversedUsdc = (rawAmount * liveSkrPrice) / 0.9;
+                  return Math.max(0.5, Math.round(reversedUsdc * 2) / 2);
+                }
+              }
+              if (extractedId.toLowerCase() === 'tip-jar') return 4.0;
+              return undefined;
+            })(),
+            imageUrl: params.get('image') ? decodeURIComponent(params.get('image')!) : undefined,
             createdAt: Date.now(),
             updatedAt: Date.now(),
             stats: { taps: 1, completed: 0, volumeUsdc: 0 },
@@ -221,25 +351,74 @@ export class PhysicalBlinkRegistry {
       }
     }
 
-    // 2. Check local list by direct ID
-    const directMatch = list.find(b => b.id.toLowerCase() === clean.toLowerCase());
+    // 2. Check for @creator/slug syntax
+    if (clean.includes('/') && !clean.startsWith('http')) {
+      const parts = clean.split('/');
+      if (parts.length === 2 && parts[0].startsWith('@')) {
+        const creatorHandle = parts[0].replace(/^@/, '').toLowerCase();
+        const blinkId = parts[1].toLowerCase();
+        const scopedMatch = [...list, ...this.globalCloudBlinks].find(b => 
+          b && b.id && b.id.toLowerCase() === blinkId && !this.tombstonedDeletedIds.has(b.id.toLowerCase()) && (
+            (b.creatorAddress && b.creatorAddress.toLowerCase().includes(creatorHandle)) ||
+            (b.recipient && b.recipient.toLowerCase().includes(creatorHandle)) ||
+            ((b as any).verifiedDomain && (b as any).verifiedDomain.toLowerCase().includes(creatorHandle))
+          )
+        );
+        if (scopedMatch) return scopedMatch;
+      }
+    }
+
+    // 3. Creator-specific lookup if creatorAddress provided
+    if (creatorAddress) {
+      const cClean = creatorAddress.toLowerCase().trim();
+      const creatorMatch = [...list, ...this.globalCloudBlinks].find(b => 
+        b && b.id && b.id.toLowerCase() === clean.toLowerCase() && !this.tombstonedDeletedIds.has(b.id.toLowerCase()) && (
+          (b.creatorAddress && b.creatorAddress.toLowerCase() === cClean) ||
+          (b.recipient && b.recipient.toLowerCase() === cClean)
+        )
+      );
+      if (creatorMatch) return creatorMatch;
+    }
+
+    // 4. Check local list by direct ID
+    const directMatch = list.find(b => b.id.toLowerCase() === clean.toLowerCase() && !this.tombstonedDeletedIds.has(b.id.toLowerCase()));
     if (directMatch) return directMatch;
 
-    // 3. Check cloud cache by direct ID
-    const cloudMatch = this.globalCloudBlinks.find(b => b.id.toLowerCase() === clean.toLowerCase());
+    // 5. Check cloud cache by direct ID
+    const cloudMatch = this.globalCloudBlinks.find(b => b.id.toLowerCase() === clean.toLowerCase() && !this.tombstonedDeletedIds.has(b.id.toLowerCase()));
     if (cloudMatch) return cloudMatch;
 
-    // 4. Check if it's a URL ending with /t/<id>
+    // 6. Check if it's a URL ending with /t/<id>
     const match = clean.match(/\/t\/([a-zA-Z0-9_-]+)/);
     if (match && match[1]) {
       const id = match[1].toLowerCase();
-      const found = list.find(b => b.id.toLowerCase() === id);
-      if (found) return found;
-      const foundCloud = this.globalCloudBlinks.find(b => b.id.toLowerCase() === id);
-      if (foundCloud) return foundCloud;
+      if (!this.tombstonedDeletedIds.has(id)) {
+        const found = list.find(b => b.id.toLowerCase() === id);
+        if (found) return found;
+        const foundCloud = this.globalCloudBlinks.find(b => b.id.toLowerCase() === id);
+        if (foundCloud) return foundCloud;
+      }
     }
 
     return null;
+  }
+
+  /**
+   * Look up a Blink by ID from memory, DatabaseService, or cloud cache.
+   */
+  static getBlinkById(id: string): PhysicalBlink | null {
+    if (!id) return null;
+    const clean = id.trim().toLowerCase();
+    const resolved = this.resolve(clean);
+    if (resolved) return resolved;
+    return DatabaseService.getBlinkById(clean);
+  }
+
+  /**
+   * Alias for getBlinkById
+   */
+  static getById(id: string): PhysicalBlink | null {
+    return this.getBlinkById(id);
   }
 
   /**
@@ -255,9 +434,22 @@ export class PhysicalBlinkRegistry {
     const globalActionTypes: ActionType[] = ['tip', 'mint', 'donation', 'voucher', 'claim'];
     const visibility: BlinkVisibility = data.visibility || (globalActionTypes.includes(data.actionType) ? 'global' : 'physical');
 
+    const isSkr = data.token === 'SKR';
+    let baseUsdc = data.baseUsdcAmount;
+    let initialAmount = data.amount;
+    if (isSkr) {
+      if (!baseUsdc || baseUsdc <= 0) {
+        baseUsdc = data.amount > 50 ? 4.0 : data.amount;
+      }
+      initialAmount = PriceService.getSkrPaymentDetails(baseUsdc).skrAmount;
+    }
+
     const newBlink: PhysicalBlink = {
       ...data,
       id: cleanId,
+      amount: initialAmount,
+      baseUsdcAmount: baseUsdc,
+      imageUrl: data.imageUrl || undefined,
       visibility,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -280,6 +472,15 @@ export class PhysicalBlinkRegistry {
     this.saveRegistry();
     DatabaseService.saveBlink(newBlink);
     this.notifyChange(newBlink);
+
+    // Dispatch instant creation events so lists update in real-time without page reload
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      try {
+        window.dispatchEvent(new CustomEvent('blink_created', { detail: newBlink }));
+        window.dispatchEvent(new CustomEvent('blink_registered', { detail: newBlink }));
+        window.dispatchEvent(new CustomEvent('tapblink_blink_registered', { detail: newBlink }));
+      } catch {}
+    }
 
     // Sync to cloud backend in background
     if (typeof window !== 'undefined' && typeof fetch === 'function') {
@@ -305,20 +506,41 @@ export class PhysicalBlinkRegistry {
     const idx = list.findIndex(b => b.id.toLowerCase() === cleanId);
     if (idx === -1) return null;
 
-    let finalAmount = list[idx].amount;
+    const currentItem = list[idx];
+    const isSkr = (updates.token || currentItem.token) === 'SKR';
+    let finalAmount = currentItem.amount;
+    let baseUsdcAmount = currentItem.baseUsdcAmount;
+
     if (updates.amount !== undefined) {
       const parsed = typeof updates.amount === 'number'
         ? updates.amount
         : parseFloat(String(updates.amount).replace(/[^0-9.]/g, ''));
       if (!isNaN(parsed) && parsed >= 0) {
-        finalAmount = parsed;
+        if (isSkr) {
+          baseUsdcAmount = parsed > 50 ? (currentItem.baseUsdcAmount || 4.0) : parsed;
+          finalAmount = PriceService.getSkrPaymentDetails(baseUsdcAmount).skrAmount;
+        } else {
+          finalAmount = parsed;
+          baseUsdcAmount = parsed;
+        }
       }
     }
 
+    // Protect SKR blinks: baseUsdcAmount must NEVER default to finalAmount (which is the SKR token quantity!)
+    const effectiveBaseUsdc = updates.baseUsdcAmount !== undefined
+      ? updates.baseUsdcAmount
+      : (isSkr ? (baseUsdcAmount || currentItem.baseUsdcAmount || 4.0) : (baseUsdcAmount || finalAmount));
+
+    if (isSkr && effectiveBaseUsdc) {
+      finalAmount = PriceService.getSkrPaymentDetails(effectiveBaseUsdc).skrAmount;
+    }
+
     const updatedItem: PhysicalBlink = {
-      ...list[idx],
+      ...currentItem,
       ...updates,
       amount: finalAmount,
+      baseUsdcAmount: effectiveBaseUsdc,
+      imageUrl: updates.imageUrl !== undefined ? updates.imageUrl : currentItem.imageUrl,
       updatedAt: Date.now(),
     };
 
@@ -365,6 +587,9 @@ export class PhysicalBlinkRegistry {
     const list = this.loadRegistry(true);
     const cleanId = id.trim().toLowerCase();
 
+    // 0. Register tombstone locally so background fetches never resurrect it
+    this.tombstonedDeletedIds.add(cleanId);
+
     // 1. Remove from local memory list
     this.blinks = list.filter(b => b.id.toLowerCase() !== cleanId);
 
@@ -400,25 +625,71 @@ export class PhysicalBlinkRegistry {
   /**
    * Record a physical tap interaction and update studio analytics.
    */
-  static recordTap(id: string, success: boolean, amountUsdc: number = 0): void {
+  static recordTap(id: string, success: boolean, amount: number = 0, token?: string): void {
+    const cleanId = (id || '').trim().toLowerCase();
     const list = this.loadRegistry();
-    const blink = list.find(b => b.id === id);
-    if (!blink) return;
-
-    blink.stats.taps += 1;
-    if (success) {
-      blink.stats.completed += 1;
-      blink.stats.volumeUsdc += amountUsdc;
+    let blink = list.find(b => b.id.toLowerCase() === cleanId);
+    if (!blink) {
+      blink = this.globalCloudBlinks.find(b => b.id.toLowerCase() === cleanId);
+    }
+    if (!blink) {
+      blink = DatabaseService.getAllBlinks().find(b => b.id.toLowerCase() === cleanId);
     }
 
-    this.saveRegistry();
+    let computedUsdc = amount;
+    const effToken = token || (blink ? blink.token : 'USDC');
+    if (effToken === 'SOL' && amount > 0) {
+      computedUsdc = Number((amount * 118.84).toFixed(2));
+    } else if (effToken === 'SKR' && amount > 0) {
+      computedUsdc = Number((amount * 0.05).toFixed(2));
+    }
+
+    if (blink) {
+      blink.stats = blink.stats || { taps: 0, completed: 0, volumeUsdc: 0 };
+      blink.stats.taps += 1;
+      if (success) {
+        blink.stats.completed += 1;
+        blink.stats.volumeUsdc = Number((blink.stats.volumeUsdc + computedUsdc).toFixed(2));
+      }
+      blink.updatedAt = Date.now();
+
+      const lIdx = list.findIndex(b => b.id.toLowerCase() === cleanId);
+      if (lIdx >= 0) {
+        list[lIdx] = { ...blink };
+      } else {
+        list.unshift({ ...blink });
+      }
+      this.blinks = list;
+      this.saveRegistry();
+
+      const cIdx = this.globalCloudBlinks.findIndex(b => b.id.toLowerCase() === cleanId);
+      if (cIdx >= 0) {
+        this.globalCloudBlinks[cIdx] = { ...blink };
+      } else {
+        this.globalCloudBlinks.unshift({ ...blink });
+      }
+
+      DatabaseService.saveBlink(blink);
+      this.notifyChange(blink);
+    }
 
     if (typeof window !== 'undefined' && typeof fetch === 'function') {
-      fetch(`/api/blinks/${id}/tap`, {
+      fetch(`/api/blinks/${cleanId}/tap`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ success, amountUsdc }),
-      }).catch(() => {});
+        body: JSON.stringify({ success, amountUsdc: computedUsdc }),
+      })
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data && data.success && data.stats && blink) {
+            blink.stats = { ...data.stats };
+            blink.updatedAt = Date.now();
+            this.saveRegistry();
+            DatabaseService.saveBlink(blink);
+            this.notifyChange(blink);
+          }
+        })
+        .catch(() => {});
     }
   }
 
@@ -435,19 +706,19 @@ export class PhysicalBlinkRegistry {
    */
   static getShareableUrl(blink: PhysicalBlink): string {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://blink.so';
-    if (blink.visibility === 'physical') {
-      const q = new URLSearchParams({
-        name: blink.name,
-        amount: String(blink.amount),
-        token: blink.token,
-        recipient: blink.recipient,
-        type: blink.actionType,
-        desc: blink.description,
-        visibility: 'physical',
-      });
-      if (blink.verifiedDomain) q.set('domain', blink.verifiedDomain);
-      return `${origin}/t/${blink.id}?${q.toString()}`;
-    }
-    return `${origin}/t/${blink.id}`;
+    const q = new URLSearchParams({
+      name: blink.name,
+      amount: String(blink.amount),
+      token: blink.token,
+      recipient: blink.recipient,
+      type: blink.actionType,
+      desc: blink.description,
+      visibility: blink.visibility || 'global',
+    });
+    if ((blink as any).creatorAddress) q.set('creator', (blink as any).creatorAddress);
+    if (blink.baseUsdcAmount) q.set('baseUsdc', String(blink.baseUsdcAmount));
+    if (blink.imageUrl) q.set('image', blink.imageUrl);
+    if (blink.verifiedDomain) q.set('domain', blink.verifiedDomain);
+    return `${origin}/t/${blink.id}?${q.toString()}`;
   }
 }

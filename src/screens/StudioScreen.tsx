@@ -8,6 +8,7 @@ import {
   ScrollView,
   Platform,
   Modal,
+  Image,
 } from 'react-native';
 import {
   Store,
@@ -33,6 +34,7 @@ import {
   ArrowRight,
   Users,
   Trash2,
+  Camera,
 } from 'lucide-react-native';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -43,14 +45,15 @@ import {
 import { NfcService } from '../services/nfcService';
 import { ToastService } from '../services/toastService';
 import { PrintableCardService } from '../services/printableCardService';
+import { PriceService } from '../services/priceService';
 import { WalletAccount } from '../services/walletProviderService';
 import {
   BlinkBrandMark,
   CoffeeShopLogo,
-  MusicianLogo,
   HackerHouseLogo,
 } from '../components/BrandLogos';
 import { useTheme } from '../theme/ThemeContext';
+import { NfcWriterModal } from '../components/NfcWriterModal';
 
 interface StudioScreenProps {
   activeAccount: WalletAccount | null;
@@ -75,6 +78,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
 
   // New Blink Form State
   const [formName, setFormName] = useState('');
+  const [formImageUrl, setFormImageUrl] = useState<string | null>(null);
   const [formActionType, setFormActionType] = useState<ActionType>('payment');
   const [formAmount, setFormAmount] = useState('5.00');
   const [formToken, setFormToken] = useState<'USDC' | 'SOL' | 'SKR'>('USDC');
@@ -83,13 +87,46 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   const [formDomain, setFormDomain] = useState('');
   const [formDesc, setFormDesc] = useState('');
 
+  const handlePickFormImage = () => {
+    if (typeof document === 'undefined') return;
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.onchange = (event: any) => {
+      const file = event.target?.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const rawDataUrl = e.target?.result as string;
+        if (!rawDataUrl) return;
+        const img = new (window as any).Image();
+        img.onload = () => {
+          const MAX = 480;
+          const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const compressed = canvas.toDataURL('image/jpeg', 0.82);
+          setFormImageUrl(compressed);
+        };
+        img.src = rawDataUrl;
+      };
+      reader.readAsDataURL(file);
+    };
+    fileInput.click();
+  };
+
   // Editing state for live Action updates
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
   const [editDesc, setEditDesc] = useState('');
 
-  // QR Modal
+  // QR & NFC Modals
   const [selectedBlinkForQr, setSelectedBlinkForQr] = useState<PhysicalBlink | null>(null);
+  const [selectedBlinkForNfc, setSelectedBlinkForNfc] = useState<PhysicalBlink | null>(null);
   const [isDownloadingCard, setIsDownloadingCard] = useState(false);
   const [cardCopied, setCardCopied] = useState(false);
 
@@ -97,6 +134,12 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   const [beamingId, setBeamingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [blinkToDelete, setBlinkToDelete] = useState<PhysicalBlink | null>(null);
+  const [, setPriceTick] = useState(0);
+
+  useEffect(() => {
+    const unsub = PriceService.subscribe(() => setPriceTick(prev => prev + 1));
+    return () => unsub();
+  }, []);
   // Removed local successToast; using global ToastService
 
   useEffect(() => {
@@ -106,23 +149,42 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     });
 
     const handleUpdate = (e?: any) => {
+      if (e?.type === 'blink_deleted' || e?.type === 'tapblink_blink_deleted') {
+        const delId = (e.detail?.id || '').toLowerCase();
+        if (delId) {
+          setBlinks(prev => prev.filter(b => b.id.toLowerCase() !== delId));
+        }
+        return;
+      }
+
       const updatedItem = e?.detail;
       if (updatedItem && updatedItem.id && !Array.isArray(updatedItem)) {
-        setBlinks(prev =>
-          prev.map(b => (b.id.toLowerCase() === updatedItem.id.toLowerCase() ? { ...b, ...updatedItem } : b))
-        );
+        setBlinks(prev => {
+          const exists = prev.some(b => b.id.toLowerCase() === updatedItem.id.toLowerCase());
+          if (exists) {
+            return prev.map(b => (b.id.toLowerCase() === updatedItem.id.toLowerCase() ? { ...b, ...updatedItem } : b));
+          } else {
+            return [updatedItem, ...prev];
+          }
+        });
       } else {
         setBlinks([...PhysicalBlinkRegistry.loadRegistry(true)]);
       }
     };
 
     if (typeof window !== 'undefined') {
+      window.addEventListener('blink_created', handleUpdate);
+      window.addEventListener('blink_registered', handleUpdate);
+      window.addEventListener('tapblink_blink_registered', handleUpdate);
       window.addEventListener('blink_registry_updated', handleUpdate);
       window.addEventListener('blink_database_updated', handleUpdate);
       window.addEventListener('blink_updated', handleUpdate);
       window.addEventListener('blink_deleted', handleUpdate);
       window.addEventListener('tapblink_blink_deleted', handleUpdate);
       return () => {
+        window.removeEventListener('blink_created', handleUpdate);
+        window.removeEventListener('blink_registered', handleUpdate);
+        window.removeEventListener('tapblink_blink_registered', handleUpdate);
         window.removeEventListener('blink_registry_updated', handleUpdate);
         window.removeEventListener('blink_database_updated', handleUpdate);
         window.removeEventListener('blink_updated', handleUpdate);
@@ -131,6 +193,10 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       };
     }
   }, []);
+
+  useEffect(() => {
+    setBlinks([...PhysicalBlinkRegistry.loadRegistry(true)]);
+  }, [refreshTrigger]);
 
   useEffect(() => {
     if (activeAccount?.publicKey && !formRecipient) {
@@ -170,33 +236,48 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       showToast('Please provide a name for this Physical Blink.');
       return;
     }
-    const cleanId =
-      formPhysicalId.trim() ||
+    const chosenId =
+      formPhysicalId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-') ||
       formName.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 20);
+
+    let finalId = chosenId;
+    if (PhysicalBlinkRegistry.isIdTakenByOther(chosenId, activeAccount.publicKey)) {
+      if (formPhysicalId.trim()) {
+        const shortPk = activeAccount.publicKey.slice(-4).toLowerCase();
+        showToast(`ID "${chosenId}" is taken by another creator. Try "${chosenId}-${shortPk}".`);
+        return;
+      } else {
+        finalId = `${chosenId}-${activeAccount.publicKey.slice(-4).toLowerCase()}`;
+      }
+    }
+
     const amountVal = parseFloat(formAmount) || 0;
     const recipientVal =
       formRecipient.trim() ||
       activeAccount.publicKey;
 
     const created = PhysicalBlinkRegistry.createBlink({
-      id: cleanId,
+      id: finalId,
       name: formName.trim(),
       actionType: formActionType,
       amount: amountVal,
+      baseUsdcAmount: formToken === 'SKR' ? amountVal : undefined,
       token: formToken,
       recipient: recipientVal,
       creatorAddress: activeAccount.publicKey,
       description: formDesc.trim() || `${formActionType.toUpperCase()} interaction`,
       verifiedDomain: formDomain.trim() || undefined,
       visibility: 'global',
+      imageUrl: formImageUrl || undefined,
     });
 
-    setBlinks(PhysicalBlinkRegistry.loadRegistry());
+    setBlinks([...PhysicalBlinkRegistry.loadRegistry(true)]);
     setShowCreateForm(false);
     showToast(`Physical Blink "${created.name}" deployed!`);
 
     // Reset Form
     setFormName('');
+    setFormImageUrl(null);
     setFormPhysicalId('');
     setFormAmount('5.00');
     setFormDomain('');
@@ -205,7 +286,10 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
 
   const startEdit = (b: PhysicalBlink) => {
     setEditingId(b.id);
-    setEditAmount(b.amount.toString());
+    const editPrice = b.token === 'SKR'
+      ? (b.baseUsdcAmount ? b.baseUsdcAmount.toString() : (b.amount > 50 ? '4.00' : b.amount.toString()))
+      : b.amount.toString();
+    setEditAmount(editPrice);
     setEditDesc(b.description);
   };
 
@@ -216,16 +300,19 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       showToast('Please enter a valid price greater than $0.00');
       return;
     }
+    const current = blinks.find(b => b.id.toLowerCase() === id.toLowerCase());
+    const isSkr = current?.token === 'SKR';
     const updated = PhysicalBlinkRegistry.updateAction(id, {
       amount: parsed,
+      baseUsdcAmount: isSkr ? parsed : undefined,
       description: editDesc.trim(),
     });
     if (updated) {
       setBlinks(prev =>
         prev.map(b => (b.id.toLowerCase() === id.toLowerCase() ? { ...b, ...updated } : b))
       );
-      const formatted = updated.token === 'SOL' ? `${updated.amount} SOL` : (updated.token === 'SKR' ? `${updated.amount} SKR` : `$${updated.amount.toFixed(2)} USDC`);
-      showToast(`Price updated to ${formatted}`);
+      const details = PriceService.getLiveBlinkDetails(updated);
+      showToast(`Price updated to ${details.displayString}`);
     } else {
       showToast('Failed to update Blink price.');
     }
@@ -236,22 +323,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     setBlinkToDelete(b);
   };
 
-  const handleBeamToTag = async (b: PhysicalBlink) => {
-    setBeamingId(b.id);
-    const targetUrl = `https://blink.so/t/${b.id}`;
-
-    const res = await NfcService.writeTag({
-      url: targetUrl,
-      title: b.name,
-      id: b.id,
-    });
-
-    setBeamingId(null);
-    if (res.success) {
-      showToast(`Wrote "${b.name}" to physical NFC tag!`);
-    } else {
-      showToast(res.message);
-    }
+  const handleBeamToTag = (b: PhysicalBlink) => {
+    setSelectedBlinkForNfc(b);
   };
 
   const copyToClipboard = async (text: string): Promise<boolean> => {
@@ -299,11 +372,20 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     }
   };
 
-  const getBlinkLogo = (id: string) => {
-    if (id.includes('coffee')) return <CoffeeShopLogo size={42} />;
-    if (id.includes('tip') || id.includes('music')) return <MusicianLogo size={42} />;
-    if (id.includes('pass') || id.includes('event')) return <HackerHouseLogo size={42} />;
-    return <BlinkBrandMark size={42} />;
+  const getBlinkLogo = (id: string, blink?: PhysicalBlink) => {
+    if (blink?.imageUrl) {
+      return (
+        <Image
+          source={{ uri: blink.imageUrl }}
+          style={{ width: 42, height: 42, borderRadius: 12 }}
+          resizeMode="cover"
+        />
+      );
+    }
+    const cleanId = id.toLowerCase();
+    if (cleanId.includes('coffee')) return <CoffeeShopLogo size={42} />;
+    if (cleanId.includes('pass') || cleanId.includes('event')) return <HackerHouseLogo size={42} />;
+    return <BlinkBrandMark size={36} />;
   };
 
   return (
@@ -426,6 +508,38 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
             placeholderTextColor={colors.textMuted}
           />
 
+          <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>BLINK IMAGE (OPTIONAL)</Text>
+          <TouchableOpacity
+            style={[
+              styles.studioImagePicker,
+              { backgroundColor: colors.bgInput, borderColor: formImageUrl ? colors.accent : colors.border },
+            ]}
+            onPress={handlePickFormImage}
+            activeOpacity={0.7}
+          >
+            {formImageUrl ? (
+              <Image
+                source={{ uri: formImageUrl }}
+                style={styles.studioImagePreview}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Camera size={16} color={colors.textMuted} />
+                <Text style={[styles.inputLabel, { color: colors.textMuted, marginBottom: 0 }]}>Tap to add image</Text>
+              </View>
+            )}
+            {formImageUrl && (
+              <TouchableOpacity
+                style={[styles.studioImageRemoveBtn, { backgroundColor: colors.bgCard }]}
+                onPress={() => setFormImageUrl(null)}
+                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+              >
+                <X size={10} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+
           <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>ACTION TYPE</Text>
           <View style={styles.actionTypeGrid}>
             {(['payment', 'tip', 'donation', 'event-pass', 'voting'] as ActionType[]).map((t) => (
@@ -533,7 +647,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
               {/* Card Top Row */}
               <View style={styles.cardTopRow}>
                 <View style={styles.cardLogoWrap}>
-                  {getBlinkLogo(blink.id)}
+                  {getBlinkLogo(blink.id, blink)}
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>{blink.name}</Text>
@@ -566,10 +680,15 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                     <Text style={[styles.cardAmount, { color: colors.textPrimary }]}>
-                      {blink.token === 'SOL' ? `${blink.amount} SOL` : (blink.token === 'SKR' ? `${blink.amount} SKR` : `$${blink.amount.toFixed(2)}`)}
+                      {PriceService.getLiveBlinkDetails(blink).displayString}
                     </Text>
                     <Edit3 size={12} color={colors.accent} />
                   </View>
+                  {blink.token === 'SKR' && (
+                    <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, marginTop: 2, alignSelf: 'flex-end' }}>
+                      <Text style={{ fontSize: 9, fontWeight: '800', color: '#10B981' }}>10% OFF</Text>
+                    </View>
+                  )}
                   <Text style={[styles.cardToken, { color: colors.textMuted }]}>{blink.token}</Text>
                 </TouchableOpacity>
               </View>
@@ -781,9 +900,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                   </View>
                   <View style={[styles.qrPriceBadge, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}>
                     <Text style={[styles.qrPriceBadgeText, { color: colors.textPrimary }]}>
-                      {selectedBlinkForQr.token === 'SOL'
-                        ? `${selectedBlinkForQr.amount} SOL`
-                        : `$${selectedBlinkForQr.amount.toFixed(2)} USDC`}
+                      {PriceService.getLiveBlinkDetails(selectedBlinkForQr).displayString}
                     </Text>
                   </View>
                 </View>
@@ -922,7 +1039,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
 
             <Text
               style={{
-                fontSize: 18,
+                fontSize: 13,
                 fontWeight: '700',
                 color: colors.textPrimary,
                 textAlign: 'center',
@@ -934,7 +1051,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
 
             <Text
               style={{
-                fontSize: 13,
+                fontSize: 11,
                 color: colors.textSecondary,
                 textAlign: 'center',
                 lineHeight: 18,
@@ -962,14 +1079,14 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
               }}
             >
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={{ fontSize: 12, color: colors.textSecondary }}>Blink ID</Text>
-                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.accent, fontFamily: 'monospace' }}>
+                <Text style={{ fontSize: 10, color: colors.textSecondary }}>Blink ID</Text>
+                <Text style={{ fontSize: 10, fontWeight: '700', color: colors.accent, fontFamily: 'monospace' }}>
                   /t/{blinkToDelete?.id}
                 </Text>
               </View>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={{ fontSize: 12, color: colors.textSecondary }}>Action Price</Text>
-                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textPrimary }}>
+                <Text style={{ fontSize: 10, color: colors.textSecondary }}>Action Price</Text>
+                <Text style={{ fontSize: 10, fontWeight: '700', color: colors.textPrimary }}>
                   ${blinkToDelete?.amount.toFixed(2)} {blinkToDelete?.token}
                 </Text>
               </View>
@@ -990,7 +1107,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                 onPress={() => setBlinkToDelete(null)}
                 activeOpacity={0.8}
               >
-                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textPrimary }}>Cancel</Text>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textPrimary }}>Cancel</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1016,12 +1133,23 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                 activeOpacity={0.8}
               >
                 <Trash2 size={15} color="#FFFFFF" />
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>Delete</Text>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFFFFF' }}>Delete</Text>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Interactive NFC Writer Modal */}
+      {selectedBlinkForNfc && (
+        <NfcWriterModal
+          visible={Boolean(selectedBlinkForNfc)}
+          onClose={() => setSelectedBlinkForNfc(null)}
+          url={PhysicalBlinkRegistry.getShareableUrl(selectedBlinkForNfc)}
+          title={selectedBlinkForNfc.name}
+          id={selectedBlinkForNfc.id}
+        />
+      )}
 
       <View style={{ height: 100 }} />
     </ScrollView>
@@ -1071,13 +1199,13 @@ const styles = StyleSheet.create({
   },
   introTitle: {
     color: '#FFFFFF',
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: '800',
     letterSpacing: -0.3,
   },
   introSubtitle: {
     color: '#94A3B8',
-    fontSize: 13,
+    fontSize: 11,
     lineHeight: 18,
     marginTop: 4,
   },
@@ -1095,7 +1223,7 @@ const styles = StyleSheet.create({
   },
   toastText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
   },
   analyticsCard: {
@@ -1114,7 +1242,7 @@ const styles = StyleSheet.create({
   },
   analyticsTitle: {
     color: '#94A3B8',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
@@ -1127,12 +1255,12 @@ const styles = StyleSheet.create({
   },
   metricNumber: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
   },
   metricLabel: {
     color: '#64748B',
-    fontSize: 11,
+    fontSize: 10,
     marginTop: 2,
   },
   actionBar: {
@@ -1143,7 +1271,7 @@ const styles = StyleSheet.create({
   },
   sectionHeading: {
     color: '#94A3B8',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
@@ -1158,7 +1286,7 @@ const styles = StyleSheet.create({
   },
   createToggleText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   formCard: {
@@ -1177,7 +1305,7 @@ const styles = StyleSheet.create({
   },
   formTitle: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '800',
   },
   inputLabel: {
@@ -1194,9 +1322,36 @@ const styles = StyleSheet.create({
     borderColor: '#1D212E',
     borderRadius: 12,
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  studioImagePicker: {
+    height: 68,
+    borderWidth: 1,
+    borderRadius: 10,
+    borderStyle: 'dashed',
+    overflow: 'hidden',
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  studioImagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  studioImageRemoveBtn: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   actionTypeGrid: {
     flexDirection: 'row',
@@ -1217,7 +1372,7 @@ const styles = StyleSheet.create({
   },
   actionTypeBtnText: {
     color: '#64748B',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   actionTypeBtnTextActive: {
@@ -1249,7 +1404,7 @@ const styles = StyleSheet.create({
   },
   tokenPillText: {
     color: '#64748B',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   tokenPillTextActive: {
@@ -1267,7 +1422,7 @@ const styles = StyleSheet.create({
   },
   submitBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   blinksList: {
@@ -1294,7 +1449,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '800',
   },
   cardTagRow: {
@@ -1305,7 +1460,7 @@ const styles = StyleSheet.create({
   },
   idTagText: {
     color: '#64748B',
-    fontSize: 12,
+    fontSize: 10,
     fontFamily: 'monospace',
   },
   verifiedBadge: {
@@ -1315,7 +1470,7 @@ const styles = StyleSheet.create({
   },
   verifiedText: {
     color: '#10B981',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   cardAmountCol: {
@@ -1323,17 +1478,17 @@ const styles = StyleSheet.create({
   },
   cardAmount: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
   },
   cardToken: {
     color: '#818CF8',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   cardDesc: {
     color: '#94A3B8',
-    fontSize: 13,
+    fontSize: 11,
     lineHeight: 18,
     marginTop: 12,
   },
@@ -1347,7 +1502,7 @@ const styles = StyleSheet.create({
     borderColor: '#1D212E',
     borderRadius: 10,
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
@@ -1362,7 +1517,7 @@ const styles = StyleSheet.create({
   },
   saveEditText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   cancelEditBtn: {
@@ -1373,7 +1528,7 @@ const styles = StyleSheet.create({
   },
   cancelEditText: {
     color: '#94A3B8',
-    fontSize: 12,
+    fontSize: 10,
   },
   statsBar: {
     flexDirection: 'row',
@@ -1391,7 +1546,7 @@ const styles = StyleSheet.create({
   },
   statNumber: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   statLabel: {
@@ -1419,7 +1574,7 @@ const styles = StyleSheet.create({
   },
   actionBtnPrimaryText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   actionBtnSecondary: {
@@ -1437,7 +1592,7 @@ const styles = StyleSheet.create({
   },
   actionBtnSecondaryText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   actionBtnIcon: {
@@ -1461,7 +1616,7 @@ const styles = StyleSheet.create({
   },
   actionBtnEditPriceText: {
     color: '#5B67F6',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   editSectionHeader: {
@@ -1472,7 +1627,7 @@ const styles = StyleSheet.create({
   },
   editSectionTitle: {
     color: '#5B67F6',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.6,
   },
@@ -1495,14 +1650,14 @@ const styles = StyleSheet.create({
   },
   editDollarSign: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
     marginRight: 4,
   },
   editPriceField: {
     flex: 1,
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
   },
   editPresets: {
@@ -1519,7 +1674,7 @@ const styles = StyleSheet.create({
   },
   editPresetText: {
     color: '#CBD5E1',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   editDescInput: {
@@ -1530,7 +1685,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
   },
   qrModalOverlay: {
     flex: 1,
@@ -1582,7 +1737,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   qrPriceBadgeText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
   },
   closeBtnCircle: {
@@ -1594,7 +1749,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   qrModalTitle: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
     letterSpacing: -0.3,
     textAlign: 'center',
@@ -1609,11 +1764,11 @@ const styles = StyleSheet.create({
   },
   domainText: {
     color: '#10B981',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   qrModalRecipient: {
-    fontSize: 12,
+    fontSize: 10,
     fontFamily: 'monospace',
     marginBottom: 4,
   },
@@ -1645,12 +1800,12 @@ const styles = StyleSheet.create({
     maxWidth: '90%',
   },
   qrLinkPillText: {
-    fontSize: 12,
+    fontSize: 10,
     fontFamily: 'monospace',
     fontWeight: '600',
   },
   qrModalSub: {
-    fontSize: 12,
+    fontSize: 10,
     textAlign: 'center',
     lineHeight: 17,
     marginBottom: 16,
@@ -1673,7 +1828,7 @@ const styles = StyleSheet.create({
   },
   qrModalDownloadText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   qrModalDoneBtn: {
@@ -1686,7 +1841,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   qrModalDoneText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   emptyBox: {
@@ -1699,14 +1854,14 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
     marginTop: 16,
     marginBottom: 8,
     textAlign: 'center',
   },
   emptySub: {
-    fontSize: 13,
+    fontSize: 11,
     lineHeight: 19,
     textAlign: 'center',
     maxWidth: 340,
@@ -1722,7 +1877,7 @@ const styles = StyleSheet.create({
   },
   emptyCreateBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '800',
   },
 });

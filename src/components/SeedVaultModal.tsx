@@ -189,13 +189,13 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#FFFFFF',
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: '800',
     marginBottom: 4,
   },
   subtitle: {
     color: '#9CA3AF',
-    fontSize: 13,
+    fontSize: 11,
     lineHeight: 18,
     marginBottom: 18,
   },
@@ -215,12 +215,12 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     color: '#6B7280',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   detailValue: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
     maxWidth: '65%',
   },
@@ -230,12 +230,12 @@ const styles = StyleSheet.create({
   },
   amountValue: {
     color: '#10B981',
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '800',
   },
   errorText: {
     color: '#EF4444',
-    fontSize: 12,
+    fontSize: 10,
     marginBottom: 12,
     textAlign: 'center',
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
   },
   sensorLabel: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     marginBottom: 6,
   },
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
   },
   securityText: {
     color: '#6B7280',
-    fontSize: 11,
+    fontSize: 10,
   },
   rejectBtn: {
     alignItems: 'center',
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
   },
   rejectText: {
     color: '#EF4444',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
   },
 });

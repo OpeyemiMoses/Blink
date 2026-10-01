@@ -101,7 +101,7 @@ export const ReceiveModal: React.FC<ReceiveModalProps> = ({
               activeOpacity={0.8}
             >
               <Send size={15} color="#FFFFFF" />
-              <Text style={styles.switchToSendText}>Send SOL or USDC with QR Scan</Text>
+              <Text style={styles.switchToSendText}>Send SOL, USDC or SKR with QR Scan</Text>
             </TouchableOpacity>
           )}
 
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
     letterSpacing: -0.3,
   },
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     color: '#94A3B8',
-    fontSize: 12,
+    fontSize: 10,
     marginBottom: 12,
     lineHeight: 17,
   },
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
   },
   tokenTagText: {
     color: '#E2E8F0',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   qrContainer: {
@@ -240,14 +240,14 @@ const styles = StyleSheet.create({
   },
   addressText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontFamily: 'monospace',
     flex: 1,
     marginRight: 8,
   },
   copiedNotice: {
     color: '#10B981',
-    fontSize: 11,
+    fontSize: 10,
     textAlign: 'center',
     marginTop: 4,
     fontWeight: '600',
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
   },
   switchToSendText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   faucetRow: {
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
   },
   faucetText: {
     color: '#818CF8',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   explorerRow: {
@@ -295,6 +295,6 @@ const styles = StyleSheet.create({
   },
   explorerText: {
     color: '#64748B',
-    fontSize: 12,
+    fontSize: 10,
   },
 });

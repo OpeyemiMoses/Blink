@@ -34,21 +34,27 @@ import {
   Sparkles,
   Layers,
   Trash2,
+  Printer,
+  Download,
 } from 'lucide-react-native';
 import { QRCodeSVG } from 'qrcode.react';
 import { PhysicalBlink, PhysicalBlinkRegistry } from '../services/physicalBlinkRegistry';
+import { PrintableCardService } from '../services/printableCardService';
 import { DatabaseService } from '../services/databaseService';
 import { ToastService } from '../services/toastService';
 import { NfcService } from '../services/nfcService';
-import { CoffeeShopLogo, MusicianLogo, HackerHouseLogo, BlinkBrandMark } from './BrandLogos';
+import { CoffeeShopLogo, HackerHouseLogo, BlinkBrandMark } from './BrandLogos';
 import { WalletProviderService } from '../services/walletProviderService';
 import { SolanaService } from '../services/solanaService';
+import { PriceService } from '../services/priceService';
+import { StreakService } from '../services/streakService';
 import { NotificationService } from '../services/notificationService';
 import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { BiometricService } from '../services/biometricService';
 import { useTheme } from '../theme/ThemeContext';
 import { ReceiptService, BlinkPayerInfo } from '../services/receiptService';
 import { ReceiptModal } from './ReceiptModal';
+import { NfcWriterModal } from './NfcWriterModal';
 import { TransactionReceipt } from '../types';
 import { UserProfileService } from '../services/userProfileService';
 import { BlinkIdService } from '../services/blinkIdService';
@@ -78,20 +84,39 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
   const [txSignature, setTxSignature] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showQr, setShowQr] = useState(false);
+  const [showNfcWriter, setShowNfcWriter] = useState(false);
   const [activeReceipt, setActiveReceipt] = useState<TransactionReceipt | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // Helper to ensure SKR blinks edit their base USDC price, not the converted SKR amount
+  const getBlinkEditPrice = (b: PhysicalBlink): string => {
+    if (b.token === 'SKR' && b.baseUsdcAmount !== undefined && b.baseUsdcAmount > 0) {
+      return b.baseUsdcAmount.toString();
+    }
+    return b.amount.toString();
+  };
+
   // Price & Recipient Editing state
   const [isEditingPrice, setIsEditingPrice] = useState(false);
-  const [editPriceInput, setEditPriceInput] = useState(blink.amount.toString());
+  const [editPriceInput, setEditPriceInput] = useState(() => getBlinkEditPrice(blink));
   const [editTokenInput, setEditTokenInput] = useState<'USDC' | 'SOL' | 'SKR'>(blink.token || 'USDC');
   const [editDescInput, setEditDescInput] = useState(blink.description);
   const [editRecipientInput, setEditRecipientInput] = useState(blink.recipient);
   const [isSaved, setIsSaved] = useState(false);
 
   // Live Wallet Balance states (both payer and recipient)
-  const [walletBalanceSol, setWalletBalanceSol] = useState<number | null>(currentBalanceSol ?? null);
-  const [walletBalanceUsdc, setWalletBalanceUsdc] = useState<number | null>(null);
+  const [walletBalanceSol, setWalletBalanceSol] = useState<number | null>(() => {
+    const acc = WalletProviderService.getActiveAccount();
+    return currentBalanceSol ?? (acc?.publicKey ? SolanaService.getCachedSol(acc.publicKey) : null);
+  });
+  const [walletBalanceUsdc, setWalletBalanceUsdc] = useState<number | null>(() => {
+    const acc = WalletProviderService.getActiveAccount();
+    return acc?.publicKey ? SolanaService.getCachedUsdc(acc.publicKey) : null;
+  });
+  const [walletBalanceSkr, setWalletBalanceSkr] = useState<number | null>(() => {
+    const acc = WalletProviderService.getActiveAccount();
+    return acc?.publicKey ? SolanaService.getCachedSkr(acc.publicKey) : null;
+  });
   const [recipientBalance, setRecipientBalance] = useState<number | null>(null);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   const [isAirdropping, setIsAirdropping] = useState(false);
@@ -110,6 +135,13 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       (userBlinkId && currentBlink.recipient && userBlinkId.toLowerCase() === currentBlink.recipient.toLowerCase())
     )
   );
+
+  const [, setPriceTick] = useState(0);
+
+  useEffect(() => {
+    const unsub = PriceService.subscribe(() => setPriceTick(prev => prev + 1));
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     const handleDeletedEvent = (e: any) => {
@@ -135,16 +167,19 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
     if (!acc?.publicKey) {
       setWalletBalanceSol(null);
       setWalletBalanceUsdc(null);
+      setWalletBalanceSkr(null);
       return;
     }
     setIsLoadingBalance(true);
     try {
-      const [sol, usdc] = await Promise.all([
+      const [sol, usdc, skr] = await Promise.all([
         SolanaService.getBalance(acc.publicKey),
         SolanaService.getUsdcBalance(acc.publicKey),
+        SolanaService.getSkrBalance(acc.publicKey, true),
       ]);
       if (typeof sol === 'number') setWalletBalanceSol(sol);
       if (typeof usdc === 'number') setWalletBalanceUsdc(usdc);
+      if (typeof skr === 'number') setWalletBalanceSkr(skr);
     } catch {
       // Retain current wallet balance
     } finally {
@@ -158,6 +193,9 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       if (currentBlink.token === 'USDC') {
         const bal = await SolanaService.getUsdcBalance(currentBlink.recipient);
         if (typeof bal === 'number') setRecipientBalance(bal);
+      } else if (currentBlink.token === 'SKR') {
+        const bal = await SolanaService.getSkrBalance(currentBlink.recipient, true);
+        if (typeof bal === 'number') setRecipientBalance(bal);
       } else {
         const bal = await SolanaService.getBalance(currentBlink.recipient);
         if (typeof bal === 'number') setRecipientBalance(bal);
@@ -170,12 +208,12 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
   useEffect(() => {
     if (blink) {
       setCurrentBlink({ ...blink });
-      setEditPriceInput(blink.amount.toString());
+      setEditPriceInput(getBlinkEditPrice(blink));
       setEditTokenInput(blink.token || 'USDC');
       setEditDescInput(blink.description || '');
       setEditRecipientInput(blink.recipient || '');
     }
-  }, [blink?.id, blink?.amount, blink?.token, blink?.description, blink?.recipient]);
+  }, [blink?.id, blink?.amount, blink?.token, blink?.baseUsdcAmount, blink?.description, blink?.recipient]);
 
   useEffect(() => {
     const handleRegistryUpdate = (e: any) => {
@@ -185,7 +223,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
         : (detail && detail.id?.toLowerCase() === currentBlink?.id?.toLowerCase() ? detail : null);
       if (target) {
         setCurrentBlink({ ...target });
-        setEditPriceInput(target.amount.toString());
+        setEditPriceInput(getBlinkEditPrice(target));
         setEditTokenInput(target.token || 'USDC');
         setEditDescInput(target.description || '');
         setEditRecipientInput(target.recipient || '');
@@ -297,14 +335,14 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
   useEffect(() => {
     if (blink) {
       setCurrentBlink(blink);
-      setEditPriceInput(blink.amount.toString());
+      setEditPriceInput(getBlinkEditPrice(blink));
       setEditDescInput(blink.description);
       setEditRecipientInput(blink.recipient);
       setIsEditingPrice(false);
       setIsSaved(DatabaseService.isBookmarked(blink.id));
       fetchRecipientBalance();
     }
-  }, [blink?.id, blink?.amount, blink?.description, blink?.recipient]);
+  }, [blink?.id, blink?.amount, blink?.token, blink?.baseUsdcAmount, blink?.description, blink?.recipient]);
 
   const copyToClipboard = async (text: string): Promise<boolean> => {
     // 1. Try modern navigator.clipboard
@@ -392,8 +430,12 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       return;
     }
 
+    const skrDetails = editTokenInput === 'SKR' ? PriceService.getSkrPaymentDetails(parsedAmount) : null;
+    const finalAmount = skrDetails ? skrDetails.skrAmount : parsedAmount;
+
     const updated = PhysicalBlinkRegistry.updateAction(currentBlink.id, {
-      amount: parsedAmount,
+      amount: finalAmount,
+      baseUsdcAmount: editTokenInput === 'SKR' ? parsedAmount : undefined,
       token: editTokenInput,
       description: editDescInput.trim() || currentBlink.description,
       recipient: editRecipientInput.trim() || currentBlink.recipient,
@@ -401,11 +443,13 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
 
     if (updated) {
       setCurrentBlink({ ...updated });
-      setEditPriceInput(parsedAmount.toString());
+      setEditPriceInput(getBlinkEditPrice(updated));
       setEditTokenInput(updated.token);
       setEditRecipientInput(updated.recipient);
       setIsEditingPrice(false);
-      const formatted = updated.token === 'SOL' ? `${parsedAmount} SOL` : (updated.token === 'SKR' ? `${parsedAmount} SKR` : `$${parsedAmount.toFixed(2)} USDC`);
+      const formatted = updated.token === 'SOL'
+        ? `${parsedAmount} SOL`
+        : (updated.token === 'SKR' ? `${finalAmount} SKR ($${parsedAmount.toFixed(2)} USDC)` : `$${parsedAmount.toFixed(2)} USDC`);
       ToastService.success(`Blink updated to ${formatted} globally.`);
       onUpdateBlink?.(updated);
       fetchRecipientBalance();
@@ -416,16 +460,26 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
 
   const adjustPrice = (delta: number) => {
     const sanitized = editPriceInput.replace(/[^0-9.]/g, '');
-    const curr = parseFloat(sanitized) || currentBlink.amount;
-    const next = Math.max(0.01, Number((curr + delta).toFixed(4)));
+    const curr = parseFloat(sanitized) || parseFloat(getBlinkEditPrice(currentBlink)) || 1;
+    const next = Math.max(0.01, Number((curr + delta).toFixed(2)));
     setEditPriceInput(next.toString());
   };
 
-  const getBlinkLogo = (id: string) => {
-    if (id.includes('coffee')) return <CoffeeShopLogo size={36} />;
-    if (id.includes('tip') || id.includes('music')) return <MusicianLogo size={36} />;
-    if (id.includes('pass') || id.includes('event')) return <HackerHouseLogo size={36} />;
-    return <BlinkBrandMark size={36} />;
+  const getBlinkLogo = (id: string, b?: PhysicalBlink) => {
+    const item = b || currentBlink || blink;
+    if (item?.imageUrl) {
+      return (
+        <Image
+          source={{ uri: item.imageUrl }}
+          style={{ width: 36, height: 36, borderRadius: 10 }}
+          resizeMode="cover"
+        />
+      );
+    }
+    const cleanId = id.toLowerCase();
+    if (cleanId.includes('coffee')) return <CoffeeShopLogo size={36} />;
+    if (cleanId.includes('pass') || cleanId.includes('event')) return <HackerHouseLogo size={36} />;
+    return <BlinkBrandMark size={32} />;
   };
 
   const handleAuthorize = async () => {
@@ -437,7 +491,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
     }
 
     if (isCreator) {
-      ToastService.info('You created this Blink — creators cannot pay themselves.');
+      ToastService.error("It's not possible to send funds to your own wallet address or Blink.");
       return;
     }
 
@@ -576,25 +630,29 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
 
       const sig = await WalletProviderService.signAndSendTransaction(tx);
 
-      // Verify transaction did not fail on-chain
-      try {
-        const connection = SolanaService.getConnection();
-        const latestBlockhash = await connection.getLatestBlockhash('confirmed');
-        const confirmation = await connection.confirmTransaction(
+      // Non-blocking: verify transaction on-chain in background (don't block success UI)
+      const connection = SolanaService.getConnection();
+      connection.getLatestBlockhash('confirmed').then((latestBlockhash) => {
+        connection.confirmTransaction(
           { signature: sig, ...latestBlockhash },
           'confirmed'
-        );
-        if (confirmation?.value?.err) {
-          throw new Error(`Transaction failed on-chain: ${JSON.stringify(confirmation.value.err)}`);
-        }
-      } catch (confirmErr: any) {
-        if (confirmErr?.message?.includes('failed on-chain')) {
-          throw confirmErr;
-        }
-      }
+        ).then((confirmation) => {
+          if (confirmation?.value?.err) {
+            console.warn('Blink payment failed on-chain after broadcast:', confirmation.value.err);
+            ToastService.error('Transaction may have failed on-chain. Please check your balance.');
+          }
+        }).catch((confirmErr) => {
+          console.warn('Blink payment confirmation check error (may still succeed):', confirmErr);
+        });
+      }).catch(() => {});
 
       setTxSignature(sig);
-      PhysicalBlinkRegistry.recordTap(currentBlink.id, true, checkoutAmount);
+      PhysicalBlinkRegistry.recordTap(currentBlink.id, true, checkoutAmount, currentBlink.token);
+
+      const freshBlink = PhysicalBlinkRegistry.resolve(currentBlink.id);
+      if (freshBlink) {
+        setCurrentBlink({ ...freshBlink });
+      }
 
       // Save official non-custodial receipt
       const rcpt: TransactionReceipt = {
@@ -614,7 +672,14 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       };
       ReceiptService.saveReceipt(rcpt);
       NotificationService.notifyPaymentSent(checkoutAmount, currentBlink.token, currentBlink.recipient, sig);
-      NotificationService.notifyBlinkPaid(currentBlink.name, checkoutAmount, currentBlink.token, activeAccount.publicKey, sig, currentBlink.id);
+      const isOwnerOrRecipient = Boolean(
+        activeAccount?.publicKey &&
+        currentBlink.recipient &&
+        (currentBlink.recipient === activeAccount.publicKey || currentBlink.recipient.toLowerCase() === activeAccount.publicKey.toLowerCase())
+      );
+      if (isOwnerOrRecipient) {
+        NotificationService.notifyBlinkPaid(currentBlink.name, checkoutAmount, currentBlink.token, activeAccount.publicKey, sig, currentBlink.id);
+      }
 
       const displayPaid = currentBlink.token === 'SOL'
         ? `${checkoutAmount} SOL`
@@ -636,21 +701,33 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('blink_balance_refresh'));
         window.dispatchEvent(new CustomEvent('blink_tx_updated', { detail: rcpt }));
+        window.dispatchEvent(new CustomEvent('blink_registry_updated', { detail: freshBlink || currentBlink }));
       }
-      onUpdateBlink?.(currentBlink);
+      onUpdateBlink?.(freshBlink || currentBlink);
     } catch (err: any) {
       console.error('Direct on-chain authorization error:', err);
       setError(err?.message || 'On-chain payment failed.');
-      ToastService.error(err?.message || 'On-chain transaction failed on Solana Devnet.');
+      ToastService.error(err?.message || `On-chain transaction failed on Solana ${currentBlink.token === 'SKR' ? 'Mainnet' : 'Devnet'}.`);
     } finally {
       setAuthorizing(false);
     }
   };
 
   const editedAmountNum = parseFloat(editPriceInput.replace(/[^0-9.]/g, ''));
-  const effectiveAmount = isEditingPrice && !isNaN(editedAmountNum) && editedAmountNum > 0
-    ? editedAmountNum
-    : currentBlink.amount;
+  const activeToken = isEditingPrice ? editTokenInput : currentBlink.token;
+  const streakBonus = StreakService.getStreakBonusPercent();
+
+  const liveDetails = PriceService.getLiveBlinkDetails(
+    isEditingPrice && !isNaN(editedAmountNum) && editedAmountNum > 0
+      ? { ...currentBlink, amount: editedAmountNum, baseUsdcAmount: editedAmountNum, token: activeToken }
+      : currentBlink,
+    streakBonus
+  );
+
+  const skrDetails = activeToken === 'SKR' ? PriceService.getSkrPaymentDetails(liveDetails.baseUsdc, streakBonus) : null;
+  const effectiveAmount = activeToken === 'SKR'
+    ? liveDetails.displayAmount
+    : (isEditingPrice && !isNaN(editedAmountNum) && editedAmountNum > 0 ? editedAmountNum : currentBlink.amount);
 
   return (
     <View style={[styles.modalOverlay, { backgroundColor: colors.bg }]}>
@@ -662,7 +739,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
           </TouchableOpacity>
 
           <View style={styles.titleGroup}>
-            {getBlinkLogo(blink.id)}
+            {getBlinkLogo(currentBlink.id, currentBlink)}
             <View style={{ marginLeft: 8 }}>
               <Text style={[styles.navTitle, { color: colors.textPrimary }]} numberOfLines={1}>
                 {blink.name}
@@ -723,7 +800,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
               </View>
 
               <View style={styles.priceInputRow}>
-                <Text style={styles.currencySymbol}>$</Text>
+                <Text style={styles.currencySymbol}>{currentBlink.token === 'SOL' ? '◎' : '$'}</Text>
                 <TextInput
                   style={styles.priceTextInput}
                   value={editPriceInput}
@@ -735,8 +812,18 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                   placeholder="0.00"
                   placeholderTextColor="#64748B"
                 />
-                <Text style={styles.tokenLabel}>{currentBlink.token}</Text>
+                <Text style={styles.tokenLabel}>
+                  {currentBlink.token === 'SKR' ? 'USDC (SKR)' : currentBlink.token}
+                </Text>
               </View>
+
+              {currentBlink.token === 'SKR' && (
+                <View style={{ marginBottom: 10, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: 'rgba(20, 241, 149, 0.08)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(20, 241, 149, 0.2)' }}>
+                  <Text style={{ color: '#10B981', fontSize: 11, fontWeight: '700' }}>
+                    Payers pay: {PriceService.getSkrPaymentDetails(parseFloat(editPriceInput) || 0).skrAmount} SKR (10% Discount Applied)
+                  </Text>
+                </View>
+              )}
 
               {/* Quick Increment Presets */}
               <View style={styles.presetRow}>
@@ -773,12 +860,12 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                       onPress={() => setEditRecipientInput(activeAccount.publicKey)}
                       activeOpacity={0.7}
                     >
-                      <Text style={{ fontSize: 11, color: colors.accent, fontWeight: '700' }}>Use My Wallet</Text>
+                      <Text style={{ fontSize: 10, color: colors.accent, fontWeight: '700' }}>Use My Wallet</Text>
                     </TouchableOpacity>
                   )}
                 </View>
                 <TextInput
-                  style={[styles.descTextInput, { fontSize: 13, fontFamily: 'monospace' }]}
+                  style={[styles.descTextInput, { fontSize: 11, fontFamily: 'monospace' }]}
                   value={editRecipientInput}
                   onChangeText={setEditRecipientInput}
                   placeholder="Recipient Solana address"
@@ -808,7 +895,17 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
             </View>
           ) : (
             <View style={styles.heroRow}>
-              <View>
+              <View style={{ flex: 1, minWidth: 0, marginRight: 10 }}>
+                {currentBlink.token === 'SKR' && skrDetails && skrDetails.fullSkrAmount > effectiveAmount && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                    <Text style={{ textDecorationLine: 'line-through', color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>
+                      {skrDetails.fullSkrAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })} SKR
+                    </Text>
+                    <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600' }}>
+                      (${skrDetails.baseUsdc.toFixed(2)})
+                    </Text>
+                  </View>
+                )}
                 <TouchableOpacity
                   style={styles.heroPriceClickable}
                   onPress={() => {
@@ -816,7 +913,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                       ToastService.error('Only the creator of this Blink can edit its price.');
                       return;
                     }
-                    setEditPriceInput(currentBlink.amount.toString());
+                    setEditPriceInput(getBlinkEditPrice(currentBlink));
                     setEditDescInput(currentBlink.description);
                     setIsEditingPrice(true);
                   }}
@@ -825,7 +922,9 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                   <Text style={[styles.heroPrice, { color: colors.textPrimary }]}>
                     {currentBlink.token === 'SOL'
                       ? `${currentBlink.amount} SOL`
-                      : `$${currentBlink.amount.toFixed(2)} USDC`}
+                      : (currentBlink.token === 'SKR'
+                        ? `${effectiveAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })} SKR`
+                        : `$${currentBlink.amount.toFixed(2)} USDC`)}
                   </Text>
                   {isCreator && (
                     <View style={styles.editPricePill}>
@@ -834,17 +933,30 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                     </View>
                   )}
                 </TouchableOpacity>
+                {currentBlink.token === 'SKR' && skrDetails && (
+                  <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: '#10B981', borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, marginTop: 6, alignSelf: 'flex-start' }}>
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: '#10B981' }}>
+                      {skrDetails.streakBonusPercent > 0
+                        ? `${skrDetails.discountPercent}% SKR Discount`
+                        : '10% SKR Discount'}
+                    </Text>
+                  </View>
+                )}
                 <View style={styles.changeBadge}>
-                  <Text style={styles.changeText}>▲ Live on Solana Devnet</Text>
+                  <Text style={styles.changeText}>
+                    {currentBlink.token === 'SKR' ? '▲ Live on Solana Mainnet' : '▲ Live on Solana Devnet'}
+                  </Text>
                 </View>
               </View>
 
-              <View style={styles.volBox}>
-                <Text style={[styles.volNumber, { color: colors.textPrimary }]}>
-                  ${currentBlink.stats.volumeUsdc.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </Text>
-                <Text style={styles.volLabel}>Total Volume</Text>
-              </View>
+              {isCreator && (
+                <View style={[styles.volBox, { flexShrink: 0 }]}>
+                  <Text style={[styles.volNumber, { color: colors.textPrimary }]}>
+                    ${currentBlink.stats.volumeUsdc.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </Text>
+                  <Text style={styles.volLabel}>Total Volume</Text>
+                </View>
+              )}
             </View>
           )}
 
@@ -869,7 +981,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                     }}
                     style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                   >
-                    <Text style={{ fontSize: 12, color: colors.accent, fontWeight: '700' }}>View & Download Receipt</Text>
+                    <Text style={{ fontSize: 10, color: colors.accent, fontWeight: '700' }}>View & Download Receipt</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => window.open(SolanaService.getExplorerUrl(txSignature), '_blank')}
@@ -891,7 +1003,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                 <TouchableOpacity
                   style={styles.editActionSmallBtn}
                   onPress={() => {
-                    setEditPriceInput(currentBlink.amount.toString());
+                    setEditPriceInput(getBlinkEditPrice(currentBlink));
                     setEditDescInput(currentBlink.description);
                     setIsEditingPrice(true);
                   }}
@@ -937,14 +1049,6 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
               <View style={[styles.metaRow, { alignItems: 'flex-start', paddingVertical: 10 }]}>
                 <View style={{ flex: 1, marginRight: 8 }}>
                   <Text style={[styles.metaKey, { color: colors.textSecondary }]}>Recipient Wallet</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 }}>
-                    <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#14F195' }} />
-                    <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-                      {recipientBalance !== null
-                        ? `Live Balance: ${currentBlink.token === 'USDC' ? `$${recipientBalance.toFixed(2)} USDC` : `${recipientBalance.toFixed(4)} SOL`}`
-                        : 'Checking balance...'}
-                    </Text>
-                  </View>
                 </View>
                 <TouchableOpacity
                   onPress={async () => {
@@ -954,7 +1058,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgCardAlt, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: colors.border }}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.metaVal, { fontFamily: 'monospace', fontSize: 12, color: colors.textPrimary }]}>
+                  <Text style={[styles.metaVal, { fontFamily: 'monospace', fontSize: 10, color: colors.textPrimary }]}>
                     {`${currentBlink.recipient.slice(0, 4)}...${currentBlink.recipient.slice(-4)}`}
                   </Text>
                   <Copy size={12} color={colors.accent} />
@@ -971,7 +1075,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
           </View>
 
           {/* User Available Balance Indicator in BlinkDetailModal */}
-          {activeAccount?.publicKey && (
+          {activeAccount?.publicKey && !isCreator && (
             <View style={{
               flexDirection: 'row',
               justifyContent: 'space-between',
@@ -984,48 +1088,28 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
               paddingVertical: 10,
               marginTop: 12,
             }}>
-              <Text style={{ fontSize: 12, color: colors.textSecondary, fontWeight: '600' }}>Your Available Balance:</Text>
+              <Text style={{ fontSize: 10, color: colors.textSecondary, fontWeight: '600' }}>Your Available Balance:</Text>
               <Text style={{
-                fontSize: 13,
+                fontSize: 11,
                 fontWeight: '700',
                 color: (currentBlink.token === 'USDC'
                   ? (walletBalanceUsdc !== null && walletBalanceUsdc < effectiveAmount)
-                  : (walletBalanceSol !== null && walletBalanceSol < effectiveAmount + 0.00001))
+                  : (currentBlink.token === 'SKR'
+                    ? (walletBalanceSkr !== null && walletBalanceSkr < effectiveAmount)
+                    : (walletBalanceSol !== null && walletBalanceSol < effectiveAmount + 0.00001)))
                   ? '#EF4444'
                   : colors.textPrimary,
               }}>
                 {currentBlink.token === 'USDC'
                   ? `${walletBalanceUsdc !== null ? `$${walletBalanceUsdc.toFixed(2)} USDC` : 'Loading...'}`
-                  : `${walletBalanceSol !== null ? `${walletBalanceSol.toFixed(4)} SOL` : 'Loading...'}`}
+                  : (currentBlink.token === 'SKR'
+                    ? `${walletBalanceSkr !== null ? `${walletBalanceSkr.toLocaleString('en-US', { maximumFractionDigits: 2 })} SKR` : 'Loading...'}`
+                    : `${walletBalanceSol !== null ? `${walletBalanceSol.toFixed(4)} SOL` : 'Loading...'}`)}
               </Text>
             </View>
           )}
 
-          {/* Insufficient Balance Warning Banner */}
-          {activeAccount?.publicKey && (
-            (currentBlink.token === 'USDC' && walletBalanceUsdc !== null && walletBalanceUsdc < effectiveAmount) ||
-            (currentBlink.token === 'SOL' && walletBalanceSol !== null && walletBalanceSol < effectiveAmount + 0.00001)
-          ) && (
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 8,
-              backgroundColor: 'rgba(239, 68, 68, 0.1)',
-              borderWidth: 1,
-              borderColor: 'rgba(239, 68, 68, 0.3)',
-              borderRadius: 12,
-              paddingVertical: 10,
-              paddingHorizontal: 14,
-              marginTop: 10,
-            }}>
-              <AlertCircle size={15} color="#EF4444" />
-              <Text style={{ color: '#EF4444', fontSize: 12, fontWeight: '600', flex: 1 }}>
-                {currentBlink.token === 'USDC'
-                  ? `Insufficient USDC balance ($${(walletBalanceUsdc ?? 0).toFixed(2)} / $${effectiveAmount.toFixed(2)} USDC required)`
-                  : `Insufficient SOL balance (${(walletBalanceSol ?? 0).toFixed(4)} / ${(effectiveAmount + 0.00001).toFixed(4)} SOL required)`}
-              </Text>
-            </View>
-          )}
+
 
           {/* Payers Section (Visible ONLY to creator of the Blink) */}
           {isCreator && (
@@ -1036,10 +1120,10 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                   <Users size={16} color={colors.accent} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.aboutTitle, { color: colors.textPrimary, fontSize: 15 }]}>
+                  <Text style={[styles.aboutTitle, { color: colors.textPrimary, fontSize: 12 }]}>
                     Payers
                   </Text>
-                  <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                  <Text style={{ fontSize: 10, color: colors.textSecondary }}>
                     {payers.length} Verified Payer{payers.length === 1 ? '' : 's'} • {payers.reduce((sum, p) => sum + p.paymentCount, 0)} Payment{payers.reduce((sum, p) => sum + p.paymentCount, 0) === 1 ? '' : 's'}
                   </Text>
                 </View>
@@ -1060,7 +1144,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                   activeOpacity={0.8}
                 >
                   {copiedAll ? <Check size={13} color="#FFFFFF" /> : <Copy size={13} color="#FFFFFF" />}
-                  <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '700' }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700' }}>
                     {copiedAll ? 'Copied All!' : 'Copy All Addresses'}
                   </Text>
                 </TouchableOpacity>
@@ -1097,11 +1181,11 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                             alignItems: 'center',
                             justifyContent: 'center',
                           }}>
-                            <Text style={{ fontSize: 11, fontWeight: '800', color: colors.accent }}>#{idx + 1}</Text>
+                            <Text style={{ fontSize: 10, fontWeight: '800', color: colors.accent }}>#{idx + 1}</Text>
                           </View>
 
                           <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: '700', color: colors.textPrimary }} numberOfLines={1}>
+                            <Text style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: '700', color: colors.textPrimary }} numberOfLines={1}>
                               {shortAddr}
                             </Text>
                             <Text style={{ fontSize: 10, color: colors.textMuted }}>
@@ -1111,7 +1195,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                         </View>
 
                         <View style={{ alignItems: 'flex-end' }}>
-                          <Text style={{ fontSize: 13, fontWeight: '800', color: '#10B981' }}>
+                          <Text style={{ fontSize: 11, fontWeight: '800', color: '#10B981' }}>
                             +{payer.token === 'SOL' ? `${payer.totalPaid} SOL` : `$${payer.totalPaid.toFixed(2)} USDC`}
                           </Text>
                           {payer.lastSignature && (
@@ -1146,7 +1230,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                           activeOpacity={0.7}
                         >
                           {isCopied ? <Check size={13} color="#10B981" /> : <Copy size={13} color={colors.textPrimary} />}
-                          <Text style={{ fontSize: 13, fontWeight: '700', color: isCopied ? '#10B981' : colors.textPrimary }}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: isCopied ? '#10B981' : colors.textPrimary }}>
                             {isCopied ? 'Copied!' : 'Copy Address'}
                           </Text>
                         </TouchableOpacity>
@@ -1172,7 +1256,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                           activeOpacity={0.7}
                         >
                           <Send size={13} color={colors.accent} />
-                          <Text style={{ fontSize: 13, fontWeight: '700', color: colors.accent }}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.accent }}>
                             Send
                           </Text>
                         </TouchableOpacity>
@@ -1196,10 +1280,10 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                 <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.bgCard, alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
                   <Users size={20} color={colors.textMuted} />
                 </View>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 }}>
                   No Payments Received Yet
                 </Text>
-                <Text style={{ fontSize: 12, color: colors.textSecondary, textAlign: 'center', maxWidth: 280 }}>
+                <Text style={{ fontSize: 10, color: colors.textSecondary, textAlign: 'center', maxWidth: 280 }}>
                   When users tap or scan to pay this Blink (e.g. mint fee), their wallet addresses and payment proofs will appear here so you can easily copy and airdrop their NFT.
                 </Text>
               </View>
@@ -1227,14 +1311,14 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                   { flex: 1, backgroundColor: colors.accentSoft, borderColor: colors.accent, borderWidth: 1 },
                 ]}
                 onPress={() => {
-                  setEditPriceInput(currentBlink.amount.toString());
+                  setEditPriceInput(getBlinkEditPrice(currentBlink));
                   setEditDescInput(currentBlink.description);
                   setIsEditingPrice(true);
                 }}
                 activeOpacity={0.8}
               >
                 <Edit3 size={15} color={colors.accent} />
-                <Text style={[styles.primaryBtnText, { color: colors.accent, marginLeft: 4, fontSize: 13 }]}>
+                <Text style={[styles.primaryBtnText, { color: colors.accent, marginLeft: 4, fontSize: 11 }]}>
                   Edit Price
                 </Text>
               </TouchableOpacity>
@@ -1257,7 +1341,9 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                 authorizing && styles.btnDisabled,
                 (currentBlink.token === 'USDC'
                   ? (walletBalanceUsdc !== null && walletBalanceUsdc < effectiveAmount)
-                  : (walletBalanceSol !== null && walletBalanceSol < effectiveAmount + 0.00001)) && { backgroundColor: '#EF4444' }
+                  : (currentBlink.token === 'SKR'
+                    ? (walletBalanceSkr !== null && walletBalanceSkr < effectiveAmount)
+                    : (walletBalanceSol !== null && walletBalanceSol < effectiveAmount + 0.00001))) && { backgroundColor: '#EF4444' }
               ]}
               onPress={handleAuthorize}
               disabled={authorizing}
@@ -1273,12 +1359,10 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                   <Fingerprint size={16} color="#FFFFFF" />
                   <Text style={[styles.primaryBtnText, { marginLeft: 6 }]}>
                     {WalletProviderService.getActiveAccount()
-                      ? (currentBlink.token === 'USDC'
-                          ? (walletBalanceUsdc !== null && walletBalanceUsdc < effectiveAmount)
-                          : (walletBalanceSol !== null && walletBalanceSol < effectiveAmount + 0.00001))
-                        ? `Insufficient ${currentBlink.token} Balance`
-                        : currentBlink.token === 'SOL'
-                          ? `Pay ${effectiveAmount} SOL`
+                      ? currentBlink.token === 'SOL'
+                        ? `Pay ${effectiveAmount} SOL`
+                        : currentBlink.token === 'SKR'
+                          ? `Pay ${effectiveAmount} SKR`
                           : `Pay $${effectiveAmount.toFixed(2)} USDC`
                       : 'Connect Wallet'}
                   </Text>
@@ -1318,22 +1402,16 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
               </Text>
 
               <View style={styles.qrActionRow}>
-                <TouchableOpacity
-                  style={[styles.qrActionBtn, { backgroundColor: colors.accent }]}
-                  onPress={async () => {
-                    const url = PhysicalBlinkRegistry.getShareableUrl(currentBlink);
-                    const res = await NfcService.writeTag({ url, title: currentBlink.name, id: currentBlink.id });
-                    if (res.success) {
-                      ToastService.success(`Encoded onto NFC tag successfully.`);
-                    } else {
-                      ToastService.info(res.message);
-                    }
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Radio size={14} color="#FFFFFF" />
-                  <Text style={styles.qrActionBtnText}>Write NFC Tag</Text>
-                </TouchableOpacity>
+                {isCreator && (
+                  <TouchableOpacity
+                    style={[styles.qrActionBtn, { backgroundColor: colors.accent }]}
+                    onPress={() => setShowNfcWriter(true)}
+                    activeOpacity={0.8}
+                  >
+                    <Radio size={14} color="#FFFFFF" />
+                    <Text style={styles.qrActionBtnText}>Write NFC Tag</Text>
+                  </TouchableOpacity>
+                )}
 
                 <TouchableOpacity
                   style={[styles.qrActionBtnSecondary, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
@@ -1430,11 +1508,11 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                 <Trash2 size={24} color="#EF4444" />
               </View>
 
-              <Text style={{ fontSize: 18, fontWeight: '700', color: colors.textPrimary, textAlign: 'center', marginBottom: 8 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary, textAlign: 'center', marginBottom: 8 }}>
                 Delete Physical Blink?
               </Text>
 
-              <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: 'center', lineHeight: 18, marginBottom: 16 }}>
+              <Text style={{ fontSize: 11, color: colors.textSecondary, textAlign: 'center', lineHeight: 18, marginBottom: 16 }}>
                 Are you sure you want to delete <Text style={{ fontWeight: '700', color: colors.textPrimary }}>"{currentBlink.name}"</Text>? This action cannot be undone and will permanently wipe it from local storage, database, and cloud backend.
               </Text>
 
@@ -1451,14 +1529,14 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                 }}
               >
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>Blink ID</Text>
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.accent, fontFamily: 'monospace' }}>
+                  <Text style={{ fontSize: 10, color: colors.textSecondary }}>Blink ID</Text>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: colors.accent, fontFamily: 'monospace' }}>
                     /t/{currentBlink.id}
                   </Text>
                 </View>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>Action Price</Text>
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textPrimary }}>
+                  <Text style={{ fontSize: 10, color: colors.textSecondary }}>Action Price</Text>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: colors.textPrimary }}>
                     ${currentBlink.amount.toFixed(2)} {currentBlink.token}
                   </Text>
                 </View>
@@ -1478,7 +1556,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                   onPress={() => setShowDeleteConfirm(false)}
                   activeOpacity={0.8}
                 >
-                  <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textPrimary }}>Cancel</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textPrimary }}>Cancel</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -1503,12 +1581,21 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                   activeOpacity={0.8}
                 >
                   <Trash2 size={15} color="#FFFFFF" />
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>Delete</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFFFFF' }}>Delete</Text>
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Interactive NFC Tag Writer Modal */}
+        <NfcWriterModal
+          visible={showNfcWriter}
+          onClose={() => setShowNfcWriter(false)}
+          url={PhysicalBlinkRegistry.getShareableUrl(currentBlink)}
+          title={currentBlink.name}
+          id={currentBlink.id}
+        />
       </View>
     </View>
   );
@@ -1552,7 +1639,7 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   navTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
     maxWidth: 180,
@@ -1581,13 +1668,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   heroPrice: {
-    fontSize: 34,
+    fontSize: 15,
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: -0.8,
   },
   heroCurrency: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '700',
     color: '#64748B',
   },
@@ -1596,19 +1683,19 @@ const styles = StyleSheet.create({
   },
   changeText: {
     color: '#10B981',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   volBox: {
     alignItems: 'flex-end',
   },
   volNumber: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
     color: '#FFFFFF',
   },
   volLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#64748B',
     marginTop: 2,
   },
@@ -1622,7 +1709,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: '#EF4444',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   successBox: {
@@ -1638,7 +1725,7 @@ const styles = StyleSheet.create({
   },
   successTitle: {
     color: '#14F195',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '800',
   },
   explorerLinkRow: {
@@ -1649,7 +1736,7 @@ const styles = StyleSheet.create({
   },
   explorerText: {
     color: '#5B67F6',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
   },
   aboutCard: {
@@ -1660,13 +1747,13 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   aboutTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '800',
     color: '#FFFFFF',
     marginBottom: 8,
   },
   aboutBody: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#94A3B8',
     lineHeight: 19,
     marginBottom: 16,
@@ -1683,11 +1770,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   metaKey: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#64748B',
   },
   metaVal: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#E2E8F0',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     fontWeight: '600',
@@ -1698,7 +1785,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   verifiedText: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#14F195',
     fontWeight: '700',
   },
@@ -1730,7 +1817,7 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   primaryActionBtn: {
@@ -1752,7 +1839,7 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '800',
   },
   // Price editing styles
@@ -1770,13 +1857,14 @@ const styles = StyleSheet.create({
   },
   successToastText: {
     color: '#10B981',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
   },
   heroPriceClickable: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   editPricePill: {
     flexDirection: 'row',
@@ -1791,7 +1879,7 @@ const styles = StyleSheet.create({
   },
   editPricePillText: {
     color: '#5B67F6',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   editPriceCard: {
@@ -1815,7 +1903,7 @@ const styles = StyleSheet.create({
   },
   editPriceTagText: {
     color: '#5B67F6',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.8,
   },
@@ -1834,19 +1922,19 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   currencySymbol: {
-    fontSize: 26,
+    fontSize: 13,
     fontWeight: '800',
     color: '#FFFFFF',
     marginRight: 4,
   },
   priceTextInput: {
     flex: 1,
-    fontSize: 26,
+    fontSize: 13,
     fontWeight: '800',
     color: '#FFFFFF',
   },
   tokenLabel: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     color: '#94A3B8',
   },
@@ -1866,7 +1954,7 @@ const styles = StyleSheet.create({
   },
   presetPillText: {
     color: '#E2E8F0',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   inputFieldLabel: {
@@ -1884,7 +1972,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     marginBottom: 14,
   },
   editBtnRow: {
@@ -1903,7 +1991,7 @@ const styles = StyleSheet.create({
   },
   savePriceBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   cancelPriceBtn: {
@@ -1916,7 +2004,7 @@ const styles = StyleSheet.create({
   },
   cancelPriceBtnText: {
     color: '#94A3B8',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
   },
   aboutHeaderRow: {
@@ -1935,7 +2023,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(91, 103, 246, 0.1)',
   },
   editActionSmallBtnText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: '#5B67F6',
   },
@@ -1971,7 +2059,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   qrModalTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
   },
   qrCodeBox: {
@@ -1981,13 +2069,13 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   qrBlinkName: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: 4,
   },
   qrBlinkSub: {
-    fontSize: 12,
+    fontSize: 10,
     textAlign: 'center',
     lineHeight: 16,
     marginBottom: 18,
@@ -1995,21 +2083,22 @@ const styles = StyleSheet.create({
   },
   qrActionRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     width: '100%',
   },
   qrActionBtn: {
-    flex: 1,
+    flex: 1.1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 12,
+    gap: 5,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 10,
   },
   qrActionBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 10.5,
     fontWeight: '700',
   },
   qrActionBtnSecondary: {
@@ -2017,13 +2106,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 12,
+    gap: 5,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 10,
     borderWidth: 1,
   },
   qrActionBtnSecondaryText: {
-    fontSize: 13,
+    fontSize: 10.5,
     fontWeight: '600',
   },
   closeBtn: {
@@ -2067,13 +2157,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   fpTitle: {
-    fontSize: 20,
+    fontSize: 12,
     fontWeight: '800',
     marginBottom: 2,
     textAlign: 'center',
   },
   fpSubtitle: {
-    fontSize: 13,
+    fontSize: 11,
     textAlign: 'center',
     marginBottom: 14,
   },
@@ -2087,12 +2177,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   fpAmountText: {
-    fontSize: 24,
+    fontSize: 14,
     fontWeight: '900',
     color: '#FFFFFF',
   },
   fpTokenText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     color: '#94A3B8',
   },
@@ -2115,7 +2205,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
   },
   balanceWalletLabel: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   balanceRefreshBtn: {
@@ -2123,7 +2213,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   balanceRefreshText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   balanceMainRow: {
@@ -2132,12 +2222,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   balanceSubTitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '500',
     marginBottom: 2,
   },
   balanceNumber: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '800',
   },
   airdropBtn: {
@@ -2150,7 +2240,7 @@ const styles = StyleSheet.create({
   },
   airdropBtnText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
 });

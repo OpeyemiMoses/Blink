@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { X, ArrowRight, ArrowUpRight, CheckCircle2, ExternalLink, Fingerprint, Send, QrCode, Scan } from 'lucide-react-native';
+import { X, ArrowRight, ArrowUpRight, CheckCircle2, AlertCircle, ExternalLink, Fingerprint, Send, QrCode, Scan } from 'lucide-react-native';
 import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { SolanaService } from '../services/solanaService';
 import { WalletProviderService } from '../services/walletProviderService';
@@ -12,6 +12,7 @@ import { BlinkIdService } from '../services/blinkIdService';
 import { PriceService } from '../services/priceService';
 import { ReceiptService } from '../services/receiptService';
 import { NotificationService } from '../services/notificationService';
+import { UserProfileService } from '../services/userProfileService';
 import { ReceiptModal } from './ReceiptModal';
 import { TransactionReceipt } from '../types';
 
@@ -41,7 +42,9 @@ export const SendModal: React.FC<SendModalProps> = ({
   const [selectedToken, setSelectedToken] = useState<'SOL' | 'USDC' | 'SKR'>('SOL');
   const [currentBalanceUsdc, setCurrentBalanceUsdc] = useState<number>(0);
   const [currentBalanceSkr, setCurrentBalanceSkr] = useState<number>(0);
-  const [resolvedBlinkInfo, setResolvedBlinkInfo] = useState<{ id: string; name: string; recipient: string; amount?: number; token?: string } | null>(null);
+  const [resolvedBlinkInfo, setResolvedBlinkInfo] = useState<{ id: string; name: string; recipient: string; amount?: number; token?: string; actionType?: any } | null>(null);
+  const [resolvedUser, setResolvedUser] = useState<{ username?: string; displayName?: string; address: string } | null>(null);
+  const [isResolving, setIsResolving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txSignature, setTxSignature] = useState<string | null>(null);
@@ -49,6 +52,47 @@ export const SendModal: React.FC<SendModalProps> = ({
   const [activeReceipt, setActiveReceipt] = useState<TransactionReceipt | null>(null);
 
   const activeAccount = WalletProviderService.getActiveAccount();
+  const trimmedRecipient = recipient.trim();
+  const isDirectValidAddress = /^[1-9A-HJ-NP-za-km-z]{32,44}$/.test(trimmedRecipient);
+
+  const myProfile = UserProfileService.getProfile();
+  const myUsername = (myProfile.username || '').toLowerCase().replace(/^@+/, '');
+  const myBlinkId = (myProfile.blinkId || '').toLowerCase().replace(/^@+/, '');
+  const myFormattedBlinkId = BlinkIdService.formatBlinkId(myProfile.username || myProfile.displayName, senderPublicKey).toLowerCase().replace(/^@+/, '');
+  const myAddress = (senderPublicKey || '').toLowerCase().trim();
+
+  // Instant detection if user entered their own wallet address or username
+  const isInputSelf = React.useMemo(() => {
+    const raw = recipient.trim().toLowerCase();
+    if (!raw) return false;
+    const clean = raw.replace(/^@+/, '');
+
+    // 1. Direct address match
+    if (myAddress && raw === myAddress) return true;
+
+    // 2. Direct username or Blink ID match
+    if (myUsername && (clean === myUsername || raw === `@${myUsername}`)) return true;
+    if (myBlinkId && (clean === myBlinkId || raw === `@${myBlinkId}`)) return true;
+    if (myFormattedBlinkId && (clean === myFormattedBlinkId || raw === `@${myFormattedBlinkId}`)) return true;
+
+    // 3. Resolved user match
+    if (resolvedUser) {
+      const resAddr = (resolvedUser.address || '').toLowerCase().trim();
+      const resUser = (resolvedUser.username || '').toLowerCase().replace(/^@+/, '');
+      if (myAddress && resAddr === myAddress) return true;
+      if (myUsername && (resUser === myUsername || resUser === `@${myUsername}`)) return true;
+      if (myBlinkId && (resUser === myBlinkId || resUser === `@${myBlinkId}`)) return true;
+      if (myFormattedBlinkId && (resUser === myFormattedBlinkId || resUser === `@${myFormattedBlinkId}`)) return true;
+    }
+
+    // 4. Resolved physical blink recipient match
+    if (resolvedBlinkInfo) {
+      const bRecip = (resolvedBlinkInfo.recipient || '').toLowerCase().trim();
+      if (myAddress && bRecip === myAddress) return true;
+    }
+
+    return false;
+  }, [recipient, myAddress, myUsername, myBlinkId, myFormattedBlinkId, resolvedUser, resolvedBlinkInfo]);
 
   React.useEffect(() => {
     if (visible && initialRecipient) {
@@ -72,43 +116,72 @@ export const SendModal: React.FC<SendModalProps> = ({
     }
   }, [senderPublicKey, visible]);
 
-  // Check if entered recipient matches a Blink ID (e.g. @yemi), physical Blink ID, or URL
+  // Check if entered recipient matches a physical/action Blink URL or ID, or a user handle
   React.useEffect(() => {
     let isCancelled = false;
     const trimmed = recipient.trim();
     if (!trimmed) {
       setResolvedBlinkInfo(null);
+      setResolvedUser(null);
+      setIsResolving(false);
       return;
     }
 
-    // 1. Resolve through BlinkIdService (user handles, usernames, @ids, addresses)
+    // 1. Primary: Check PhysicalBlinkRegistry for actual Action/Product Blinks (e.g. coffee-001)
+    const cleanId = trimmed.replace(/^https?:\/\/[^\/]+\/(?:t|b)\//i, '').replace(/^\/t\//i, '');
+    const found = PhysicalBlinkRegistry.resolve(cleanId) || PhysicalBlinkRegistry.resolve(trimmed);
+    if (found && found.id && found.name) {
+      setResolvedBlinkInfo({
+        id: found.id,
+        name: found.name,
+        recipient: found.recipient,
+        amount: found.amount,
+        token: found.token,
+        actionType: found.actionType,
+      });
+      setResolvedUser(null);
+      setIsResolving(false);
+      if (found.token) {
+        setSelectedToken(found.token as 'SOL' | 'USDC');
+      }
+      return;
+    }
+
+    setResolvedBlinkInfo(null);
+
+    // 2. Direct Solana address
+    if (/^[1-9A-HJ-NP-za-km-z]{32,44}$/.test(trimmed)) {
+      setIsResolving(false);
+      BlinkIdService.resolveBlinkId(trimmed).then((res) => {
+        if (!isCancelled && res && res.source !== 'address') {
+          setResolvedUser({
+            username: res.blinkId,
+            displayName: res.displayName,
+            address: res.address,
+          });
+        }
+      });
+      return;
+    }
+
+    // 3. Resolve user handles/usernames for standard P2P transfers
+    setIsResolving(true);
     BlinkIdService.resolveBlinkId(trimmed).then((res) => {
       if (isCancelled) return;
+      setIsResolving(false);
       if (res && res.address) {
-        setResolvedBlinkInfo({
-          id: res.blinkId,
-          name: res.displayName || res.blinkId,
-          recipient: res.address,
+        setResolvedUser({
+          username: res.username || res.blinkId,
+          displayName: res.displayName,
+          address: res.address,
         });
-        return;
-      }
-
-      // 2. Fallback check PhysicalBlinkRegistry
-      const cleanId = trimmed.replace(/^https?:\/\/[^\/]+\/(?:t|b)\//i, '').replace(/^\/t\//i, '');
-      const found = PhysicalBlinkRegistry.resolve(cleanId) || PhysicalBlinkRegistry.resolve(trimmed);
-      if (found) {
-        setResolvedBlinkInfo({
-          id: found.id,
-          name: found.name,
-          recipient: found.recipient,
-          amount: found.amount,
-          token: found.token,
-        });
-        if (found.token) {
-          setSelectedToken(found.token as 'SOL' | 'USDC');
-        }
       } else {
-        setResolvedBlinkInfo(null);
+        setResolvedUser(null);
+      }
+    }).catch(() => {
+      if (!isCancelled) {
+        setIsResolving(false);
+        setResolvedUser(null);
       }
     });
 
@@ -120,12 +193,20 @@ export const SendModal: React.FC<SendModalProps> = ({
   const handleSend = async () => {
     setError(null);
     const numAmount = parseFloat(amount);
-    const targetRecipient = resolvedBlinkInfo ? resolvedBlinkInfo.recipient : recipient.trim();
+    const targetRecipient = resolvedBlinkInfo ? resolvedBlinkInfo.recipient : (resolvedUser?.address || recipient.trim());
 
     if (!targetRecipient) {
+      ToastService.error('Please enter a recipient Solana address or Blink ID.');
       setError('Please enter a recipient Solana address or Blink ID.');
       return;
     }
+
+    if (isInputSelf || targetRecipient.toLowerCase() === myAddress) {
+      ToastService.error("It's not possible to send funds to your own wallet address or username.");
+      setError("It's not possible to send funds to your own wallet address or username.");
+      return;
+    }
+
     if (isNaN(numAmount) || numAmount <= 0) {
       setError(`Please enter a valid amount of ${selectedToken}.`);
       return;
@@ -236,22 +317,21 @@ export const SendModal: React.FC<SendModalProps> = ({
       // Routes through the active wallet provider (Seed Vault biometrics, Phantom, or Solflare)
       const sig = await WalletProviderService.signAndSendTransaction(transaction);
 
-      // Verify transaction did not fail on-chain
-      try {
-        const connection = SolanaService.getConnection();
-        const latestBlockhash = await connection.getLatestBlockhash('confirmed');
-        const confirmation = await connection.confirmTransaction(
+      // Non-blocking: verify transaction on-chain in background (don't block success UI)
+      const connection = SolanaService.getConnection();
+      connection.getLatestBlockhash('confirmed').then((latestBlockhash) => {
+        connection.confirmTransaction(
           { signature: sig, ...latestBlockhash },
           'confirmed'
-        );
-        if (confirmation?.value?.err) {
-          throw new Error(`Transaction failed on-chain: ${JSON.stringify(confirmation.value.err)}`);
-        }
-      } catch (confirmErr: any) {
-        if (confirmErr?.message?.includes('failed on-chain')) {
-          throw confirmErr;
-        }
-      }
+        ).then((confirmation) => {
+          if (confirmation?.value?.err) {
+            console.warn('Transaction failed on-chain after broadcast:', confirmation.value.err);
+            ToastService.error('Transaction may have failed on-chain. Please check your balance.');
+          }
+        }).catch((confirmErr) => {
+          console.warn('Transaction confirmation check error (may still succeed):', confirmErr);
+        });
+      }).catch(() => {});
 
       setTxSignature(sig);
 
@@ -259,7 +339,9 @@ export const SendModal: React.FC<SendModalProps> = ({
       const rcpt: TransactionReceipt = {
         id: `rcpt_${sig.slice(0, 10)}`,
         signature: sig,
-        blinkTitle: resolvedBlinkInfo ? resolvedBlinkInfo.name : `${selectedToken} Transfer`,
+        blinkTitle: resolvedBlinkInfo ? resolvedBlinkInfo.name : undefined,
+        blinkId: resolvedBlinkInfo ? resolvedBlinkInfo.id : undefined,
+        actionType: resolvedBlinkInfo ? resolvedBlinkInfo.actionType : undefined,
         amount: numAmount,
         token: selectedToken,
         payerAddress: senderPublicKey,
@@ -288,6 +370,7 @@ export const SendModal: React.FC<SendModalProps> = ({
 
       // Notify app to instantly refresh transactions and balance without waiting or manual refresh
       if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('blink_balance_refresh'));
         window.dispatchEvent(new CustomEvent('blink_tx_updated', { detail: rcpt }));
       }
       onSuccess();
@@ -312,7 +395,9 @@ export const SendModal: React.FC<SendModalProps> = ({
         const fallbackRcpt: TransactionReceipt = {
           id: `rcpt_${matchedSig.slice(0, 10)}`,
           signature: matchedSig,
-          blinkTitle: resolvedBlinkInfo ? resolvedBlinkInfo.name : `${selectedToken} Transfer`,
+          blinkTitle: resolvedBlinkInfo ? resolvedBlinkInfo.name : undefined,
+          blinkId: resolvedBlinkInfo ? resolvedBlinkInfo.id : undefined,
+          actionType: resolvedBlinkInfo ? resolvedBlinkInfo.actionType : undefined,
           amount: numAmount,
           token: selectedToken,
           payerAddress: senderPublicKey,
@@ -524,16 +609,89 @@ export const SendModal: React.FC<SendModalProps> = ({
                     </TouchableOpacity>
                   </View>
 
-                  {/* Resolved Blink Notification Badge */}
-                  {resolvedBlinkInfo && (
-                    <View style={styles.resolvedBlinkBadge}>
-                      <CheckCircle2 size={14} color="#10B981" />
+                  {/* Real-time Verification & Resolution Badges */}
+                  {isResolving && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, paddingHorizontal: 4 }}>
+                      <ActivityIndicator size="small" color="#818CF8" />
+                      <Text style={{ fontSize: 10, color: '#9CA3AF' }}>Verifying recipient on Solana...</Text>
+                    </View>
+                  )}
+
+                  {/* Self Recipient Warning Badge */}
+                  {isInputSelf && (
+                    <View style={[styles.resolvedBlinkBadge, { backgroundColor: 'rgba(239, 68, 68, 0.12)', borderColor: 'rgba(239, 68, 68, 0.4)' }]}>
+                      <AlertCircle size={16} color="#EF4444" />
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.resolvedBlinkText}>
-                          Blink ID Resolved: {resolvedBlinkInfo.id.startsWith('@') ? resolvedBlinkInfo.id : `@${resolvedBlinkInfo.id}`} ({resolvedBlinkInfo.name})
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#EF4444' }}>
+                          Self-Transfer Not Allowed
                         </Text>
-                        <Text style={{ fontSize: 10, color: '#9CA3AF', marginTop: 1 }}>
-                          On-Chain Wallet: {resolvedBlinkInfo.recipient.slice(0, 6)}...{resolvedBlinkInfo.recipient.slice(-6)}
+                        <Text style={{ fontSize: 10, color: '#F87171', marginTop: 2 }}>
+                          It's not possible to send funds to your own wallet address or username. Please enter a different recipient.
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* 1. Verified User Recipient (Only if not self) */}
+                  {!isResolving && !isInputSelf && resolvedUser && (
+                    <View style={[styles.resolvedBlinkBadge, { backgroundColor: 'rgba(16, 185, 129, 0.12)', borderColor: 'rgba(16, 185, 129, 0.35)' }]}>
+                      <CheckCircle2 size={16} color="#10B981" />
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text style={{ fontSize: 10, fontWeight: '800', color: '#10B981' }}>
+                            Verified User: {resolvedUser.username.startsWith('@') ? resolvedUser.username : `@${resolvedUser.username}`}
+                          </Text>
+                          {resolvedUser.displayName && resolvedUser.displayName !== resolvedUser.username && (
+                            <Text style={{ fontSize: 10, color: '#D1D5DB' }}>({resolvedUser.displayName})</Text>
+                          )}
+                        </View>
+                        <Text style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
+                          Wallet Address: {resolvedUser.address.slice(0, 8)}...{resolvedUser.address.slice(-8)}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* 2. Verified Action Blink Recipient */}
+                  {!isResolving && resolvedBlinkInfo && (
+                    <View style={[styles.resolvedBlinkBadge, { backgroundColor: 'rgba(99, 102, 241, 0.12)', borderColor: 'rgba(99, 102, 241, 0.35)' }]}>
+                      <CheckCircle2 size={16} color="#818CF8" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: '#818CF8' }}>
+                          Action Blink: {resolvedBlinkInfo.name}
+                        </Text>
+                        <Text style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
+                          Merchant Wallet: {resolvedBlinkInfo.recipient.slice(0, 8)}...{resolvedBlinkInfo.recipient.slice(-8)}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* 3. Direct Valid Solana Address */}
+                  {!isResolving && !resolvedBlinkInfo && !resolvedUser && isDirectValidAddress && (
+                    <View style={[styles.resolvedBlinkBadge, { backgroundColor: 'rgba(59, 130, 246, 0.12)', borderColor: 'rgba(59, 130, 246, 0.35)' }]}>
+                      <CheckCircle2 size={16} color="#3B82F6" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: '#3B82F6' }}>
+                          Valid Solana Wallet Address
+                        </Text>
+                        <Text style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
+                          {trimmedRecipient.slice(0, 8)}...{trimmedRecipient.slice(-8)}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* 4. Not Found Warning */}
+                  {!isResolving && !resolvedBlinkInfo && !resolvedUser && !isDirectValidAddress && trimmedRecipient.length >= 3 && (
+                    <View style={[styles.resolvedBlinkBadge, { backgroundColor: 'rgba(239, 68, 68, 0.12)', borderColor: 'rgba(239, 68, 68, 0.35)' }]}>
+                      <AlertCircle size={16} color="#EF4444" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: '#EF4444' }}>
+                          Recipient Not Found
+                        </Text>
+                        <Text style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2 }}>
+                          No registered wallet found for "{trimmedRecipient}". Check spelling or paste a 32-44 char Solana address.
                         </Text>
                       </View>
                     </View>
@@ -570,7 +728,7 @@ export const SendModal: React.FC<SendModalProps> = ({
                     keyboardType="decimal-pad"
                   />
                   {parseFloat(amount || '0') > 0 && (
-                    <Text style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>
+                    <Text style={{ fontSize: 10, color: '#9CA3AF', marginTop: 4 }}>
                       {selectedToken === 'SOL'
                         ? `≈ $${PriceService.convertSolToUsdt(parseFloat(amount)).toFixed(2)} USDT`
                         : (selectedToken === 'SKR'
@@ -606,9 +764,13 @@ export const SendModal: React.FC<SendModalProps> = ({
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.sendBtn, loading && styles.sendBtnDisabled]}
+                  style={[
+                    styles.sendBtn,
+                    (loading || isInputSelf) && styles.sendBtnDisabled,
+                    isInputSelf && { backgroundColor: '#374151' }
+                  ]}
                   onPress={handleSend}
-                  disabled={loading}
+                  disabled={loading || isInputSelf}
                   activeOpacity={0.8}
                 >
                   {loading ? (
@@ -619,14 +781,16 @@ export const SendModal: React.FC<SendModalProps> = ({
                   ) : (
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                       <Fingerprint size={16} color="#FFFFFF" />
-                      <Text style={styles.sendBtnText}>
-                        {amount && parseFloat(amount) > 0
-                          ? selectedToken === 'SOL'
-                            ? `Pay ${amount} SOL`
-                            : (selectedToken === 'SKR' ? `Pay ${amount} SKR` : `Pay $${parseFloat(amount).toFixed(2)} USDC`)
-                          : `Pay ${selectedToken}`}
+                      <Text style={[styles.sendBtnText, isInputSelf && { color: '#9CA3AF' }]}>
+                        {isInputSelf
+                          ? 'Cannot Send to Yourself'
+                          : (amount && parseFloat(amount) > 0
+                            ? selectedToken === 'SOL'
+                              ? `Pay ${amount} SOL`
+                              : (selectedToken === 'SKR' ? `Pay ${amount} SKR` : `Pay $${parseFloat(amount).toFixed(2)} USDC`)
+                            : `Pay ${selectedToken}`)}
                       </Text>
-                      <ArrowRight size={15} color="#FFFFFF" />
+                      {!isInputSelf && <ArrowRight size={15} color="#FFFFFF" />}
                     </View>
                   )}
                 </TouchableOpacity>
@@ -696,7 +860,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
     letterSpacing: -0.3,
   },
@@ -735,7 +899,7 @@ const styles = StyleSheet.create({
   },
   scanBadgeText: {
     color: '#818CF8',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   inputWithIconRow: {
@@ -763,7 +927,7 @@ const styles = StyleSheet.create({
   },
   maxText: {
     color: '#818CF8',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   input: {
@@ -772,12 +936,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     color: '#FFFFFF',
-    fontSize: 16, // Enforced 16px to prevent mobile display zoom on focus
+    fontSize: 11,
     borderWidth: 1,
     borderColor: '#1D212E',
   },
   amountInput: {
-    fontSize: 22,
+    fontSize: 12,
     fontWeight: '800',
   },
   feeInfoRow: {
@@ -787,11 +951,11 @@ const styles = StyleSheet.create({
   },
   feeLabel: {
     color: '#64748B',
-    fontSize: 12,
+    fontSize: 10,
   },
   feeValue: {
     color: '#94A3B8',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   errorBox: {
@@ -803,7 +967,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: '#EF4444',
-    fontSize: 11,
+    fontSize: 10,
     textAlign: 'center',
   },
   sendBtn: {
@@ -821,7 +985,7 @@ const styles = StyleSheet.create({
   },
   sendBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   successBox: {
@@ -831,17 +995,17 @@ const styles = StyleSheet.create({
   },
   successTitle: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
     marginTop: 4,
   },
   successSub: {
     color: '#94A3B8',
-    fontSize: 13,
+    fontSize: 11,
   },
   sigText: {
     color: '#818CF8',
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: 'monospace',
     backgroundColor: '#12141F',
     paddingHorizontal: 12,
@@ -857,7 +1021,7 @@ const styles = StyleSheet.create({
   },
   explorerBtnText: {
     color: '#5B67F6',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   doneBtn: {
@@ -870,7 +1034,7 @@ const styles = StyleSheet.create({
   },
   doneBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   switchReceiveBtn: {
@@ -883,7 +1047,7 @@ const styles = StyleSheet.create({
   },
   switchReceiveText: {
     color: '#94A3B8',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   tokenPillRow: {
@@ -910,7 +1074,7 @@ const styles = StyleSheet.create({
   },
   tokenPillText: {
     color: '#94A3B8',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   tokenPillTextActive: {
@@ -930,7 +1094,7 @@ const styles = StyleSheet.create({
   },
   resolvedBlinkText: {
     color: '#10B981',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
 });

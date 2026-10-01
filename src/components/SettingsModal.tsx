@@ -8,6 +8,8 @@ import {
   ScrollView,
   Alert,
   Platform,
+  Switch,
+  ActivityIndicator,
 } from 'react-native';
 import {
   X,
@@ -21,6 +23,7 @@ import {
   Check,
   LogOut,
   AlertTriangle,
+  Fingerprint,
 } from 'lucide-react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { usePrivy } from '@privy-io/react-auth';
@@ -28,6 +31,7 @@ import { useExportWallet } from '@privy-io/react-auth/solana';
 import { UserProfileService } from '../services/userProfileService';
 import { ToastService } from '../services/toastService';
 import { WalletAccount } from '../services/walletProviderService';
+import { BiometricService } from '../services/biometricService';
 
 interface SettingsModalProps {
   visible: boolean;
@@ -40,11 +44,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   activeAccount,
 }) => {
-  const { colors, isDark, toggleTheme, theme } = useTheme();
+  const { colors, isDark, toggleTheme, theme, setTheme } = useTheme();
   const { logout, user } = usePrivy();
   const { exportWallet } = useExportWallet();
   const [isExporting, setIsExporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [bioEnabled, setBioEnabled] = useState<boolean>(() => BiometricService.isBiometricsEnabled());
+  const [isAuthenticatingBio, setIsAuthenticatingBio] = useState<boolean>(false);
+
+  const handleToggleBiometrics = async (targetState: boolean) => {
+    if (bioEnabled === targetState || isAuthenticatingBio) return;
+    setIsAuthenticatingBio(true);
+    try {
+      const res = await BiometricService.toggleBiometricsWithAuth(targetState);
+      if (res.success) {
+        setBioEnabled(targetState);
+        ToastService.success(targetState ? 'Biometric security enabled (ON)' : 'Biometric security disabled (OFF)');
+      } else {
+        ToastService.error(res.error || 'Biometric authentication failed or cancelled.');
+      }
+    } catch (err: any) {
+      ToastService.error(err?.message || 'Biometric verification failed.');
+    } finally {
+      setIsAuthenticatingBio(false);
+    }
+  };
 
   const handleExportKey = async () => {
     if (!activeAccount?.publicKey) {
@@ -106,45 +130,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </View>
 
           <ScrollView style={styles.scrollList} contentContainerStyle={styles.scrollContent}>
-            {/* Appearance Section */}
+            {/* Appearance & Theme Section */}
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>APPEARANCE & THEME</Text>
-              <View style={styles.themeToggleRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.themeOptionCard,
-                    { backgroundColor: colors.bgCardAlt, borderColor: colors.border },
-                    !isDark && [styles.themeOptionActive, { borderColor: colors.accent, backgroundColor: colors.accentSoft }],
-                  ]}
-                  onPress={() => {
-                    if (isDark) toggleTheme();
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Sun size={20} color={!isDark ? colors.accent : colors.textSecondary} />
-                  <Text style={[styles.themeOptionTitle, { color: !isDark ? colors.accent : colors.textPrimary }]}>
-                    Light Mode
-                  </Text>
-                  {!isDark && <Check size={14} color={colors.accent} />}
-                </TouchableOpacity>
+              <View style={[styles.networkCard, { backgroundColor: colors.bgCardAlt, borderColor: colors.border, justifyContent: 'space-between' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                  {isDark ? <Moon size={20} color={colors.accent} /> : <Sun size={20} color={colors.accent} />}
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.networkTitle, { color: colors.textPrimary }]}>Dark Mode</Text>
+                    <Text style={[styles.networkSub, { color: colors.textSecondary }]}>
+                      {isDark ? 'Dark theme active' : 'Light theme active'}
+                    </Text>
+                  </View>
+                </View>
+                <Switch
+                  value={isDark}
+                  onValueChange={(val) => setTheme(val ? 'dark' : 'light')}
+                  trackColor={{ false: '#334155', true: colors.accent }}
+                  thumbColor={isDark ? '#FFFFFF' : '#F4F3F4'}
+                />
+              </View>
+            </View>
 
-                <TouchableOpacity
-                  style={[
-                    styles.themeOptionCard,
-                    { backgroundColor: colors.bgCardAlt, borderColor: colors.border },
-                    isDark && [styles.themeOptionActive, { borderColor: colors.accent, backgroundColor: colors.accentSoft }],
-                  ]}
-                  onPress={() => {
-                    if (!isDark) toggleTheme();
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Moon size={20} color={isDark ? colors.accent : colors.textSecondary} />
-                  <Text style={[styles.themeOptionTitle, { color: isDark ? colors.accent : colors.textPrimary }]}>
-                    Dark Mode
-                  </Text>
-                  {isDark && <Check size={14} color={colors.accent} />}
-                </TouchableOpacity>
+            {/* Biometric Security Section */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>BIOMETRIC SECURITY</Text>
+              <View style={[styles.networkCard, { backgroundColor: colors.bgCardAlt, borderColor: colors.border, justifyContent: 'space-between' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                  <Fingerprint size={20} color={bioEnabled ? colors.accent : colors.textMuted} />
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={[styles.networkTitle, { color: colors.textPrimary }]}>Turn on Biometrics</Text>
+                      {isAuthenticatingBio && <ActivityIndicator size="small" color={colors.accent} />}
+                    </View>
+                    <Text style={[styles.networkSub, { color: colors.textSecondary }]}>
+                      {bioEnabled ? 'ON' : 'OFF'}
+                    </Text>
+                  </View>
+                </View>
+                <Switch
+                  value={bioEnabled}
+                  onValueChange={(val) => handleToggleBiometrics(val)}
+                  disabled={isAuthenticatingBio}
+                  trackColor={{ false: '#334155', true: colors.accent }}
+                  thumbColor={bioEnabled ? '#FFFFFF' : '#F4F3F4'}
+                />
               </View>
             </View>
 
@@ -185,7 +215,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </Text>
                     </View>
                   </View>
-                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#F59E0B' }}>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#F59E0B' }}>
                     {isExporting ? '...' : 'Export'}
                   </Text>
                 </TouchableOpacity>
@@ -258,8 +288,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
   },
   headerTitleRow: {
@@ -268,13 +298,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -283,35 +313,35 @@ const styles = StyleSheet.create({
     maxHeight: 500,
   },
   scrollContent: {
-    padding: 20,
-    gap: 20,
+    padding: 10,
+    gap: 6,
   },
   section: {
-    gap: 10,
+    gap: 5,
   },
   sectionTitle: {
-    fontSize: 11,
+    fontSize: 9.5,
     fontWeight: '800',
     letterSpacing: 0.6,
   },
   themeToggleRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 6,
   },
   themeOptionCard: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     borderWidth: 1.5,
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 10,
+    padding: 8,
   },
   themeOptionActive: {
     borderWidth: 1.5,
   },
   themeOptionTitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
     flex: 1,
   },
@@ -320,27 +350,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 10,
+    padding: 8,
   },
   networkTitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   networkSub: {
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: 9.5,
+    marginTop: 1,
   },
   activeDotBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     backgroundColor: 'rgba(16, 185, 129, 0.12)',
     borderColor: 'rgba(16, 185, 129, 0.3)',
     borderWidth: 1,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
   greenDot: {
     width: 6,
@@ -353,31 +383,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 10,
+    padding: 8,
   },
   exportTitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   exportSub: {
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: 9.5,
+    marginTop: 1,
   },
   deleteCardBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
     backgroundColor: 'rgba(239, 68, 68, 0.08)',
     borderColor: 'rgba(239, 68, 68, 0.3)',
     borderWidth: 1,
-    borderRadius: 14,
-    paddingVertical: 14,
+    borderRadius: 10,
+    paddingVertical: 8,
   },
   deleteCardBtnText: {
     color: '#EF4444',
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '700',
   },
   deleteConfirmCard: {
@@ -389,12 +419,12 @@ const styles = StyleSheet.create({
   },
   deleteConfirmTitle: {
     color: '#EF4444',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '800',
   },
   deleteConfirmSub: {
     color: '#EF4444',
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 16,
     marginBottom: 14,
     opacity: 0.9,
@@ -412,7 +442,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.2)',
   },
   cancelDeleteText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
   },
   confirmDeleteBtn: {
@@ -427,7 +457,7 @@ const styles = StyleSheet.create({
   },
   confirmDeleteText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
 });

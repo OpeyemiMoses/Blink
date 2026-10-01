@@ -74,9 +74,11 @@ export const PickUsernameModal: React.FC<PickUsernameModalProps> = ({
 
     debounceTimerRef.current = setTimeout(async () => {
       try {
-        const res = await BlinkIdService.isUsernameAvailable(cleanUser, publicKey);
+        const curProf = UserProfileService.getProfile();
+        const userEmail = curProf.linkedAccounts.email || curProf.linkedAccounts.google || '';
+        const res = await BlinkIdService.isUsernameAvailable(cleanUser, publicKey, userEmail);
         setIsChecking(false);
-        if (res.available) {
+        if (res.available || res.isOwner) {
           setIsAvailable(true);
           setErrorMsg(null);
           setSuggestedAlternative(null);
@@ -108,8 +110,11 @@ export const PickUsernameModal: React.FC<PickUsernameModalProps> = ({
       return;
     }
 
+    const curProf = UserProfileService.getProfile();
+    const userEmail = curProf.linkedAccounts.email || curProf.linkedAccounts.google || '';
+
     setIsChecking(true);
-    const check = await BlinkIdService.isUsernameAvailable(cleanUser, publicKey);
+    const check = await BlinkIdService.isUsernameAvailable(cleanUser, publicKey, userEmail);
     setIsChecking(false);
 
     if (!check.available && !check.isOwner) {
@@ -378,12 +383,12 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   title: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
     letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 17,
   },
   form: {
@@ -393,7 +398,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   label: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.6,
   },
@@ -408,12 +413,12 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     outlineStyle: 'none' as any,
   },
   helperText: {
-    fontSize: 11,
+    fontSize: 10,
     marginTop: 2,
   },
   statusBadge: {
@@ -427,12 +432,12 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   statusHint: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '500',
     marginTop: 3,
   },
   statusText: {
-    fontSize: 11.5,
+    fontSize: 10.5,
     fontWeight: '700',
   },
   suggestionChip: {
@@ -445,7 +450,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   suggestionText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   previewBadge: {
@@ -463,16 +468,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   previewName: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   previewUser: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
   },
   errorText: {
     color: '#EF4444',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   confirmBtn: {
@@ -490,7 +495,7 @@ const styles = StyleSheet.create({
   },
   confirmBtnText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '700',
   },
   mascotSection: {

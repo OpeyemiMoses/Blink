@@ -3,33 +3,27 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
+  ScrollView,
   TextInput,
-  Platform,
-  Image,
 } from 'react-native';
 import {
-  TrendingUp,
-  Search,
-  ArrowUpRight,
-  ArrowDownLeft,
-  ShieldCheck,
-  Shield,
-  Radio,
   Plus,
-  Sun,
-  Moon,
-  User,
-  HelpCircle,
-  BookOpen,
+  Search,
+  X,
+  ArrowDownLeft,
+  Printer,
+  Copy,
+  QrCode,
+  Radio,
+  CheckCircle2,
 } from 'lucide-react-native';
-import { BlinkBrandMark, CoffeeShopLogo, MusicianLogo, HackerHouseLogo, UsdcCoinLogo, SolanaCoinLogo } from '../components/BrandLogos';
-import { PhantomIcon, SolflareIcon, BackpackIcon, CoinbaseIcon } from '../components/WalletIcons';
-import { PrivyIcon } from '../components/PrivyIcon';
+import { BlinkBrandMark, CoffeeShopLogo, HackerHouseLogo } from '../components/BrandLogos';
 import { PhysicalBlink, PhysicalBlinkRegistry } from '../services/physicalBlinkRegistry';
+import { PrintableCardModal } from '../components/PrintableCardModal';
 import { WalletAccount } from '../services/walletProviderService';
 import { PriceService } from '../services/priceService';
+import { ToastService } from '../services/toastService';
 import { useTheme } from '../theme/ThemeContext';
 
 interface MarketsScreenProps {
@@ -42,7 +36,6 @@ interface MarketsScreenProps {
   onOpenDeposit: () => void;
   onSelectBlink: (blink: PhysicalBlink) => void;
   onOpenStudioCreate: () => void;
-  onOpenAbout?: () => void;
   hideBrandLogo?: boolean;
   refreshTrigger?: number;
   onOpenProfile?: () => void;
@@ -53,665 +46,658 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({
   activeAccount,
   balanceSol,
   balanceUsdc = 0,
-  network,
-  onToggleNetwork,
-  onOpenWalletConnect,
   onOpenDeposit,
   onSelectBlink,
   onOpenStudioCreate,
-  onOpenAbout,
-  hideBrandLogo = false,
   refreshTrigger = 0,
-  onOpenProfile,
-  avatarUrl,
 }) => {
-  const { colors, isDark, toggleTheme } = useTheme();
-  const [mainTab, setMainTab] = useState<'all' | 'taps' | 'merchants'>('all');
-  const [activeFilter, setActiveFilter] = useState<'trending' | 'completed' | 'volume'>('trending');
+  const { colors, isDark } = useTheme();
+  const [activeFilter, setActiveFilter] = useState<'none' | 'most_tapped' | 'top_settled'>('none');
   const [searchQuery, setSearchQuery] = useState('');
   const [solPrice, setSolPrice] = useState<number>(() => PriceService.getSolPriceSync());
+  const [printableBlink, setPrintableBlink] = useState<PhysicalBlink | null>(null);
+  const [, setPriceTick] = useState(0);
 
   React.useEffect(() => {
-    const unsub = PriceService.subscribe((p) => setSolPrice(p.sol));
+    const unsub = PriceService.subscribe((p) => {
+      setSolPrice(p.sol);
+      setPriceTick(prev => prev + 1);
+    });
     return () => unsub();
   }, []);
 
-  const [blinks, setBlinks] = useState<PhysicalBlink[]>(() => PhysicalBlinkRegistry.getGlobalBlinks());
+  const [allBlinks, setAllBlinks] = useState<PhysicalBlink[]>(() => PhysicalBlinkRegistry.loadRegistry(true));
+
+  const reloadBlinks = () => {
+    setAllBlinks([...PhysicalBlinkRegistry.loadRegistry(true)]);
+    PhysicalBlinkRegistry.syncFromCloud().then(() => {
+      setAllBlinks([...PhysicalBlinkRegistry.loadRegistry(true)]);
+    });
+  };
 
   React.useEffect(() => {
-    setBlinks(PhysicalBlinkRegistry.getGlobalBlinks());
-    PhysicalBlinkRegistry.syncFromCloud().then(cloudBlinks => {
-      if (cloudBlinks && cloudBlinks.length > 0) {
-        setBlinks(PhysicalBlinkRegistry.getGlobalBlinks());
-      }
-    });
+    reloadBlinks();
   }, [refreshTrigger]);
 
   React.useEffect(() => {
     const handleUpdate = (e?: any) => {
-      const detail = e?.detail;
-      if (detail && detail.id && !Array.isArray(detail)) {
-        setBlinks(prev =>
-          prev.map(b => (b.id.toLowerCase() === detail.id.toLowerCase() ? { ...b, ...detail } : b))
-        );
-      } else {
-        setBlinks(PhysicalBlinkRegistry.getGlobalBlinks());
+      if (e?.type === 'blink_deleted' || e?.type === 'tapblink_blink_deleted') {
+        const delId = (e.detail?.id || '').toLowerCase();
+        if (delId) {
+          setAllBlinks(prev => prev.filter(b => b.id.toLowerCase() !== delId));
+        }
+        return;
       }
+      reloadBlinks();
     };
 
     if (typeof window !== 'undefined') {
+      window.addEventListener('blink_created', handleUpdate);
+      window.addEventListener('blink_registered', handleUpdate);
+      window.addEventListener('tapblink_blink_registered', handleUpdate);
       window.addEventListener('blink_registry_updated', handleUpdate);
       window.addEventListener('blink_database_updated', handleUpdate);
       window.addEventListener('blink_updated', handleUpdate);
+      window.addEventListener('blink_deleted', handleUpdate);
+      window.addEventListener('tapblink_blink_deleted', handleUpdate);
       return () => {
+        window.removeEventListener('blink_created', handleUpdate);
+        window.removeEventListener('blink_registered', handleUpdate);
+        window.removeEventListener('tapblink_blink_registered', handleUpdate);
         window.removeEventListener('blink_registry_updated', handleUpdate);
         window.removeEventListener('blink_database_updated', handleUpdate);
         window.removeEventListener('blink_updated', handleUpdate);
+        window.removeEventListener('blink_deleted', handleUpdate);
+        window.removeEventListener('tapblink_blink_deleted', handleUpdate);
       };
     }
   }, []);
 
-  // Aggregate balance / display
-  const totalVolume = blinks.reduce((sum, b) => sum + b.stats.volumeUsdc, 0);
+  // Filter blinks strictly to those created by the current user / active wallet
+  const userAddress = (activeAccount?.publicKey || '').toLowerCase();
+  const myBlinks = allBlinks.filter((b) => {
+    if (!userAddress) return true; // Show blinks in preview
+    const recip = (b.recipient || '').toLowerCase();
+    const creator = ((b as any).creatorAddress || (b as any).owner || '').toLowerCase();
+    return recip === userAddress || creator === userAddress;
+  });
 
-  const getBlinkIcon = (id: string) => {
-    if (id.includes('coffee')) return <CoffeeShopLogo size={42} />;
-    if (id.includes('tip') || id.includes('music')) return <MusicianLogo size={42} />;
-    if (id.includes('pass') || id.includes('event')) return <HackerHouseLogo size={42} />;
-    return <BlinkBrandMark size={42} />;
+  // Calculate live USD balance
+  const totalUsdValue = (balanceSol * solPrice) + (balanceUsdc || 0);
+
+  const copyPaylink = (blink: PhysicalBlink, e?: any) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    const url = PhysicalBlinkRegistry.getPhysicalUrl(blink.id);
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(url);
+      ToastService.success(`Paylink copied: /t/${blink.id}`);
+    }
   };
 
-  const filteredBlinks = blinks
-    .filter((b) => {
-      const matchesSearch =
-        b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (b.verifiedDomain ? b.verifiedDomain.toLowerCase().includes(searchQuery.toLowerCase()) : false);
-      if (!matchesSearch) return false;
+  const getBlinkIcon = (blink: PhysicalBlink) => {
+    if (blink.imageUrl) {
+      return (
+        <Image
+          source={{ uri: blink.imageUrl }}
+          style={{ width: 36, height: 36, borderRadius: 10 }}
+          resizeMode="cover"
+        />
+      );
+    }
+    const id = blink.id.toLowerCase();
+    if (id.includes('coffee') || blink.actionType === 'payment') return <CoffeeShopLogo size={36} />;
+    if (id.includes('pass') || id.includes('event') || blink.actionType === 'voucher') return <HackerHouseLogo size={36} />;
+    return <BlinkBrandMark size={32} />;
+  };
 
-      if (mainTab === 'taps') return b.actionType === 'tip' || b.actionType === 'mint' || b.actionType === 'donation';
-      if (mainTab === 'merchants') return !!b.verifiedDomain || b.actionType === 'voucher';
-      return true;
+  const getActionTypeLabel = (type: string) => {
+    switch (type) {
+      case 'tip': return 'Tip Jar';
+      case 'payment': return 'Point of Sale';
+      case 'voucher': return 'Ticket / Pass';
+      case 'mint': return 'NFT Mint';
+      case 'donation': return 'Donation';
+      case 'checkin': return 'Check-In';
+      default: return 'Blink Action';
+    }
+  };
+
+  const filteredBlinks = myBlinks
+    .filter((b) => {
+      const q = searchQuery.toLowerCase().trim();
+      if (!q) return true;
+      return (
+        b.name.toLowerCase().includes(q) ||
+        b.id.toLowerCase().includes(q) ||
+        (b.description && b.description.toLowerCase().includes(q))
+      );
     })
     .sort((a, b) => {
-      if (activeFilter === 'trending') return b.stats.taps - a.stats.taps;
-      if (activeFilter === 'completed') return b.stats.completed - a.stats.completed;
-      if (activeFilter === 'volume') return b.stats.volumeUsdc - a.stats.volumeUsdc;
-      return 0;
+      if (activeFilter === 'top_settled') {
+        return (b.stats?.volumeUsdc || 0) - (a.stats?.volumeUsdc || 0) || (b.stats?.completed || 0) - (a.stats?.completed || 0);
+      }
+      if (activeFilter === 'most_tapped') {
+        return (b.stats?.taps || 0) - (a.stats?.taps || 0);
+      }
+      return b.createdAt - a.createdAt;
     });
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.bg }]} contentContainerStyle={styles.content}>
-
-
-      {/* Hero Balance & Action Buttons */}
-      <View style={styles.heroSection}>
-        <View>
-          <Text style={[styles.heroAmount, { color: colors.textPrimary }]}>
-            ${activeAccount ? PriceService.calculateTotalPortfolioUsdt(balanceSol || 0, balanceUsdc || 0, 0).toFixed(2) : '0.00'}
-          </Text>
-
-        </View>
+      {/* Balance Row */}
+      <View style={styles.balanceRow}>
+        <Text style={[styles.balanceText, { color: colors.textPrimary }]}>
+          ${(totalUsdValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </Text>
 
         <TouchableOpacity
           style={styles.depositBtn}
           onPress={onOpenDeposit}
           activeOpacity={0.8}
-          accessibilityLabel="Deposit funds"
         >
-          <ArrowDownLeft size={15} color="#FFFFFF" strokeWidth={2.5} />
+          <ArrowDownLeft size={15} color="#FFFFFF" strokeWidth={2.4} style={{ marginRight: 6 }} />
           <Text style={styles.depositBtnText}>Deposit</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Horizontal Carousel: "Top physical blinks" */}
-      {blinks.length > 0 && (
-        <View style={styles.carouselSection}>
-          <View style={styles.sectionHeaderRow}>
-            <TrendingUp size={14} color={colors.textSecondary} />
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Top Physical Blinks</Text>
-          </View>
-
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselScroll}>
-            {blinks.map((blink) => (
-              <TouchableOpacity
-                key={blink.id}
-                style={[styles.moverCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-                onPress={() => onSelectBlink(blink)}
-                activeOpacity={0.8}
-              >
-                <View style={styles.moverCardTop}>
-                  {getBlinkIcon(blink.id)}
-                  <Text style={[styles.moverSymbol, { color: colors.textPrimary }]}>
-                    {blink.id.split('-')[0].toUpperCase()}
-                  </Text>
-                </View>
-                <Text style={[styles.moverGain, { color: colors.accent }]}>
-                  {blink.token === 'SOL' ? `${blink.amount} SOL` : (blink.token === 'SKR' ? `${blink.amount} SKR` : `$${blink.amount.toFixed(2)} USDC`)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+      {/* Section Header: All Blinks (no physical taps / merchants tabs) */}
+      <View style={styles.sectionTabRow}>
+        <View style={styles.activeTabIndicator}>
+          <Text style={[styles.activeTabText, { color: colors.textPrimary }]}>All Blinks</Text>
+          <View style={styles.activeTabUnderline} />
         </View>
-      )}
-
-      {/* Segmented Main Navigation Tabs (All | Physical Taps | Merchants) */}
-      <View style={[styles.segmentNav, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          style={styles.segmentTab}
-          onPress={() => setMainTab('all')}
-        >
-          <Text style={[styles.segmentLabel, { color: colors.textMuted }, mainTab === 'all' && [styles.segmentLabelActive, { color: colors.textPrimary }]]}>
-            All Blinks
-          </Text>
-          {mainTab === 'all' && <View style={[styles.segmentUnderline, { backgroundColor: colors.accent }]} />}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.segmentTab}
-          onPress={() => setMainTab('taps')}
-        >
-          <Text style={[styles.segmentLabel, { color: colors.textMuted }, mainTab === 'taps' && [styles.segmentLabelActive, { color: colors.textPrimary }]]}>
-            Physical Taps
-          </Text>
-          {mainTab === 'taps' && <View style={[styles.segmentUnderline, { backgroundColor: colors.accent }]} />}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.segmentTab}
-          onPress={() => setMainTab('merchants')}
-        >
-          <Text style={[styles.segmentLabel, { color: colors.textMuted }, mainTab === 'merchants' && [styles.segmentLabelActive, { color: colors.textPrimary }]]}>
-            Merchants
-          </Text>
-          {mainTab === 'merchants' && <View style={[styles.segmentUnderline, { backgroundColor: colors.accent }]} />}
-        </TouchableOpacity>
       </View>
 
-      {/* Search & Category Pills Horizontal Scroll Container */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterBarScroll}
-        style={styles.filterBarWrapper}
-      >
-        <View style={[styles.searchPillBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-          <Search size={14} color={colors.textMuted} style={{ marginLeft: 10 }} />
+      {/* Search and Filters Section */}
+      <View style={styles.searchContainer}>
+        {/* Full-width Search Input with overflow protection */}
+        <View style={[styles.searchBox, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <Search size={14} color={colors.textMuted} style={{ marginRight: 8, flexShrink: 0 }} />
           <TextInput
             style={[styles.searchInput, { color: colors.textPrimary }]}
             placeholder="Search by name, ID or domain..."
             placeholderTextColor={colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
           />
+          {searchQuery ? (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={{ padding: 4 }}
+            >
+              <X size={14} color={colors.textMuted} />
+            </TouchableOpacity>
+          ) : null}
         </View>
 
-        {(['trending', 'completed', 'volume'] as const).map((filter) => (
+        {/* Scrollable Category Filter Pills Row (Never overlaps search input) */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterPillsRow}
+          style={styles.filterScrollView}
+        >
           <TouchableOpacity
-            key={filter}
             style={[
               styles.filterPill,
-              { backgroundColor: colors.bgCard, borderColor: colors.border },
-              activeFilter === filter && { backgroundColor: isDark ? '#1E2333' : '#E0E7FF', borderColor: colors.accent }
+              { borderColor: activeFilter === 'none' ? '#4F46E5' : colors.border },
+              activeFilter === 'none' && styles.filterPillActive,
             ]}
-            onPress={() => setActiveFilter(filter)}
-            activeOpacity={0.8}
+            onPress={() => setActiveFilter('none')}
+            activeOpacity={0.7}
           >
-            <Text style={[
-              styles.filterPillText,
-              { color: colors.textMuted },
-              activeFilter === filter && { color: isDark ? '#FFFFFF' : colors.accent, fontWeight: '800' }
-            ]}>
-              {filter === 'trending' ? 'Most Taps' : filter === 'completed' ? 'Top Settled' : 'High Volume'}
+            <Text
+              style={[
+                styles.filterPillText,
+                { color: activeFilter === 'none' ? '#4F46E5' : colors.textSecondary },
+              ]}
+            >
+              All
             </Text>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
 
-      {/* Rich List Items with real data */}
-      <View style={styles.listSection}>
-        {filteredBlinks.length > 0 ? (
-          filteredBlinks.map((blink) => (
+          <TouchableOpacity
+            style={[
+              styles.filterPill,
+              { borderColor: activeFilter === 'most_tapped' ? '#4F46E5' : colors.border },
+              activeFilter === 'most_tapped' && styles.filterPillActive,
+            ]}
+            onPress={() => setActiveFilter(activeFilter === 'most_tapped' ? 'none' : 'most_tapped')}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.filterPillText,
+                { color: activeFilter === 'most_tapped' ? '#4F46E5' : colors.textSecondary },
+              ]}
+            >
+              Most Taps
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.filterPill,
+              { borderColor: activeFilter === 'top_settled' ? '#4F46E5' : colors.border },
+              activeFilter === 'top_settled' && styles.filterPillActive,
+            ]}
+            onPress={() => setActiveFilter(activeFilter === 'top_settled' ? 'none' : 'top_settled')}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.filterPillText,
+                { color: activeFilter === 'top_settled' ? '#4F46E5' : colors.textSecondary },
+              ]}
+            >
+              Top Settled
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+
+      {/* Main Content Area */}
+      {filteredBlinks.length === 0 ? (
+        <View style={[styles.dashedEmptyCard, { borderColor: isDark ? 'rgba(91,103,246,0.3)' : '#CBD5E1', backgroundColor: colors.bgCard }]}>
+          <View style={[styles.emptyLogoWrap, { backgroundColor: 'rgba(91,103,246,0.1)', borderColor: 'rgba(91,103,246,0.25)', width: 80, height: 80, borderRadius: 40, borderWidth: 2 }]}>
+            <BlinkBrandMark size={40} />
+          </View>
+
+          <Text style={[styles.emptyCardTitle, { color: colors.textPrimary, fontSize: 18, fontWeight: '900' }]}>
+            Create your first Blink
+          </Text>
+
+          <Text style={[styles.emptyCardSub, { color: colors.textSecondary }]}>
+            A Blink is your on-chain storefront. Set a price, choose a token, and share a link or NFC tag — anyone can tap to pay instantly.
+          </Text>
+
+          <TouchableOpacity
+            style={styles.createPhysicalBtn}
+            onPress={onOpenStudioCreate}
+            activeOpacity={0.8}
+          >
+            <Plus size={16} color="#FFFFFF" strokeWidth={2.4} style={{ marginRight: 6 }} />
+            <Text style={styles.createPhysicalBtnText}>Create Your First Blink</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        /* List of Created Physical Blinks */
+        <View style={styles.blinksList}>
+          {filteredBlinks.map((blink) => (
             <TouchableOpacity
               key={blink.id}
-              style={styles.listItem}
+              style={[styles.blinkCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
               onPress={() => onSelectBlink(blink)}
-              activeOpacity={0.7}
+              activeOpacity={0.85}
             >
-              {/* Left Circular Avatar */}
-              <View style={styles.itemAvatar}>
-                {getBlinkIcon(blink.id)}
+              <View style={styles.cardTopRow}>
+                <View style={styles.cardBrandWrap}>
+                  {getBlinkIcon(blink)}
+                </View>
+
+                <View style={{ flex: 1, marginRight: 10 }}>
+                  <Text style={[styles.blinkCardName, { color: colors.textPrimary }]} numberOfLines={1}>
+                    {blink.name}
+                  </Text>
+                  <Text style={[styles.blinkCardId, { color: colors.textSecondary }]} numberOfLines={1}>
+                    ID: @{blink.id}
+                  </Text>
+                </View>
+
+                <View style={[styles.priceTag, { alignItems: 'flex-end' }]}>
+                  <Text style={[styles.priceTagValue, { color: colors.accent }]}>
+                    {PriceService.getLiveBlinkDetails(blink).displayString}
+                  </Text>
+                  {blink.token === 'SKR' && (
+                    <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 4, marginTop: 2 }}>
+                      <Text style={{ fontSize: 9, fontWeight: '800', color: '#10B981' }}>10% OFF</Text>
+                    </View>
+                  )}
+                </View>
               </View>
 
-              {/* Middle Info */}
-              <View style={styles.itemMiddle}>
-                <Text style={[styles.itemTitle, { color: colors.textPrimary }]}>{blink.name}</Text>
-                <Text style={[styles.itemSub, { color: colors.textSecondary }]}>
-                  ${blink.stats.volumeUsdc.toLocaleString('en-US', { minimumFractionDigits: 0 })} vol.
-                  {blink.verifiedDomain ? ` • ${blink.verifiedDomain}` : ''}
+              {blink.description ? (
+                <Text style={[styles.blinkCardDesc, { color: colors.textMuted }]} numberOfLines={2}>
+                  {blink.description}
                 </Text>
-              </View>
+              ) : null}
 
-              {/* Right Value & Stats */}
-              <View style={styles.itemRight}>
-                <Text style={[styles.itemPrice, { color: colors.textPrimary }]}>
-                  {blink.token === 'SOL' ? `${blink.amount} SOL` : (blink.token === 'SKR' ? `${blink.amount} SKR` : `$${blink.amount.toFixed(2)} USDC`)}
-                </Text>
-                <Text style={styles.itemGain}>
-                  {blink.stats.taps} taps • {blink.stats.completed} settled
-                </Text>
+              {/* Card Footer / Stats & Actions */}
+              <View style={[styles.cardFooterRow, { borderTopColor: colors.border }]}>
+                <View style={styles.cardStatsLeft}>
+                  <View style={styles.badgeItem}>
+                    <Radio size={10} color={colors.accent} />
+                    <Text style={[styles.badgeText, { color: colors.textSecondary }]}>
+                      {blink.stats?.taps || 0} taps
+                    </Text>
+                  </View>
+                  <View style={styles.badgeItem}>
+                    <CheckCircle2 size={10} color="#10B981" />
+                    <Text style={[styles.badgeText, { color: '#10B981' }]}>
+                      ${(blink.stats?.volumeUsdc || 0).toFixed(2)}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.cardActionsRight}>
+                  <TouchableOpacity
+                    style={[styles.actionBtnIcon, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
+                    onPress={(e) => {
+                      if (e && e.stopPropagation) e.stopPropagation();
+                      setPrintableBlink(blink);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Printer size={11} color={colors.textSecondary} />
+                    <Text style={[styles.actionBtnText, { color: colors.textSecondary }]}>Stand</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionBtnIcon, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
+                    onPress={(e) => copyPaylink(blink, e)}
+                    activeOpacity={0.7}
+                  >
+                    <Copy size={11} color={colors.textSecondary} />
+                    <Text style={[styles.actionBtnText, { color: colors.textSecondary }]}>Link</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionBtnPrimary, { backgroundColor: '#4F46E5' }]}
+                    onPress={() => onSelectBlink(blink)}
+                    activeOpacity={0.8}
+                  >
+                    <QrCode size={11} color="#FFFFFF" />
+                    <Text style={styles.actionBtnPrimaryText}>Accept</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </TouchableOpacity>
-          ))
-        ) : (
-          <View style={[styles.emptyBox, { borderColor: colors.border, backgroundColor: colors.bgCard }]}>
-            <BlinkBrandMark size={48} />
-            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-              {blinks.length === 0 ? 'No Physical Blinks Yet' : 'No Matching Blinks Found'}
-            </Text>
-            <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
-              {blinks.length === 0
-                ? 'Your Blink store and registry are clean and ready. Tap below to create your first on-chain Physical Blink!'
-                : 'Try adjusting your search query or filter settings.'}
-            </Text>
-            {blinks.length === 0 && (
-              <TouchableOpacity
-                style={[styles.emptyCreateBtn, { backgroundColor: colors.accent }]}
-                onPress={onOpenStudioCreate}
-                activeOpacity={0.8}
-              >
-                <Plus size={16} color="#FFFFFF" strokeWidth={2.5} />
-                <Text style={styles.emptyCreateBtnText}>Create Physical Blink</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-      </View>
+          ))}
+
+          {/* Create More Button */}
+          <TouchableOpacity
+            style={styles.createPhysicalBtnFloating}
+            onPress={onOpenStudioCreate}
+            activeOpacity={0.8}
+          >
+            <Plus size={15} color="#FFFFFF" strokeWidth={2.4} style={{ marginRight: 6 }} />
+            <Text style={styles.createPhysicalBtnText}>Create Another Physical Blink</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Printable Countertop Stand Modal */}
+      {printableBlink && (
+        <PrintableCardModal
+          blink={printableBlink}
+          visible={Boolean(printableBlink)}
+          onClose={() => setPrintableBlink(null)}
+        />
+      )}
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  themeToggleBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   container: {
     flex: 1,
   },
   content: {
-    paddingHorizontal: 6,
-    paddingTop: 8,
-    paddingBottom: 110, // Avoid overlap with floating bottom dock
+    padding: 16,
+    paddingBottom: 90,
   },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-    marginTop: 4,
-  },
-  topBarRightOnly: {
-    justifyContent: 'flex-end',
-  },
-  topBarLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  topBarRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  helpPillBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  helpPillText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  docsBannerCard: {
+  balanceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginBottom: 16,
-    gap: 10,
+    paddingVertical: 10,
+    marginBottom: 8,
   },
-  docsBannerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-  },
-  docsBannerIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  docsBannerTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  docsBannerDesc: {
-    fontSize: 11,
-    marginTop: 2,
-    lineHeight: 15,
-  },
-  docsBannerBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  docsBannerBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  walletPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#131620',
-    borderWidth: 1,
-    borderColor: '#242938',
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 18,
-  },
-  walletPillText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  walletPillConnect: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  heroSection: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  heroAmount: {
-    fontSize: 40,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: -1.2,
-  },
-  gainRow: {
-    marginTop: 2,
-  },
-  gainText: {
-    color: '#10B981', // Clean Emerald Green from screenshot
-    fontSize: 13,
-    fontWeight: '700',
+  balanceText: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   depositBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#5B67F6',
-    borderRadius: 18,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    shadowColor: '#5B67F6',
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    backgroundColor: '#4F46E5',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 22,
+    shadowColor: '#4F46E5',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
   depositBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: -0.2,
   },
-  carouselSection: {
-    marginBottom: 22,
-  },
-  sectionHeaderRow: {
+  sectionTabRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  carouselScroll: {
-    gap: 10,
-    paddingRight: 16,
-  },
-  moverCard: {
-    backgroundColor: '#0F1118',
-    borderWidth: 1,
-    borderColor: '#1D212E',
-    borderRadius: 16,
-    padding: 12,
-    width: 125,
-  },
-  moverCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  moverSymbol: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  moverGain: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#10B981',
-  },
-  segmentNav: {
-    flexDirection: 'row',
+    marginBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#171A24',
-    marginBottom: 16,
+    borderBottomColor: 'rgba(148, 163, 184, 0.15)',
+    paddingBottom: 4,
   },
-  segmentTab: {
-    paddingVertical: 10,
-    marginRight: 24,
+  activeTabIndicator: {
     position: 'relative',
+    paddingBottom: 8,
   },
-  segmentLabel: {
-    fontSize: 15,
+  activeTabText: {
+    fontSize: 13,
     fontWeight: '700',
-    color: '#64748B',
   },
-  segmentLabelActive: {
-    color: '#FFFFFF',
-  },
-  segmentUnderline: {
+  activeTabUnderline: {
     position: 'absolute',
-    bottom: -1,
+    bottom: 0,
     left: 0,
     right: 0,
     height: 2.5,
-    backgroundColor: '#5B67F6',
+    backgroundColor: '#4F46E5',
     borderRadius: 2,
   },
-  filterBarWrapper: {
-    marginBottom: 18,
-    marginHorizontal: -6,
+  searchContainer: {
+    width: '100%',
+    marginBottom: 16,
   },
-  filterBarScroll: {
+  searchBox: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 6,
-  },
-  searchPillBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 22,
     borderWidth: 1,
-    borderRadius: 20,
-    height: 36,
-    width: 210,
-    paddingRight: 6,
+    overflow: 'hidden',
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
-    paddingVertical: 4,
-    paddingHorizontal: 6,
-  },
-  filterPill: {
-    backgroundColor: '#0F1118',
-    borderWidth: 1,
-    borderColor: '#1D212E',
-    borderRadius: 20,
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-  },
-  filterPillActive: {
-    backgroundColor: '#1E2333',
-    borderColor: '#2F374F',
-  },
-  filterPillText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#64748B',
-  },
-  filterPillTextActive: {
-    color: '#FFFFFF',
-  },
-  listSection: {
-    gap: 14,
-  },
-  listItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-  },
-  itemAvatar: {
-    marginRight: 12,
-  },
-  itemMiddle: {
-    flex: 1,
-  },
-  itemTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 2,
-  },
-  itemSub: {
-    fontSize: 11,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  itemRight: {
-    alignItems: 'flex-end',
-  },
-  itemPrice: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    marginBottom: 2,
-  },
-  itemGain: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#10B981',
-  },
-  profileAvatarBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 2,
-  },
-  avatarImg: {
+    minWidth: 0,
     width: '100%',
-    height: '100%',
-    borderRadius: 16,
-  },
-  avatarFallback: {
+    fontSize: 12,
+    padding: 0,
+    margin: 0,
+    outlineStyle: 'none',
+  } as any,
+  filterScrollView: {
+    marginTop: 10,
     width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  heroActionBtns: {
+  filterPillsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    paddingRight: 16,
   },
-  createBlinkBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  createBlinkBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  emptyBox: {
+  filterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 18,
     borderWidth: 1,
+    backgroundColor: 'transparent',
+  },
+  filterPillActive: {
+    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+  },
+  filterPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  dashedEmptyCard: {
+    borderWidth: 1.5,
     borderStyle: 'dashed',
     borderRadius: 20,
-    padding: 32,
+    paddingVertical: 36,
+    paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 12,
+    marginTop: 8,
   },
-  emptyTitle: {
-    fontSize: 18,
+  emptyLogoWrap: {
+    marginBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyCardTitle: {
+    fontSize: 16,
     fontWeight: '800',
-    marginTop: 16,
     marginBottom: 8,
     textAlign: 'center',
   },
-  emptySub: {
-    fontSize: 13,
-    lineHeight: 19,
+  emptyCardSub: {
+    fontSize: 11,
     textAlign: 'center',
-    maxWidth: 320,
+    maxWidth: 290,
+    lineHeight: 16,
     marginBottom: 20,
   },
-  emptyCreateBtn: {
+  createPhysicalBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4F46E5',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 22,
+    shadowColor: '#4F46E5',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  createPhysicalBtnFloating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4F46E5',
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 20,
+    marginTop: 8,
+    alignSelf: 'center',
+  },
+  createPhysicalBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  blinksList: {
+    gap: 10,
+  },
+  blinkCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  cardBrandWrap: {
+    marginRight: 10,
+  },
+  blinkCardName: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  blinkCardId: {
+    fontSize: 10,
+  },
+  priceTag: {
+    alignItems: 'flex-end',
+  },
+  priceTagValue: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  blinkCardDesc: {
+    fontSize: 10,
+    lineHeight: 14,
+    marginBottom: 10,
+  },
+  cardFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  cardStatsLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 22,
-    borderRadius: 14,
   },
-  emptyCreateBtnText: {
+  badgeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  cardActionsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  actionBtnIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 7,
+    borderWidth: 1,
+    gap: 4,
+  },
+  actionBtnText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  actionBtnPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 7,
+    gap: 4,
+  },
+  actionBtnPrimaryText: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

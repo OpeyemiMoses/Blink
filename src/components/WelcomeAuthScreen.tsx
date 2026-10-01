@@ -286,21 +286,6 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
             Explore Dashboard as Guest →
           </Text>
         </TouchableOpacity>
-
-        {onOpenAbout && (
-          <>
-            <Text style={{ color: colors.textMuted }}>•</Text>
-            <TouchableOpacity
-              style={styles.guestLink}
-              onPress={onOpenAbout}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.guestLinkText, { color: colors.accent, fontWeight: '700' }]}>
-                Help & Docs ↗
-              </Text>
-            </TouchableOpacity>
-          </>
-        )}
       </View>
     </ScrollView>
   );
@@ -329,12 +314,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   brandTitle: {
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: '900',
     letterSpacing: 2,
   },
   brandSubtitle: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
     marginTop: 1,
   },
@@ -354,7 +339,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
   },
   devnetText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   heroSection: {
@@ -372,18 +357,18 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   pillBadgeText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.8,
   },
   heroHeading: {
-    fontSize: 32,
+    fontSize: 21,
     fontWeight: '900',
     letterSpacing: -0.8,
     lineHeight: 38,
   },
   heroSubtext: {
-    fontSize: 14,
+    fontSize: 12,
     lineHeight: 22,
     fontWeight: '500',
   },
@@ -403,7 +388,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   authCardTitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
@@ -422,7 +407,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   authCardExplainer: {
-    fontSize: 13,
+    fontSize: 11,
     lineHeight: 18,
   },
   primaryPrivyBtn: {
@@ -441,7 +426,7 @@ const styles = StyleSheet.create({
   },
   primaryPrivyBtnText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.3,
   },
@@ -456,7 +441,7 @@ const styles = StyleSheet.create({
     height: 1,
   },
   dividerText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
   },
   socialGrid: {
@@ -476,7 +461,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   socialPillText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   mwaButton: {
@@ -490,7 +475,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   mwaButtonText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   featuresList: {
@@ -512,12 +497,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   featureTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     marginBottom: 2,
   },
   featureDesc: {
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 16,
   },
   guestLink: {
@@ -526,7 +511,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   guestLinkText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
     textDecorationLine: 'underline',
   },
@@ -537,13 +522,13 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   authNoticeText: {
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 16,
     fontWeight: '600',
     textAlign: 'center',
   },
   loginTipText: {
-    fontSize: 11,
+    fontSize: 10,
     lineHeight: 16,
     textAlign: 'center',
     marginTop: 12,

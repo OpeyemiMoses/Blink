@@ -145,18 +145,18 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   tierBadgeName: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
   },
   tierTitle: {
     color: '#FFFFFF',
-    fontSize: 24,
+    fontSize: 17,
     fontWeight: '900',
     marginBottom: 6,
   },
   tierSubtitle: {
     color: '#8E9BB0',
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 17,
     marginBottom: 16,
   },
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
   },
   tierStatValue: {
     color: '#00F0FF',
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '800',
   },
   purpleText: {
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
   },
   stakeBtnText: {
     color: '#C084FC',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '800',
   },
   sectionHeader: {
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '800',
   },
   tiersGrid: {
@@ -226,18 +226,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 240, 255, 0.05)',
   },
   tierCardBadge: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '800',
     marginBottom: 2,
   },
   tierCardReq: {
     color: '#8E9BB0',
-    fontSize: 11,
+    fontSize: 10,
     marginBottom: 4,
   },
   tierCardBenefit: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   beaconCard: {
@@ -261,25 +261,25 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   beaconIcon: {
-    fontSize: 22,
+    fontSize: 15,
   },
   beaconInfo: {
     flex: 1,
   },
   beaconTitle: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
     marginBottom: 2,
   },
   beaconDistance: {
     color: '#8E9BB0',
-    fontSize: 11,
+    fontSize: 10,
     marginBottom: 2,
   },
   beaconReward: {
     color: '#14F195',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   beaconClaimBtn: {
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   },
   beaconClaimText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '800',
   },
 });

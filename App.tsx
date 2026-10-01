@@ -20,6 +20,7 @@ import { SavedBlinksScreen } from './src/screens/SavedBlinksScreen';
 import { PocketScreen } from './src/screens/PocketScreen';
 import { TapScanScreen } from './src/screens/TapScanScreen';
 import { StudioScreen } from './src/screens/StudioScreen';
+import { BlinkStudioScreen } from './src/screens/BlinkStudioScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { NotificationsScreen } from './src/screens/NotificationsScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -34,12 +35,22 @@ import { SendModal } from './src/components/SendModal';
 import { ReceiveModal } from './src/components/ReceiveModal';
 import { SeedVaultModal } from './src/components/SeedVaultModal';
 import { ReceiptModal } from './src/components/ReceiptModal';
-import { AboutBlinkModal } from './src/components/AboutBlinkModal';
-import { NotificationsModal } from './src/components/NotificationsModal';
-import { SettingsModal } from './src/components/SettingsModal';
 import { NotificationService } from './src/services/notificationService';
+import { SaleWatcherService } from './src/services/saleWatcherService';
+
+// Sleep/wake & unhandled rejection safety guards to prevent idle blank screens
+if (typeof window !== 'undefined') {
+  window.addEventListener('unhandledrejection', (event) => {
+    console.warn('[Sleep/Wake Recovery] Caught unhandled rejection:', event.reason);
+    if (event && event.preventDefault) event.preventDefault();
+  });
+  window.addEventListener('error', (event) => {
+    console.warn('[Sleep/Wake Recovery] Caught window error:', event.error || event.message);
+  });
+}
 import { LaunchSplashScreen } from './src/components/LaunchSplashScreen';
 import { WelcomeAuthScreen } from './src/components/WelcomeAuthScreen';
+import { OnboardingScreen } from './src/components/OnboardingScreen';
 
 import { SolanaService } from './src/services/solanaService';
 import { WalletProviderService, WalletAccount } from './src/services/walletProviderService';
@@ -47,11 +58,13 @@ import { BlinkEngine } from './src/services/blinkEngine';
 import { SolanaMobileStackService } from './src/services/solanaMobileStackService';
 import { UserProfileService, UserProfile } from './src/services/userProfileService';
 import { BlinkIdService } from './src/services/blinkIdService';
-import { PhysicalBlink } from './src/services/physicalBlinkRegistry';
+import { PhysicalBlink, PhysicalBlinkRegistry } from './src/services/physicalBlinkRegistry';
+import { ReceiptService } from './src/services/receiptService';
 import { LinkedAction, SolanaActionMetadata, TransactionReceipt } from './src/types';
 import { Toast } from './src/components/Toast';
 import { ToastService } from './src/services/toastService';
 import { PickUsernameModal } from './src/components/PickUsernameModal';
+import { PushNotificationService } from './src/services/pushNotificationService';
 
 const solanaConnectors = toSolanaWalletConnectors();
 
@@ -73,10 +86,21 @@ function BlinkMainApp() {
   const [network] = useState<'devnet'>('devnet');
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
-  // Splash Screen & Guest mode state
+  // Splash Screen, Guest mode & Onboarding state
   const [showSplash, setShowSplash] = useState(true);
   const [isGuestMode, setIsGuestMode] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(() => UserProfileService.getProfile());
+
+  // Mark onboarding complete & persist
+  const finishOnboarding = () => {
+    setShowOnboarding(false);
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('blink_onboarding_done', '1');
+      }
+    } catch {}
+  };
 
   useEffect(() => {
     const handleProfileUpdate = () => {
@@ -86,6 +110,19 @@ function BlinkMainApp() {
       window.addEventListener('blink_profile_updated', handleProfileUpdate);
       return () => window.removeEventListener('blink_profile_updated', handleProfileUpdate);
     }
+  }, []);
+
+  // Initialize push notifications on app mount
+  useEffect(() => {
+    PushNotificationService.initialize().catch(() => {});
+    // Listen for notification taps (e.g. navigate to Pocket tab)
+    const unsub = PushNotificationService.addResponseListener((response) => {
+      const data = response?.notification?.request?.content?.data;
+      if (data?.type === 'blink_sale' || data?.type === 'payment_received') {
+        setCurrentTab('pocket');
+      }
+    });
+    return () => { if (unsub) unsub(); };
   }, []);
 
   // Prevent mobile browser auto-zoom when tapping text inputs
@@ -138,7 +175,6 @@ function BlinkMainApp() {
   }, [selectedDetailBlink?.id]);
 
   // Modals
-  const [aboutModalVisible, setAboutModalVisible] = useState(false);
   const [sendModalVisible, setSendModalVisible] = useState(false);
   const [receiveModalVisible, setReceiveModalVisible] = useState(false);
   const [seedVaultModalVisible, setSeedVaultModalVisible] = useState(false);
@@ -154,8 +190,12 @@ function BlinkMainApp() {
       setUnreadNotificationsCount(NotificationService.getUnreadCount());
     };
     if (typeof window !== 'undefined') {
+      window.addEventListener('blink_notifications_updated', handleNotifsUpdate);
       window.addEventListener('tapblink_notifications_updated', handleNotifsUpdate);
-      return () => window.removeEventListener('tapblink_notifications_updated', handleNotifsUpdate);
+      return () => {
+        window.removeEventListener('blink_notifications_updated', handleNotifsUpdate);
+        window.removeEventListener('tapblink_notifications_updated', handleNotifsUpdate);
+      };
     }
   }, []);
 
@@ -211,6 +251,145 @@ function BlinkMainApp() {
   }, [user?.id]);
 
   const effectiveAddress = solanaAddress || fallbackSolanaAddress;
+
+  // Global background poller for incoming cloud receipts and global Blink stats sync
+  const initialSyncDoneRef = React.useRef(false);
+  const syncedSigsRef = React.useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!effectiveAddress) return;
+    const syncCloudData = async () => {
+      try {
+        await PhysicalBlinkRegistry.syncFromCloud().catch(() => {});
+
+        const [newReceipts, enrichedTxs] = await Promise.all([
+          ReceiptService.fetchCloudReceiptsForAddress(effectiveAddress).catch(() => []),
+          SolanaService.getEnrichedRecentTransactions(effectiveAddress, 25).catch(() => []),
+        ]);
+
+        const existingNotifs = NotificationService.getNotifications();
+        const notifSigSet = new Set(existingNotifs.map((n) => n.signature).filter(Boolean));
+        let hasNewIncoming = false;
+
+        if (initialSyncDoneRef.current) {
+          if (Array.isArray(newReceipts) && newReceipts.length > 0) {
+            for (const rcpt of newReceipts) {
+              const recip = (rcpt.recipientAddress || '').toLowerCase().trim();
+              const recipNoAt = recip.replace(/^@+/, '');
+              const myEffAddr = (effectiveAddress || '').toLowerCase().trim();
+              const myUserClean = (userProfile?.username || '').toLowerCase().trim().replace(/^@+/, '');
+              const myBlinkClean = (userProfile?.blinkId || '').toLowerCase().trim().replace(/^@+/, '');
+
+              const isForMe = recip === myEffAddr || recipNoAt === myEffAddr ||
+                              (myUserClean && (recip === myUserClean || recipNoAt === myUserClean)) ||
+                              (myBlinkClean && (recip === myBlinkClean || recipNoAt === myBlinkClean));
+
+              if (
+                rcpt.signature &&
+                !syncedSigsRef.current.has(rcpt.signature) &&
+                isForMe &&
+                !notifSigSet.has(rcpt.signature)
+              ) {
+                hasNewIncoming = true;
+                notifSigSet.add(rcpt.signature);
+                syncedSigsRef.current.add(rcpt.signature);
+
+                // STRICT: Only genuine Blink sales carrying a blinkId trigger Blink Sale notifications.
+                // Standard P2P transfers are strictly tagged as Payment Received.
+                let isRealBlinkSale = false;
+                let blinkTitle = '';
+
+                if (rcpt.blinkId) {
+                  isRealBlinkSale = true;
+                  const foundBlink = PhysicalBlinkRegistry.getBlinkById(rcpt.blinkId);
+                  blinkTitle = foundBlink?.name || rcpt.blinkTitle || 'Blink Sale';
+                }
+
+                if (isRealBlinkSale) {
+                  NotificationService.notifyBlinkPaid(
+                    blinkTitle || 'Blink Sale',
+                    rcpt.amount,
+                    rcpt.token,
+                    rcpt.payerAddress || 'Solana Wallet',
+                    rcpt.signature,
+                    rcpt.blinkId
+                  );
+                } else {
+                  NotificationService.notifyPaymentReceived(
+                    rcpt.amount,
+                    rcpt.token,
+                    rcpt.payerAddress || 'Solana Wallet',
+                    rcpt.signature
+                  );
+                }
+              }
+            }
+          }
+
+          if (Array.isArray(enrichedTxs) && enrichedTxs.length > 0) {
+            for (const tx of enrichedTxs) {
+              if (
+                tx.signature &&
+                !syncedSigsRef.current.has(tx.signature) &&
+                tx.direction === 'receive' &&
+                !tx.err &&
+                !notifSigSet.has(tx.signature)
+              ) {
+                const amt = tx.token === 'SOL' ? (tx.amountSol || 0) : (tx.amountUsdc || 0);
+                if (amt > 0) {
+                  hasNewIncoming = true;
+                  notifSigSet.add(tx.signature);
+                  syncedSigsRef.current.add(tx.signature);
+                  NotificationService.notifyPaymentReceived(
+                    amt,
+                    tx.token || 'SOL',
+                    tx.counterparty || 'Solana Wallet',
+                    tx.signature
+                  );
+                }
+              }
+            }
+          }
+        }
+
+        // Seed all known signatures into syncedSigsRef so they are never re-notified
+        if (Array.isArray(newReceipts)) {
+          newReceipts.forEach((r) => {
+            if (r.signature) syncedSigsRef.current.add(r.signature);
+          });
+        }
+        if (Array.isArray(enrichedTxs)) {
+          enrichedTxs.forEach((t) => {
+            if (t.signature) syncedSigsRef.current.add(t.signature);
+          });
+        }
+        initialSyncDoneRef.current = true;
+
+        if (hasNewIncoming && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('blink_tx_updated'));
+          window.dispatchEvent(new CustomEvent('blink_balance_refresh'));
+        }
+      } catch (err) {
+        console.warn('Background cloud sync error:', err);
+      }
+    };
+
+    syncCloudData();
+    const interval = setInterval(syncCloudData, 5000);
+    return () => clearInterval(interval);
+  }, [effectiveAddress]);
+
+  // Real-time sale watcher: instant SSE streaming + 3s fallback poller
+  useEffect(() => {
+    if (effectiveAddress) {
+      SaleWatcherService.start(effectiveAddress, userProfile?.username);
+    } else {
+      SaleWatcherService.stop();
+    }
+    return () => {
+      SaleWatcherService.stop();
+    };
+  }, [effectiveAddress, userProfile?.username]);
 
   // Open profile handler: if guest, opens Privy sign-up / sign-in directly
   const handleOpenProfile = () => {
@@ -279,31 +458,66 @@ function BlinkMainApp() {
     const lookupKey = effectiveAddress || user?.email?.address || user?.id;
     if (!lookupKey) return;
 
+    const googleAccount =
+      user.google ||
+      (user.linkedAccounts?.find((acc: any) => acc.type === 'google_oauth') as any);
+
+    const googleEmail =
+      user.google?.email ||
+      googleAccount?.email ||
+      (user.email?.address && user.email.address.toLowerCase().endsWith('@gmail.com') ? user.email.address : null);
+
+    const userEmail = googleEmail || user.email?.address || null;
+
     // Check cloud database first to restore profile on this device
     DatabaseService.syncUserFromCloud(lookupKey).then(async (cloudUser) => {
-      if (cloudUser && cloudUser.username && cloudUser.username !== 'seeker_user') {
+      let resolvedCloudUser = cloudUser;
+
+      // If user profile on current address has an auto-assigned handle (e.g. user_xxx), check if user email had an established custom handle
+      if (
+        userEmail &&
+        (!resolvedCloudUser || !resolvedCloudUser.username || resolvedCloudUser.username.startsWith('user_') || resolvedCloudUser.username === 'seeker_user')
+      ) {
+        try {
+          const emailUser = await DatabaseService.syncUserFromCloud(userEmail);
+          if (emailUser && emailUser.username && !emailUser.username.startsWith('user_')) {
+            resolvedCloudUser = emailUser;
+          }
+        } catch (e) {}
+      }
+
+      if (resolvedCloudUser && resolvedCloudUser.username && resolvedCloudUser.username !== 'seeker_user') {
         const restored = UserProfileService.updateProfile({
-          displayName: cloudUser.displayName,
-          username: cloudUser.username,
-          avatarUrl: cloudUser.avatarUrl || userProfile.avatarUrl,
-          bio: cloudUser.bio || userProfile.bio,
+          displayName: resolvedCloudUser.displayName,
+          username: resolvedCloudUser.username,
+          avatarUrl: resolvedCloudUser.avatarUrl || userProfile.avatarUrl,
+          bio: resolvedCloudUser.bio || userProfile.bio,
           hasCustomizedProfile: true,
+          linkedAccounts: {
+            ...userProfile.linkedAccounts,
+            ...(userEmail ? { email: userEmail, google: userEmail } : {}),
+          },
         });
         setUserProfile(restored);
+        if (effectiveAddress) {
+          DatabaseService.saveUserAccount({
+            id: effectiveAddress,
+            address: effectiveAddress,
+            publicKey: effectiveAddress,
+            displayName: restored.displayName,
+            username: restored.username,
+            name: restored.displayName,
+            avatarUrl: restored.avatarUrl,
+            bio: restored.bio,
+            email: userEmail || undefined,
+          });
+          BlinkIdService.registerBlinkId(`@${restored.username}`, effectiveAddress, restored.displayName, restored.avatarUrl, userEmail || undefined);
+        }
         PhysicalBlinkRegistry.syncFromCloud();
         return;
       }
 
       // If no customized profile on cloud, proceed with onboarding derivation
-      const googleAccount =
-        user.google ||
-        (user.linkedAccounts?.find((acc: any) => acc.type === 'google_oauth') as any);
-
-      const googleEmail =
-        user.google?.email ||
-        googleAccount?.email ||
-        (user.email?.address && user.email.address.toLowerCase().endsWith('@gmail.com') ? user.email.address : null);
-
       const isGoogleAuth = Boolean(googleEmail);
       const currentProf = UserProfileService.getProfile();
 
@@ -333,9 +547,19 @@ function BlinkMainApp() {
           } else {
             ToastService.success(`Welcome @${updated.username}! Signed in via Google.`);
           }
+          // Show onboarding for first-time users
+          try {
+            const done = typeof localStorage !== 'undefined' ? localStorage.getItem('blink_onboarding_done') : '1';
+            if (!done) setShowOnboarding(true);
+          } catch {}
         }
       } else {
         if (!currentProf.hasCustomizedProfile && currentProf.username === 'seeker_user') {
+          // Show onboarding for first-time non-Google users too
+          try {
+            const done = typeof localStorage !== 'undefined' ? localStorage.getItem('blink_onboarding_done') : '1';
+            if (!done) setShowOnboarding(true);
+          } catch {}
           setPickUsernameModalVisible(true);
         }
       }
@@ -351,7 +575,7 @@ function BlinkMainApp() {
         const connection = SolanaService.getConnection();
         const serialized = tx.serialize({ requireAllSignatures: false });
 
-        // Approach 1: Try signTransaction first, then broadcast directly via our SolanaService connection
+        // Approach 1: Headless signing with privySignTransaction + broadcast via Connection / Server Proxy
         if (privySignTransaction) {
           try {
             const signRes = await privySignTransaction({
@@ -367,15 +591,43 @@ function BlinkMainApp() {
                 ? signedRaw
                 : Buffer.from(signedRaw);
 
-              const sig = await connection.sendRawTransaction(rawBytes, {
-                skipPreflight: true,
-                preflightCommitment: 'confirmed',
-              });
-              console.log('Successfully broadcasted transaction to Solana Devnet:', sig);
-              return sig;
+              try {
+                const sig = await connection.sendRawTransaction(rawBytes, {
+                  skipPreflight: true,
+                  preflightCommitment: 'confirmed',
+                });
+                console.log('Successfully broadcasted transaction to Solana Devnet:', sig);
+                return sig;
+              } catch (broadcastErr: any) {
+                console.warn('Direct broadcast throttled, trying server proxy broadcast:', broadcastErr);
+                // Fallback to server RPC proxy if direct client broadcast is rate-limited
+                try {
+                  const base64Tx = Buffer.from(rawBytes).toString('base64');
+                  const proxyRes = await fetch('/api/solana-rpc', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      jsonrpc: '2.0',
+                      id: 'send-' + Date.now(),
+                      method: 'sendTransaction',
+                      params: [base64Tx, { encoding: 'base64', skipPreflight: true }],
+                    }),
+                  });
+                  if (proxyRes.ok) {
+                    const proxyData = await proxyRes.json();
+                    if (proxyData?.result) {
+                      console.log('Successfully broadcasted via server proxy:', proxyData.result);
+                      return proxyData.result;
+                    }
+                  }
+                } catch (proxyErr) {
+                  console.warn('Server proxy broadcast error:', proxyErr);
+                }
+                throw broadcastErr;
+              }
             }
           } catch (signErr: any) {
-            console.warn('privySignTransaction error, falling back:', signErr);
+            console.warn('privySignTransaction error, checking fallback:', signErr);
             const errMsg = signErr?.message || String(signErr);
             if (/reject|cancel|denied|dismiss/i.test(errMsg)) {
               throw signErr;
@@ -390,17 +642,15 @@ function BlinkMainApp() {
               transaction: serialized,
               wallet: activeSolanaWallet,
               chain: 'solana:devnet',
-              options: {
-                sponsor: false,
-                optimisticBroadcast: true,
-                skipSimulation: true,
-              },
             });
             const sig = typeof res.signature === 'string' ? res.signature : bs58.encode(res.signature);
-            return sig;
+            if (sig) {
+              console.log('Successfully signed & sent via Privy signAndSend:', sig);
+              return sig;
+            }
           } catch (privyErr: any) {
             const errMsg = privyErr?.message || String(privyErr);
-            console.warn('Privy signAndSend threw, checking if tx landed:', errMsg);
+            console.warn('Privy signAndSend threw:', errMsg);
 
             if (/reject|cancel|denied|dismiss/i.test(errMsg)) {
               throw privyErr;
@@ -621,12 +871,17 @@ function BlinkMainApp() {
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <WelcomeAuthScreen
           onContinueGuest={() => setIsGuestMode(true)}
-          onOpenAbout={() => setAboutModalVisible(true)}
         />
-        <AboutBlinkModal
-          visible={aboutModalVisible}
-          onClose={() => setAboutModalVisible(false)}
-        />
+      </SafeAreaView>
+    );
+  }
+
+  // 2b. First-time user onboarding (after sign-in, before main app)
+  if (showOnboarding) {
+    return (
+      <SafeAreaView style={[styles.appRoot, { backgroundColor: colors.bg }]}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <OnboardingScreen onFinish={finishOnboarding} />
       </SafeAreaView>
     );
   }
@@ -645,7 +900,6 @@ function BlinkMainApp() {
             onToggleNetwork={toggleNetwork}
             activeAccount={activeAccount}
             onOpenWalletConnect={login}
-            onOpenAbout={() => setAboutModalVisible(true)}
             onOpenNotifications={() => setCurrentTab('notifications')}
             unreadNotificationsCount={unreadNotificationsCount}
             onOpenSettings={() => setCurrentTab('settings')}
@@ -669,7 +923,6 @@ function BlinkMainApp() {
                 refreshTrigger={refreshTrigger}
                 onOpenProfile={handleOpenProfile}
                 avatarUrl={userProfile.avatarUrl}
-                onOpenAbout={() => setAboutModalVisible(true)}
               />
             )}
 
@@ -685,17 +938,23 @@ function BlinkMainApp() {
               <TapScanScreen
                 onOpenWalletConnect={login}
                 onTagDetected={handleTagDetected}
-                onOpenAbout={() => setAboutModalVisible(true)}
               />
             )}
 
             {currentTab === 'studio' && (
-              <StudioScreen
+              <BlinkStudioScreen
                 activeAccount={activeAccount}
+                balanceSol={balanceSol}
+                balanceUsdc={balanceUsdc}
+                network={network}
+                onToggleNetwork={toggleNetwork}
                 onOpenWalletConnect={login}
-                onOpenCreateBlinkModal={() => setCreateBlinkModalVisible(true)}
+                onOpenDeposit={handleOpenReceive}
                 onSelectBlink={(blink) => setSelectedDetailBlink(blink)}
-                onOpenSend={(recipientAddress) => handleOpenSend(recipientAddress)}
+                onOpenStudioCreate={() => setCreateBlinkModalVisible(true)}
+                refreshTrigger={refreshTrigger}
+                onOpenProfile={handleOpenProfile}
+                avatarUrl={userProfile.avatarUrl}
               />
             )}
 
@@ -727,7 +986,6 @@ function BlinkMainApp() {
                   activeAccount={activeAccount}
                   onOpenWalletConnect={login}
                   network={network}
-                  onOpenAbout={() => setAboutModalVisible(true)}
                 />
               ) : (
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
@@ -757,7 +1015,6 @@ function BlinkMainApp() {
             activeAccount={activeAccount}
             onToggleNetwork={toggleNetwork}
             onOpenWalletConnect={login}
-            onOpenAbout={() => setAboutModalVisible(true)}
             onOpenNotifications={() => setCurrentTab('notifications')}
             unreadNotificationsCount={unreadNotificationsCount}
             onOpenSettings={() => setCurrentTab('settings')}
@@ -778,7 +1035,6 @@ function BlinkMainApp() {
                 onOpenDeposit={handleOpenReceive}
                 onSelectBlink={(blink) => setSelectedDetailBlink(blink)}
                 onOpenStudioCreate={() => setCreateBlinkModalVisible(true)}
-                onOpenAbout={() => setAboutModalVisible(true)}
                 refreshTrigger={refreshTrigger}
                 onOpenProfile={handleOpenProfile}
                 avatarUrl={userProfile.avatarUrl}
@@ -797,17 +1053,23 @@ function BlinkMainApp() {
               <TapScanScreen
                 onOpenWalletConnect={login}
                 onTagDetected={handleTagDetected}
-                onOpenAbout={() => setAboutModalVisible(true)}
               />
             )}
 
             {currentTab === 'studio' && (
-              <StudioScreen
+              <BlinkStudioScreen
                 activeAccount={activeAccount}
+                balanceSol={balanceSol}
+                balanceUsdc={balanceUsdc}
+                network={network}
+                onToggleNetwork={toggleNetwork}
                 onOpenWalletConnect={login}
-                onOpenCreateBlinkModal={() => setCreateBlinkModalVisible(true)}
+                onOpenDeposit={handleOpenReceive}
                 onSelectBlink={(blink) => setSelectedDetailBlink(blink)}
-                onOpenSend={(recipientAddress) => handleOpenSend(recipientAddress)}
+                onOpenStudioCreate={() => setCreateBlinkModalVisible(true)}
+                refreshTrigger={refreshTrigger}
+                onOpenProfile={handleOpenProfile}
+                avatarUrl={userProfile.avatarUrl}
               />
             )}
 
@@ -839,7 +1101,6 @@ function BlinkMainApp() {
                   activeAccount={activeAccount}
                   onOpenWalletConnect={login}
                   network={network}
-                  onOpenAbout={() => setAboutModalVisible(true)}
                 />
               ) : (
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
@@ -934,20 +1195,6 @@ function BlinkMainApp() {
         onClose={() => setReceiptModalVisible(false)}
       />
 
-      {/* About Blink Architecture & Explainer Modal */}
-      <AboutBlinkModal
-        visible={aboutModalVisible}
-        onClose={() => setAboutModalVisible(false)}
-        onOpenStudio={() => {
-          setAboutModalVisible(false);
-          setCurrentTab('studio');
-        }}
-        onOpenPocket={() => {
-          setAboutModalVisible(false);
-          setCurrentTab('wallet');
-        }}
-      />
-
       {/* Deploy Physical Blink Modal */}
       <CreateBlinkModal
         visible={createBlinkModalVisible}
@@ -1039,6 +1286,7 @@ export default function App() {
             loginMethods: ['email', 'google', 'twitter', 'discord', 'telegram', 'github', 'wallet'],
         embeddedWallets: {
           createOnLogin: 'users-without-wallets',
+          showWalletUIs: false,
           solana: {
             createOnLogin: 'users-without-wallets',
           },

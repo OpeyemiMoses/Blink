@@ -169,10 +169,12 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       return;
     }
 
+    const userEmail = profile.linkedAccounts.email || profile.linkedAccounts.google || user?.email?.address || user?.google?.email || '';
+
     const currentClean = (profile.username || '').trim().replace(/^@/, '').toLowerCase();
     if (cleanUsername !== currentClean) {
       const address = user?.wallet?.address;
-      const check = await BlinkIdService.isUsernameAvailable(cleanUsername, address);
+      const check = await BlinkIdService.isUsernameAvailable(cleanUsername, address, userEmail);
       if (!check.available && !check.isOwner) {
         showToast(check.reason || `Username @${cleanUsername} is already taken by another user.`);
         return;
@@ -185,6 +187,22 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       avatarUrl: avatarUrl.trim() || DEFAULT_AVATARS[0],
       bio: bio.trim(),
     });
+
+    const walletAddress = (user as any)?.wallet?.address;
+    if (walletAddress) {
+      DatabaseService.saveUserAccount({
+        id: walletAddress,
+        address: walletAddress,
+        publicKey: walletAddress,
+        displayName: updated.displayName,
+        username: updated.username,
+        name: updated.displayName,
+        avatarUrl: updated.avatarUrl,
+        bio: updated.bio,
+        email: userEmail || undefined,
+      });
+      BlinkIdService.registerBlinkId(`@${cleanUsername}`, walletAddress, updated.displayName, updated.avatarUrl, userEmail || undefined);
+    }
 
     setProfile(updated);
     showToast('Profile saved successfully!');
@@ -241,6 +259,19 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     setBindingInput('');
     showToast(`Linked ${provider} successfully!`);
     onProfileUpdated();
+
+    // If linking email/google, check if previous customized handle exists for this email
+    if (provider === 'email' || provider === 'google') {
+      UserProfileService.syncCloudProfile(user?.wallet?.address, val).then(synced => {
+        if (synced && synced.username && !synced.username.startsWith('user_') && synced.username !== updated.username) {
+          setProfile(synced);
+          setUsername(synced.username);
+          setDisplayName(synced.displayName);
+          showToast(`Recognized previous email! Restored handle @${synced.username}`);
+          onProfileUpdated();
+        }
+      });
+    }
   };
 
   const handleUnbind = async (provider: keyof LinkedAccounts) => {
@@ -786,76 +817,76 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 18,
+    padding: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#1A1F2C',
   },
   headerTitle: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 13,
     fontWeight: '800',
   },
   headerSub: {
     color: '#94A3B8',
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: 9.5,
+    marginTop: 1,
   },
   closeBtn: {
-    padding: 8,
+    padding: 6,
     borderRadius: 8,
     backgroundColor: '#181C28',
   },
   toast: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(16, 185, 129, 0.3)',
   },
   toastText: {
     color: '#10B981',
-    fontSize: 13,
+    fontSize: 10.5,
     fontWeight: '600',
   },
   body: {
     flex: 1,
   },
   scrollContent: {
-    padding: 18,
+    padding: 10,
   },
   section: {
-    marginBottom: 20,
+    marginBottom: 10,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 4,
+    marginBottom: 3,
   },
   sectionLabel: {
     color: '#94A3B8',
-    fontSize: 11,
+    fontSize: 9.5,
     fontWeight: '700',
     letterSpacing: 0.8,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   subtext: {
     color: '#64748B',
-    fontSize: 12,
-    marginBottom: 12,
+    fontSize: 9.5,
+    marginBottom: 6,
   },
   avatarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 10,
   },
   avatarPreview: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 2,
     borderColor: '#5B67F6',
   },
@@ -864,7 +895,7 @@ const styles = StyleSheet.create({
   },
   avatarHelper: {
     color: '#94A3B8',
-    fontSize: 11,
+    fontSize: 10,
     marginBottom: 6,
   },
   avatarThumbRow: {
@@ -898,7 +929,7 @@ const styles = StyleSheet.create({
   },
   galleryUploadBtnText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   customUrlToggle: {
@@ -909,7 +940,7 @@ const styles = StyleSheet.create({
   },
   customUrlToggleText: {
     color: '#5B67F6',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
   },
   customAvatarRow: {
@@ -926,7 +957,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
   },
   applyAvatarBtn: {
     backgroundColor: '#1E2333',
@@ -936,7 +967,7 @@ const styles = StyleSheet.create({
   },
   applyAvatarText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
   },
   input: {
@@ -947,7 +978,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
   },
   bioInput: {
     height: 70,
@@ -964,7 +995,7 @@ const styles = StyleSheet.create({
   },
   atSign: {
     color: '#5B67F6',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     marginRight: 4,
   },
@@ -972,7 +1003,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
   },
   bindCard: {
     backgroundColor: '#141824',
@@ -996,12 +1027,12 @@ const styles = StyleSheet.create({
   },
   bindTitle: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   bindStatus: {
     color: '#94A3B8',
-    fontSize: 11,
+    fontSize: 10,
     marginTop: 2,
   },
   bindBtn: {
@@ -1014,7 +1045,7 @@ const styles = StyleSheet.create({
   },
   bindBtnText: {
     color: '#818CF8',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   unbindBtn: {
@@ -1028,7 +1059,7 @@ const styles = StyleSheet.create({
   },
   unbindText: {
     color: '#EF4444',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
   },
   inlineBindRow: {
@@ -1048,7 +1079,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
   },
   confirmBindBtn: {
     flexDirection: 'row',
@@ -1060,41 +1091,41 @@ const styles = StyleSheet.create({
   },
   confirmBindText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 10,
-    padding: 16,
+    gap: 8,
+    padding: 10,
     borderTopWidth: 1,
     borderTopColor: '#1A1F2C',
     backgroundColor: '#0F121C',
   },
   cancelBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
     backgroundColor: '#181C28',
   },
   cancelBtnText: {
     color: '#94A3B8',
-    fontSize: 13,
+    fontSize: 10.5,
     fontWeight: '600',
   },
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
     backgroundColor: '#5B67F6',
   },
   saveBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 10.5,
     fontWeight: '700',
   },
 });

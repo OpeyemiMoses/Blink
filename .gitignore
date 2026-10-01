@@ -38,7 +38,9 @@ yarn-error.*
 server_db.json
 server_receipts_db.json
 server_users_db.json
+server_deleted_db.json
 ACTIVE_TUNNEL_URL.txt
+*.log
 
 # typescript
 *.tsbuildinfo

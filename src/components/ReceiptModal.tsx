@@ -420,7 +420,7 @@ const styles = StyleSheet.create({
     height: 35,
   },
   brandWordmark: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '900',
     letterSpacing: -0.2,
   },
@@ -465,7 +465,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     color: '#10B981',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   dirBadgeSend: {
@@ -481,7 +481,7 @@ const styles = StyleSheet.create({
   },
   dirBadgeSendText: {
     color: '#EF4444',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
   },
   dirBadgeReceive: {
@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
   },
   dirBadgeReceiveText: {
     color: '#10B981',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
   },
   amountContainer: {
@@ -505,12 +505,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   amountValue: {
-    fontSize: 32,
+    fontSize: 21,
     fontWeight: '900',
     letterSpacing: -0.5,
   },
   amountSub: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
     marginTop: 2,
   },
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   itemCardTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '800',
     textAlign: 'center',
   },
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
   },
   domainText: {
     color: '#10B981',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   table: {
@@ -561,11 +561,11 @@ const styles = StyleSheet.create({
   },
   tableLabel: {
     color: '#64748B',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   tableVal: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   valWithCopy: {
@@ -574,7 +574,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   monoText: {
-    fontSize: 12,
+    fontSize: 10,
     fontFamily: 'monospace',
     fontWeight: '700',
   },
@@ -608,7 +608,7 @@ const styles = StyleSheet.create({
   },
   downloadBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '800',
   },
   explorerBtn: {
@@ -621,7 +621,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   explorerBtnText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   closeModalBtn: {
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   closeModalBtnText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
   },
 });

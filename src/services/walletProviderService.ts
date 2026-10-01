@@ -205,6 +205,20 @@ export class WalletProviderService {
    * Sign and send transaction through the connected wallet.
    */
   static async signAndSendTransaction(transaction: Transaction): Promise<string> {
+    // If account was authorized via Mobile Wallet Adapter / Seed Vault
+    if (
+      this.activeAccount?.name?.includes('MWA') ||
+      this.activeAccount?.name?.includes('Seed Vault') ||
+      this.activeAccount?.name?.includes('Mobile')
+    ) {
+      try {
+        const { SolanaMobileStackService } = await import('./solanaMobileStackService');
+        return await SolanaMobileStackService.signAndSendTransaction(transaction);
+      } catch (mwaErr) {
+        console.warn('MWA transaction signing error, checking fallbacks:', mwaErr);
+      }
+    }
+
     if (this.privySigner) {
       try {
         return await this.privySigner(transaction);

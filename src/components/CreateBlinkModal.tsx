@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  Image,
 } from 'react-native';
 import {
   X,
@@ -23,6 +24,7 @@ import {
   Download,
   Printer,
   Lock,
+  Camera,
 } from 'lucide-react-native';
 import {
   PhysicalBlinkRegistry,
@@ -33,6 +35,7 @@ import { DatabaseService } from '../services/databaseService';
 import { WalletProviderService } from '../services/walletProviderService';
 import { PrintableCardService } from '../services/printableCardService';
 import { ToastService } from '../services/toastService';
+import { PriceService } from '../services/priceService';
 import { useTheme } from '../theme/ThemeContext';
 import { BlinkBrandMark } from './BrandLogos';
 
@@ -44,13 +47,13 @@ interface CreateBlinkModalProps {
   onOpenWalletConnect?: () => void;
 }
 
-const ACTION_TYPES: { type: ActionType; label: string; desc: string; visibility: 'global' | 'physical' }[] = [
-  { type: 'tip', label: 'Creator Tip Jar', desc: 'Global social tipping', visibility: 'global' },
-  { type: 'mint', label: 'NFT Mint / POAP', desc: 'Commemorative digital badges', visibility: 'global' },
-  { type: 'donation', label: 'Charity / Donation', desc: 'Worldwide fundraising', visibility: 'global' },
-  { type: 'voucher', label: 'Digital Voucher', desc: 'Pre-orders & event passes', visibility: 'global' },
-  { type: 'payment', label: 'In-Person POS (Food / Retail)', desc: 'Physical on-site tap only', visibility: 'physical' },
-  { type: 'checkin', label: 'Check-In', desc: 'Venue attendance pass', visibility: 'physical' },
+const ACTION_TYPES: { type: ActionType; label: string; desc: string }[] = [
+  { type: 'tip', label: 'Creator Tip Jar', desc: 'Direct tipping with custom notes' },
+  { type: 'payment', label: 'Point-of-Sale / Retail', desc: 'Accept payments for goods & services' },
+  { type: 'voucher', label: 'Digital Voucher / Ticket', desc: 'Pre-orders & event admission passes' },
+  { type: 'mint', label: 'NFT / POAP Mint', desc: 'Commemorative digital collectibles' },
+  { type: 'donation', label: 'Charity / Donation', desc: 'Fundraising for campaigns & causes' },
+  { type: 'checkin', label: 'Venue Check-In', desc: 'Attendance & access verification' },
 ];
 
 export const CreateBlinkModal: React.FC<CreateBlinkModalProps> = ({
@@ -63,6 +66,7 @@ export const CreateBlinkModal: React.FC<CreateBlinkModalProps> = ({
   const { colors, isDark } = useTheme();
 
   const [name, setName] = useState('');
+  const [blinkImage, setBlinkImage] = useState<string | null>(null);
   const [actionType, setActionType] = useState<ActionType>('tip');
   const [amount, setAmount] = useState('5.00');
   const [token, setToken] = useState<'USDC' | 'SOL' | 'SKR'>('USDC');
@@ -74,6 +78,38 @@ export const CreateBlinkModal: React.FC<CreateBlinkModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [successBlink, setSuccessBlink] = useState<PhysicalBlink | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+
+  const handlePickBlinkImage = () => {
+    if (typeof document === 'undefined') return;
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.onchange = (event: any) => {
+      const file = event.target?.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const rawDataUrl = e.target?.result as string;
+        if (!rawDataUrl) return;
+        const img = new (window as any).Image();
+        img.onload = () => {
+          const MAX = 480;
+          const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const compressed = canvas.toDataURL('image/jpeg', 0.82);
+          setBlinkImage(compressed);
+        };
+        img.src = rawDataUrl;
+      };
+      reader.readAsDataURL(file);
+    };
+    fileInput.click();
+  };
 
   useEffect(() => {
     if (visible) {
@@ -113,21 +149,36 @@ export const CreateBlinkModal: React.FC<CreateBlinkModalProps> = ({
       return;
     }
 
-    const autoId =
+    const chosenId =
       physicalId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-') ||
       name.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 18) + '-' + Math.floor(Math.random() * 900 + 100);
 
+    let finalId = chosenId;
+    if (PhysicalBlinkRegistry.isIdTakenByOther(chosenId, active.publicKey)) {
+      if (physicalId.trim()) {
+        const shortPk = active.publicKey.slice(-4).toLowerCase();
+        setError(`Blink ID "${chosenId}" is already registered by another creator. Try "${chosenId}-${shortPk}" instead.`);
+        return;
+      } else {
+        finalId = `${chosenId}-${active.publicKey.slice(-4).toLowerCase()}`;
+      }
+    }
+
+    const skrDetails = token === 'SKR' ? PriceService.getSkrPaymentDetails(cleanAmount) : null;
+
     const newBlink = PhysicalBlinkRegistry.createBlink({
-      id: autoId,
+      id: finalId,
       name: name.trim(),
       actionType,
-      amount: cleanAmount,
+      amount: skrDetails ? skrDetails.skrAmount : cleanAmount,
+      baseUsdcAmount: cleanAmount,
       token,
       recipient: cleanRecipient,
       creatorAddress: active.publicKey,
       description: description.trim() || `${actionType.toUpperCase()} interaction powered by Solana Actions`,
       verifiedDomain: verifiedDomain.trim() || undefined,
       visibility: customVisibility,
+      imageUrl: blinkImage || undefined,
     });
 
     DatabaseService.saveBlink(newBlink);
@@ -155,6 +206,7 @@ export const CreateBlinkModal: React.FC<CreateBlinkModalProps> = ({
 
   const handleCloseAndReset = () => {
     setName('');
+    setBlinkImage(null);
     setAmount('5.00');
     setDescription('');
     setPhysicalId('');
@@ -229,6 +281,41 @@ export const CreateBlinkModal: React.FC<CreateBlinkModalProps> = ({
                   />
                 </View>
 
+                {/* Blink Image (Optional) */}
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>BLINK IMAGE (OPTIONAL)</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.imagePicker,
+                      { backgroundColor: colors.bgCardAlt, borderColor: blinkImage ? colors.accent : colors.border },
+                    ]}
+                    onPress={handlePickBlinkImage}
+                    activeOpacity={0.7}
+                  >
+                    {blinkImage ? (
+                      <Image
+                        source={{ uri: blinkImage }}
+                        style={styles.imagePreview}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.imagePickerPlaceholder}>
+                        <Camera size={18} color={colors.textMuted} />
+                        <Text style={[styles.imagePickerText, { color: colors.textMuted }]}>Tap to add image</Text>
+                      </View>
+                    )}
+                    {blinkImage && (
+                      <TouchableOpacity
+                        style={[styles.imageRemoveBtn, { backgroundColor: colors.bgCard }]}
+                        onPress={() => setBlinkImage(null)}
+                        hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                      >
+                        <X size={10} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
                 {/* Action Type Selector */}
                 <View style={styles.fieldGroup}>
                   <Text style={[styles.label, { color: colors.textSecondary }]}>ACTION TYPE</Text>
@@ -269,49 +356,7 @@ export const CreateBlinkModal: React.FC<CreateBlinkModalProps> = ({
                   </View>
                 </View>
 
-                {/* Interactive Visibility Selector */}
-                <View style={styles.fieldGroup}>
-                  <Text style={[styles.label, { color: colors.textSecondary }]}>VISIBILITY (WHO CAN SEE THIS BLINK?)</Text>
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
-                    <TouchableOpacity
-                      style={[
-                        styles.visibilityCard,
-                        { backgroundColor: customVisibility === 'global' ? colors.accentSoft : colors.bgCardAlt, borderColor: customVisibility === 'global' ? colors.accent : colors.border },
-                      ]}
-                      onPress={() => setCustomVisibility('global')}
-                      activeOpacity={0.8}
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <Globe size={15} color={customVisibility === 'global' ? colors.accent : colors.textMuted} />
-                        <Text style={[styles.visibilityCardTitle, { color: customVisibility === 'global' ? colors.accent : colors.textPrimary }]}>
-                          Public & General
-                        </Text>
-                      </View>
-                      <Text style={[styles.visibilityCardSub, { color: colors.textSecondary }]}>
-                        Shows in Explore for everyone signed up & new users
-                      </Text>
-                    </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={[
-                        styles.visibilityCard,
-                        { backgroundColor: customVisibility === 'physical' ? colors.accentSoft : colors.bgCardAlt, borderColor: customVisibility === 'physical' ? colors.accent : colors.border },
-                      ]}
-                      onPress={() => setCustomVisibility('physical')}
-                      activeOpacity={0.8}
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <Tag size={15} color={customVisibility === 'physical' ? colors.accent : colors.textMuted} />
-                        <Text style={[styles.visibilityCardTitle, { color: customVisibility === 'physical' ? colors.accent : colors.textPrimary }]}>
-                          Personal Only
-                        </Text>
-                      </View>
-                      <Text style={[styles.visibilityCardSub, { color: colors.textSecondary }]}>
-                        Private to your device studio and physical NFC tag
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
 
                 {/* Amount & Token Row */}
                 <View style={styles.fieldRow}>
@@ -366,6 +411,18 @@ export const CreateBlinkModal: React.FC<CreateBlinkModalProps> = ({
                     </View>
                   </View>
                 </View>
+
+                {token === 'SKR' && (
+                  <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)', borderColor: '#10B981', borderWidth: 1, borderRadius: 8, padding: 10, marginTop: 4, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Sparkles size={16} color="#10B981" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 10, fontWeight: '800', color: '#10B981' }}>10% SKR Discount Active</Text>
+                      <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2, lineHeight: 15 }}>
+                        Payers using SKR automatically get 10% off!
+                      </Text>
+                    </View>
+                  </View>
+                )}
 
                 {/* Recipient Solana Address */}
                 <View style={styles.fieldGroup}>
@@ -479,22 +536,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
   },
   title: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '800',
   },
   subtitle: {
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: 9.5,
+    marginTop: 1,
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -503,150 +560,185 @@ const styles = StyleSheet.create({
     maxHeight: 460,
   },
   scrollContent: {
-    padding: 20,
-    gap: 14,
+    padding: 16,
+    gap: 10,
   },
   errorBanner: {
     backgroundColor: 'rgba(239, 68, 68, 0.12)',
     borderColor: '#EF4444',
     borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
+    borderRadius: 8,
+    padding: 8,
   },
   errorText: {
     color: '#EF4444',
-    fontSize: 12,
+    fontSize: 9.5,
     fontWeight: '600',
   },
   successBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     backgroundColor: 'rgba(16, 185, 129, 0.12)',
     borderColor: '#10B981',
     borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
+    borderRadius: 8,
+    padding: 8,
   },
   successText: {
     color: '#10B981',
-    fontSize: 12,
+    fontSize: 9.5,
     fontWeight: '700',
   },
   fieldGroup: {
-    gap: 6,
+    gap: 4,
   },
   fieldRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
+  },
+  imagePicker: {
+    height: 72,
+    borderWidth: 1,
+    borderRadius: 10,
+    borderStyle: 'dashed',
+    overflow: 'hidden',
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  imagePickerPlaceholder: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  imagePickerText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  imageRemoveBtn: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   label: {
-    fontSize: 11,
+    fontSize: 9.5,
     fontWeight: '700',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   useWalletHint: {
-    fontSize: 11,
+    fontSize: 9.5,
     fontWeight: '700',
   },
   input: {
     borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 13,
+    borderRadius: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    fontSize: 11,
   },
   monoInput: {
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 12,
+    fontSize: 10,
   },
   textArea: {
-    height: 60,
+    height: 52,
     textAlignVertical: 'top',
   },
   inputWithPrefix: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    borderRadius: 10,
+    paddingHorizontal: 10,
   },
   prefixText: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '700',
-    marginRight: 4,
+    marginRight: 3,
   },
   inputBare: {
     flex: 1,
-    paddingVertical: 10,
-    fontSize: 13,
+    paddingVertical: 7,
+    fontSize: 11,
     fontWeight: '700',
   },
   tokenToggleRow: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 5,
   },
   tokenToggleBtn: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 10,
+    borderRadius: 8,
+    paddingVertical: 7,
     alignItems: 'center',
   },
   tokenToggleBtnActive: {
     borderColor: 'transparent',
   },
   tokenToggleText: {
-    fontSize: 12,
+    fontSize: 9.5,
     fontWeight: '700',
   },
   actionTypeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   actionTypePill: {
     borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
   },
   actionTypePillSelected: {
     borderWidth: 1.5,
   },
   actionTypeLabel: {
-    fontSize: 12,
+    fontSize: 9.5,
     fontWeight: '600',
   },
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 10,
-    padding: 16,
+    gap: 8,
+    padding: 12,
     borderTopWidth: 1,
   },
   cancelBtn: {
     borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     justifyContent: 'center',
   },
   cancelBtnText: {
-    fontSize: 13,
+    fontSize: 10.5,
     fontWeight: '600',
   },
   submitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    borderRadius: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    gap: 5,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
   submitBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 10.5,
     fontWeight: '700',
   },
   visibilityCard: {
@@ -656,7 +748,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   visibilityCardTitle: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   visibilityCardSub: {
@@ -672,13 +764,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   successTitle: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
     marginBottom: 4,
     textAlign: 'center',
   },
   successSub: {
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 16,
     textAlign: 'center',
     marginBottom: 18,
@@ -697,21 +789,21 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   placardPrice: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '800',
   },
   placardTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '800',
     marginBottom: 4,
   },
   placardDesc: {
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 16,
     marginBottom: 8,
   },
   placardRecipient: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   downloadCardBtn: {
@@ -726,7 +818,7 @@ const styles = StyleSheet.create({
   },
   downloadCardBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   doneBtn: {
@@ -738,7 +830,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   doneBtnText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
   },
 });

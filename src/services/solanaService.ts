@@ -39,14 +39,14 @@ export interface EnrichedTransactionInfo extends OnChainTransactionInfo {
 }
 
 export class SolanaService {
-  private static connection = new Connection(DEVNET_RPC, 'confirmed');
+  private static connection = new Connection(DEVNET_RPC, { commitment: 'confirmed', disableRetryOnRateLimit: true });
   private static activeNetwork: 'devnet' = 'devnet';
   private static currentKeypair: Keypair | null = null;
 
   static setNetwork(_network?: string) {
     // Strictly locked to devnet
     this.activeNetwork = 'devnet';
-    this.connection = new Connection(DEVNET_RPC, 'confirmed');
+    this.connection = new Connection(DEVNET_RPC, { commitment: 'confirmed', disableRetryOnRateLimit: true });
   }
 
   static getNetwork(): 'devnet' {
@@ -224,6 +224,31 @@ export class SolanaService {
       }
     }
 
+    // 1. Primary: Backend /api/balance proxy (ultra-fast, bypasses mobile 429 & CORS)
+    try {
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        const res = await fetch(`/api/balance?address=${encodeURIComponent(pubkeyStr.trim())}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.success && typeof data.sol === 'number') {
+            const solVal = Number(data.sol.toFixed(4));
+            this.solCache.set(pubkeyStr, { value: solVal, time: Date.now() });
+            if (typeof data.usdc === 'number') {
+              this.usdcCache.set(pubkeyStr, { value: Number(data.usdc.toFixed(2)), time: Date.now() });
+            }
+            if (typeof data.skr === 'number') {
+              const skrVal = Number(data.skr.toFixed(2));
+              this.skrCache.set(pubkeyStr, { value: skrVal, time: Date.now() });
+              if (typeof window !== 'undefined' && window.localStorage) {
+                window.localStorage.setItem(`blink_cached_skr_${pubkeyStr}`, String(skrVal));
+              }
+            }
+            return solVal;
+          }
+        }
+      }
+    } catch {}
+
     // Deduplicate in-flight requests for the same address
     if (this.inFlightSol.has(pubkeyStr)) {
       return this.inFlightSol.get(pubkeyStr)!;
@@ -280,6 +305,31 @@ export class SolanaService {
         return cached.value;
       }
     }
+
+    // 1. Primary: Backend /api/balance proxy (ultra-fast, bypasses mobile 429 & CORS)
+    try {
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        const res = await fetch(`/api/balance?address=${encodeURIComponent(pubkeyStr.trim())}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.success && typeof data.usdc === 'number') {
+            const usdcVal = Number(data.usdc.toFixed(2));
+            this.usdcCache.set(pubkeyStr, { value: usdcVal, time: Date.now() });
+            if (typeof data.sol === 'number') {
+              this.solCache.set(pubkeyStr, { value: Number(data.sol.toFixed(4)), time: Date.now() });
+            }
+            if (typeof data.skr === 'number') {
+              const skrVal = Number(data.skr.toFixed(2));
+              this.skrCache.set(pubkeyStr, { value: skrVal, time: Date.now() });
+              if (typeof window !== 'undefined' && window.localStorage) {
+                window.localStorage.setItem(`blink_cached_skr_${pubkeyStr}`, String(skrVal));
+              }
+            }
+            return usdcVal;
+          }
+        }
+      }
+    } catch {}
 
     if (this.inFlightUsdc.has(pubkeyStr)) {
       return this.inFlightUsdc.get(pubkeyStr)!;
@@ -359,6 +409,30 @@ export class SolanaService {
         return cached.value;
       }
     }
+
+    // 1. Primary: Backend /api/balance proxy (ultra-fast, bypasses mobile 429 & CORS)
+    try {
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        const res = await fetch(`/api/balance?address=${encodeURIComponent(pubkeyStr.trim())}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.success && typeof data.skr === 'number') {
+            const skrVal = Number(data.skr.toFixed(2));
+            this.skrCache.set(pubkeyStr, { value: skrVal, time: Date.now() });
+            if (typeof window !== 'undefined' && window.localStorage) {
+              window.localStorage.setItem(`blink_cached_skr_${pubkeyStr}`, String(skrVal));
+            }
+            if (typeof data.sol === 'number') {
+              this.solCache.set(pubkeyStr, { value: Number(data.sol.toFixed(4)), time: Date.now() });
+            }
+            if (typeof data.usdc === 'number') {
+              this.usdcCache.set(pubkeyStr, { value: Number(data.usdc.toFixed(2)), time: Date.now() });
+            }
+            return skrVal;
+          }
+        }
+      }
+    } catch {}
 
     if (this.inFlightSkr.has(pubkeyStr)) {
       return this.inFlightSkr.get(pubkeyStr)!;
@@ -617,8 +691,27 @@ export class SolanaService {
 
   /**
    * Fetch recent transactions enriched with direction (Send/Receive) and amount.
+   * Uses backend proxy /api/tx-history for maximum reliability on mobile devices with client RPC fallback.
    */
   static async getEnrichedRecentTransactions(pubkeyStr: string, limit: number = 50): Promise<EnrichedTransactionInfo[]> {
+    if (!pubkeyStr) return [];
+
+    // 1. Primary: Use backend /api/tx-history proxy (bypasses mobile RPC rate limits & CORS)
+    try {
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        const res = await fetch(`/api/tx-history?address=${encodeURIComponent(pubkeyStr)}&limit=${limit}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.success && Array.isArray(data.transactions)) {
+            return data.transactions;
+          }
+        }
+      }
+    } catch (apiErr) {
+      console.warn('Backend /api/tx-history lookup deferred, falling back to direct RPC:', apiErr);
+    }
+
+    // 2. Fallback: Direct client-side Solana RPC connection
     try {
       const pubkey = new PublicKey(pubkeyStr);
       const sigInfos = await this.connection.getSignaturesForAddress(pubkey, { limit });
@@ -626,7 +719,7 @@ export class SolanaService {
 
       const signatures = sigInfos.map(s => s.signature);
 
-      // Fetch parsed transactions for the top recent items to stay within Solana public RPC limits
+      // Fetch parsed transactions for the top recent items
       const parsedMap = new Map<string, any>();
       try {
         const topSignatures = signatures.slice(0, 8);
@@ -661,10 +754,11 @@ export class SolanaService {
         };
       });
     } catch (err) {
-      console.error('Error fetching enriched transactions:', err);
+      console.warn('Direct RPC lookup failed for enriched transactions:', err);
       return [];
     }
   }
+
 
   /**
    * Universal on-chain transaction parser for SOL and SPL Tokens (USDC).

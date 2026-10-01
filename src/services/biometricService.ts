@@ -55,11 +55,41 @@ export class BiometricService {
     }
   }
 
+  static isBiometricsEnabled(): boolean {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const val = window.localStorage.getItem('seeker_biometrics_enabled');
+      if (val !== null) return val === 'true';
+    }
+    return true; // Default ON
+  }
+
+  /**
+   * Toggles biometrics ON or OFF. Requires the user to authenticate with biometrics first!
+   */
+  static async toggleBiometricsWithAuth(targetEnabled: boolean): Promise<{ success: boolean; error?: string }> {
+    const promptMsg = targetEnabled
+      ? 'Authenticate biometric scanner to turn ON Biometric Security'
+      : 'Authenticate biometric scanner to turn OFF Biometric Security';
+
+    const res = await this.authenticate(promptMsg, true /* forceAuth */);
+    if (res.success) {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('seeker_biometrics_enabled', targetEnabled ? 'true' : 'false');
+      }
+      return { success: true };
+    } else {
+      return { success: false, error: res.error || 'Biometric authentication failed.' };
+    }
+  }
+
   /**
    * Triggers the user's REAL physical device hardware biometric prompt
    * (Android BiometricPrompt fingerprint scanner, iOS Face ID / Touch ID, or native Expo).
    */
-  static async authenticate(promptMessage: any = 'Authorize Solana Payment'): Promise<BiometricAuthResult> {
+  static async authenticate(promptMessage: any = 'Authorize Solana Payment', forceAuth: boolean = false): Promise<BiometricAuthResult> {
+    if (!forceAuth && !this.isBiometricsEnabled()) {
+      return { success: true, authType: 'disabled_by_user' };
+    }
     const message = typeof promptMessage === 'string'
       ? promptMessage
       : promptMessage?.promptMessage || 'Authorize Solana Payment';

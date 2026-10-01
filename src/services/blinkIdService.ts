@@ -54,7 +54,8 @@ export class BlinkIdService {
     blinkId: string,
     address: string,
     displayName?: string,
-    avatarUrl?: string
+    avatarUrl?: string,
+    email?: string
   ): Promise<boolean> {
     if (!blinkId || !address) return false;
 
@@ -86,7 +87,7 @@ export class BlinkIdService {
         await fetch('/api/blink-ids', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(record),
+          body: JSON.stringify({ ...record, email: email || '' }),
         });
       } catch (e) {
         // silent fail if server is temporarily unreachable
@@ -192,7 +193,8 @@ export class BlinkIdService {
    */
   static async isUsernameAvailable(
     username: string,
-    currentAddress?: string
+    currentAddress?: string,
+    currentEmail?: string
   ): Promise<{ available: boolean; reason?: string; suggested?: string; isOwner?: boolean }> {
     if (!username || username.trim().length === 0) {
       return { available: false, reason: 'Username cannot be empty.' };
@@ -208,7 +210,7 @@ export class BlinkIdService {
       return { available: false, reason: 'Username may only contain letters, numbers, and underscores.' };
     }
 
-    const reserved = ['admin', 'root', 'system', 'blink', 'blink', 'seeker', 'solana', 'official', 'support', 'help', 'api'];
+    const reserved = ['admin', 'root', 'system', 'blink', 'seeker', 'solana', 'official', 'support', 'help', 'api'];
     if (reserved.includes(clean)) {
       return { available: false, reason: `@${clean} is a reserved system handle.` };
     }
@@ -219,6 +221,7 @@ export class BlinkIdService {
         const query = new URLSearchParams({
           username: clean,
           address: currentAddress || '',
+          email: currentEmail || '',
         });
         const res = await fetch(`/api/users/check-username?${query.toString()}`);
         if (res.ok) {
@@ -241,7 +244,7 @@ export class BlinkIdService {
     const local = this.localRegistry[clean] || this.localRegistry[`@${clean}`];
     if (local && local.address) {
       if (currentAddress && local.address.toLowerCase() === currentAddress.toLowerCase()) {
-        return { available: true };
+        return { available: true, isOwner: true };
       }
       return {
         available: false,
@@ -259,7 +262,8 @@ export class BlinkIdService {
    */
   static async findAvailableUsername(
     baseName: string,
-    currentAddress?: string
+    currentAddress?: string,
+    currentEmail?: string
   ): Promise<string> {
     const cleanBase = (baseName || 'user')
       .trim()
@@ -270,14 +274,14 @@ export class BlinkIdService {
 
     const initialCandidate = cleanBase.length >= 2 ? cleanBase : 'user';
 
-    const check = await this.isUsernameAvailable(initialCandidate, currentAddress);
-    if (check.available) {
+    const check = await this.isUsernameAvailable(initialCandidate, currentAddress, currentEmail);
+    if (check.available || check.isOwner) {
       return initialCandidate;
     }
 
     if (check.suggested) {
-      const checkSuggested = await this.isUsernameAvailable(check.suggested, currentAddress);
-      if (checkSuggested.available) {
+      const checkSuggested = await this.isUsernameAvailable(check.suggested, currentAddress, currentEmail);
+      if (checkSuggested.available || checkSuggested.isOwner) {
         return check.suggested;
       }
     }
@@ -285,8 +289,8 @@ export class BlinkIdService {
     // Generate random variants
     for (let i = 0; i < 15; i++) {
       const candidate = `${initialCandidate}_${Math.floor(100 + Math.random() * 900)}`;
-      const cCheck = await this.isUsernameAvailable(candidate, currentAddress);
-      if (cCheck.available) {
+      const cCheck = await this.isUsernameAvailable(candidate, currentAddress, currentEmail);
+      if (cCheck.available || cCheck.isOwner) {
         return candidate;
       }
     }

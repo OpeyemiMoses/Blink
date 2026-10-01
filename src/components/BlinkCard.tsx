@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
   },
   merchant: {
     color: '#14F195',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.4,
     marginBottom: 2,
@@ -101,12 +101,12 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '700',
   },
   description: {
     color: '#9CA3AF',
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 17,
     marginBottom: 14,
   },
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
     borderColor: '#1D212E',
   },
   actionBtnText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   actionBtnTextPrimary: {

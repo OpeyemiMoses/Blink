@@ -18,6 +18,8 @@ export interface LinkedAccounts {
 }
 
 export interface UserProfile {
+  address?: string;
+  publicKey?: string;
   username: string;
   displayName: string;
   avatarUrl: string;
@@ -25,6 +27,8 @@ export interface UserProfile {
   blinkId?: string; // Canonical Blink ID handle (e.g. @yemi) that acts as on-chain wallet address
   linkedAccounts: LinkedAccounts;
   hasCustomizedProfile?: boolean;
+  isPremium?: boolean;
+  tier?: string;
   updatedAt: number;
 }
 
@@ -82,13 +86,13 @@ export class UserProfileService {
     const cleanCandidate = emailPrefix.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
     const cleanDisplayName = googleName && googleName.trim().length > 0 ? googleName.trim() : emailPrefix;
 
-    const check = await BlinkIdService.isUsernameAvailable(cleanCandidate, userAddress);
+    const check = await BlinkIdService.isUsernameAvailable(cleanCandidate, userAddress, googleEmail);
     let finalUsername = cleanCandidate;
     let wasTaken = false;
 
     if (!check.available && !check.isOwner) {
       wasTaken = true;
-      finalUsername = await BlinkIdService.findAvailableUsername(cleanCandidate, userAddress);
+      finalUsername = await BlinkIdService.findAvailableUsername(cleanCandidate, userAddress, googleEmail);
     }
 
     const currentProfile = this.getProfile();
@@ -218,7 +222,7 @@ export class UserProfileService {
             this.saveProfile();
           }
 
-          return { ...this.profile };
+          return { ...this.profile } as UserProfile;
         } catch {}
       }
     }
@@ -270,6 +274,54 @@ export class UserProfileService {
     return this.updateProfile({ linkedAccounts: updatedAccounts });
   }
 
+  static async syncCloudProfile(addressOrEmail?: string, fallbackEmail?: string): Promise<UserProfile | null> {
+    if (!addressOrEmail || typeof fetch !== 'function') return null;
+    try {
+      let res = await fetch(`/api/users/${encodeURIComponent(addressOrEmail)}`);
+      let data = res.ok ? await res.json() : null;
+
+      // If initial result has a temporary/auto-generated username and we have an email, check email profile
+      if (
+        fallbackEmail &&
+        fallbackEmail.toLowerCase() !== addressOrEmail.toLowerCase() &&
+        (!data?.user || !data.user.username || data.user.username.startsWith('user_') || data.user.username === 'seeker_user')
+      ) {
+        try {
+          const emailRes = await fetch(`/api/users/${encodeURIComponent(fallbackEmail)}`);
+          if (emailRes.ok) {
+            const emailData = await emailRes.json();
+            if (emailData?.user?.username && !emailData.user.username.startsWith('user_')) {
+              data = emailData;
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (data && data.success && data.user) {
+        const cloud = data.user;
+        const current = this.getProfile();
+        if (cloud.hasCustomizedProfile || cloud.displayName || cloud.avatarUrl || cloud.bio) {
+          const updated = this.updateProfile({
+            displayName: cloud.displayName || current.displayName,
+            username: cloud.username || current.username,
+            avatarUrl: cloud.avatarUrl || current.avatarUrl,
+            bio: cloud.bio !== undefined ? cloud.bio : current.bio,
+            hasCustomizedProfile: cloud.hasCustomizedProfile ?? true,
+            linkedAccounts: {
+              ...current.linkedAccounts,
+              ...(cloud.linkedAccounts || {}),
+              ...(fallbackEmail ? { email: fallbackEmail, google: fallbackEmail } : {}),
+            },
+          });
+          return updated;
+        }
+      }
+    } catch (err) {
+      console.warn('Error syncing cloud profile:', err);
+    }
+    return null;
+  }
+
   private static saveProfile(): void {
     if (typeof window !== 'undefined' && window.localStorage && this.profile) {
       try {
@@ -280,6 +332,23 @@ export class UserProfileService {
       } catch (err) {
         console.error('Failed to save profile:', err);
       }
+
+      // Background Cloud Sync to server database
+      try {
+        const p = this.profile;
+        const userKey = p.address || p.publicKey || p.username;
+        const payload = {
+          ...p,
+          address: userKey,
+          publicKey: userKey,
+          updatedAt: p.updatedAt || Date.now(),
+        };
+        fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }).catch(() => {});
+      } catch {}
     }
   }
 

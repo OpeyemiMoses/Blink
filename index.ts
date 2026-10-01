@@ -1,10 +1,9 @@
 import './src/polyfill';
-import { injectCursiveFont } from './src/styles/loadCursiveFont';
+import { injectAppFont } from './src/styles/loadCursiveFont';
 import { registerRootComponent } from 'expo';
 import App from './App';
 
-// Inject stylized cursive Google Fonts across the application
-injectCursiveFont();
+// Inject modern professional Google Fonts (Poppins & Plus Jakarta Sans) across the application
+injectAppFont();
 
 registerRootComponent(App);
-

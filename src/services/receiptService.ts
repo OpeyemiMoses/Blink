@@ -121,10 +121,15 @@ export class ReceiptService {
     return Array.from(this.cachedReceipts.values())
       .filter((r) => {
         if (!r.payerAddress) return false;
-        const matchesId = r.blinkId && r.blinkId.toLowerCase() === cleanBlinkId;
-        const matchesLegacyId = r.id && r.id.toLowerCase().includes(cleanBlinkId);
-        const matchesRecipient = Boolean(cleanRecipient && r.recipientAddress && r.recipientAddress.toLowerCase() === cleanRecipient);
-        return matchesId || matchesLegacyId || matchesRecipient;
+        if (cleanBlinkId) {
+          const matchesId = Boolean(r.blinkId && r.blinkId.trim().toLowerCase() === cleanBlinkId);
+          const matchesLegacyId = Boolean(r.id && r.id.trim().toLowerCase() === cleanBlinkId);
+          return matchesId || matchesLegacyId;
+        }
+        if (cleanRecipient) {
+          return Boolean(r.recipientAddress && r.recipientAddress.trim().toLowerCase() === cleanRecipient);
+        }
+        return false;
       })
       .sort((a, b) => b.timestamp - a.timestamp);
   }
@@ -172,30 +177,26 @@ export class ReceiptService {
    */
   static async fetchCloudReceiptsForBlink(blinkId: string, recipientAddress?: string): Promise<TransactionReceipt[]> {
     this.init();
-    if (!blinkId && !recipientAddress) return [];
+    const cleanId = (blinkId || '').trim();
+    const cleanAddr = (recipientAddress || '').trim();
+    if (!cleanId && !cleanAddr) return [];
     try {
-      const urls: string[] = [];
-      if (blinkId) urls.push(`/api/receipts?blinkId=${encodeURIComponent(blinkId)}`);
-      if (recipientAddress) urls.push(`/api/receipts?address=${encodeURIComponent(recipientAddress)}`);
+      const url = cleanId
+        ? `/api/receipts?blinkId=${encodeURIComponent(cleanId)}`
+        : `/api/receipts?address=${encodeURIComponent(cleanAddr)}`;
 
-      const results = await Promise.all(
-        urls.map((url) =>
-          fetch(url)
-            .then((res) => (res.ok ? res.json() : null))
-            .catch(() => null)
-        )
-      );
-
-      for (const data of results) {
+      const res = await fetch(url).catch(() => null);
+      if (res && res.ok) {
+        const data = await res.json();
         if (data && data.success && Array.isArray(data.receipts)) {
           for (const item of data.receipts) {
             if (item.signature) {
               this.cachedReceipts.set(item.signature, item);
             }
           }
+          this.persist();
         }
       }
-      this.persist();
       return this.getReceiptsForBlink(blinkId, recipientAddress);
     } catch (err) {
       console.warn('Error fetching cloud receipts for blink:', err);

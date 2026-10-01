@@ -30,15 +30,20 @@ import {
   RefreshCw,
   LogOut,
   Sparkles,
-  BookOpen,
   Pencil,
   X as XIcon,
   Smartphone,
   Key,
+  Moon,
+  Sun,
+  Fingerprint,
+  Flame,
 } from 'lucide-react-native';
+import { BiometricService } from '../services/biometricService';
 import { usePrivy } from '@privy-io/react-auth';
 import { useExportWallet } from '@privy-io/react-auth/solana';
 import { UserProfileService, UserProfile, DEFAULT_AVATARS, LinkedAccounts } from '../services/userProfileService';
+import { StreakService } from '../services/streakService';
 import { MASCOT_AVATARS } from '../constants/mascotAvatars';
 import { DatabaseService } from '../services/databaseService';
 import { ToastService } from '../services/toastService';
@@ -69,7 +74,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   network,
   onOpenAbout,
 }) => {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, theme, setTheme } = useTheme();
   const {
     user,
     login,
@@ -101,6 +106,66 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [activeBindingProvider, setActiveBindingProvider] = useState<keyof LinkedAccounts | null>(null);
   const [bindingInput, setBindingInput] = useState('');
   const [toast, setToast] = useState<import('../services/toastService').ToastMessage | null>(null);
+  const [bioEnabled, setBioEnabled] = useState<boolean>(() => BiometricService.isBiometricsEnabled());
+  const [isAuthenticatingBio, setIsAuthenticatingBio] = useState<boolean>(false);
+
+  const handleToggleBiometrics = async (targetState: boolean) => {
+    if (bioEnabled === targetState || isAuthenticatingBio) return;
+    setIsAuthenticatingBio(true);
+    try {
+      const res = await BiometricService.toggleBiometricsWithAuth(targetState);
+      if (res.success) {
+        setBioEnabled(targetState);
+        ToastService.success(targetState ? 'Biometric security enabled (ON)' : 'Biometric security disabled (OFF)');
+      } else {
+        ToastService.error(res.error || 'Biometric authentication failed or cancelled.');
+      }
+    } catch (err: any) {
+      ToastService.error(err?.message || 'Biometric verification failed.');
+    } finally {
+      setIsAuthenticatingBio(false);
+    }
+  };
+  const [streakStatus, setStreakStatus] = useState(() => StreakService.getClockInStatus());
+  const [isClockingIn, setIsClockingIn] = useState(false);
+  const [isClockInModalOpen, setIsClockInModalOpen] = useState(false);
+
+  useEffect(() => {
+    const updateStreak = () => {
+      setStreakStatus(StreakService.getClockInStatus());
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('blink_streak_updated', updateStreak);
+      window.addEventListener('tapblink_streak_updated', updateStreak);
+    }
+    const timer = setInterval(updateStreak, 30000);
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('blink_streak_updated', updateStreak);
+        window.removeEventListener('tapblink_streak_updated', updateStreak);
+      }
+      clearInterval(timer);
+    };
+  }, []);
+
+  const handleClockIn = async () => {
+    if (isClockingIn || !streakStatus.canClockIn) return;
+    setIsClockingIn(true);
+    try {
+      const res = await StreakService.clockIn(activeAccount?.publicKey || username);
+      setStreakStatus(StreakService.getClockInStatus());
+      if (res.success) {
+        ToastService.success(res.message);
+      } else {
+        ToastService.info(res.message);
+      }
+    } catch (err: any) {
+      ToastService.error(err?.message || 'Clock in failed. Please try again.');
+    } finally {
+      setIsClockingIn(false);
+    }
+  };
+
   // Profile edit panel: hidden by default once profile is saved, shown for new users
   const [isEditingProfile, setIsEditingProfile] = useState(() => !profile.hasCustomizedProfile);
 
@@ -181,6 +246,23 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     });
     return unsub;
   }, []);
+
+  // Automatically sync profile with cloud database on screen mount or wallet change
+  useEffect(() => {
+    const key = activeAccount?.publicKey || user?.id || user?.email?.address;
+    const fallbackEmail = user?.email?.address || user?.google?.email || profile.linkedAccounts.email || profile.linkedAccounts.google || undefined;
+    if (key) {
+      UserProfileService.syncCloudProfile(key, fallbackEmail).then(synced => {
+        if (synced) {
+          setProfile(synced);
+          setDisplayName(synced.displayName);
+          setUsername(synced.username);
+          setBio(synced.bio);
+          setAvatarUrl(synced.avatarUrl);
+        }
+      });
+    }
+  }, [activeAccount?.publicKey, user?.id, user?.email?.address, user?.google?.email]);
 
   // Sync Privy verified user data with profile
   useEffect(() => {
@@ -304,11 +386,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       return;
     }
 
+    const userEmail = profile.linkedAccounts.email || profile.linkedAccounts.google || user?.email?.address || user?.google?.email || '';
+
     // Check if username changed and is taken by another user
     const currentClean = (profile.username || '').trim().replace(/^@/, '').toLowerCase();
     if (cleanUsername !== currentClean) {
       setIsCheckingUsername(true);
-      const check = await BlinkIdService.isUsernameAvailable(cleanUsername, activeAccount?.publicKey);
+      const check = await BlinkIdService.isUsernameAvailable(cleanUsername, activeAccount?.publicKey, userEmail);
       setIsCheckingUsername(false);
 
       if (!check.available && !check.isOwner) {
@@ -337,10 +421,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         name: updated.displayName,
         avatarUrl: updated.avatarUrl,
         bio: updated.bio,
+        email: userEmail || undefined,
       });
 
       // Synchronize unique Blink ID to server
-      BlinkIdService.registerBlinkId(`@${cleanUsername}`, activeAccount.publicKey, updated.displayName, updated.avatarUrl);
+      BlinkIdService.registerBlinkId(`@${cleanUsername}`, activeAccount.publicKey, updated.displayName, updated.avatarUrl, userEmail || undefined);
     }
 
     setProfile(updated);
@@ -394,6 +479,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     setActiveBindingProvider(null);
     setBindingInput('');
     showToast(`Linked ${provider} successfully!`);
+
+    // If linking an email or Google account, check if this email previously owned a customized handle
+    if (provider === 'email' || provider === 'google') {
+      UserProfileService.syncCloudProfile(activeAccount?.publicKey, val).then(synced => {
+        if (synced && synced.username && !synced.username.startsWith('user_') && synced.username !== updated.username) {
+          setProfile(synced);
+          setUsername(synced.username);
+          setDisplayName(synced.displayName);
+          ToastService.success(`Recognized previous email! Restored handle @${synced.username}`);
+        }
+      });
+    }
   };
 
   const handleUnbind = async (provider: keyof LinkedAccounts) => {
@@ -453,14 +550,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const solanaAddress = activeAccount?.publicKey || null;
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.bg }]} contentContainerStyle={styles.contentContainer}>
+    <View style={{ flex: 1, position: 'relative' }}>
+      <ScrollView style={[styles.container, { backgroundColor: colors.bg }]} contentContainerStyle={styles.contentContainer}>
 
       {/* Screen Title */}
       <View style={styles.header}>
         <View>
           <Text style={[styles.screenTitle, { color: colors.textPrimary }]}>User Profile & Identity</Text>
           <Text style={[styles.screenSubtitle, { color: colors.textSecondary }]}>
-            Manage your public identity, custom avatar, and non-custodial Privy social logins
+            Manage your identity
           </Text>
         </View>
 
@@ -513,7 +611,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   borderRadius: 6,
                 }}
               >
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#14F195' }}>
+                <Text style={{ fontSize: 10, fontWeight: '700', color: '#14F195' }}>
                   Blink ID: @{username || 'user'}
                 </Text>
               </View>
@@ -528,11 +626,32 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               >
                 <Copy size={12} color={colors.accent} />
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 3,
+                  backgroundColor: 'rgba(20, 241, 149, 0.12)',
+                  borderColor: 'rgba(20, 241, 149, 0.3)',
+                  borderWidth: 1,
+                  paddingHorizontal: 7,
+                  paddingVertical: 2,
+                  borderRadius: 6,
+                }}
+                onPress={() => setIsClockInModalOpen(true)}
+                activeOpacity={0.7}
+              >
+                <Flame size={11} color="#14F195" />
+                <Text style={{ fontSize: 10, fontWeight: '700', color: '#14F195' }}>
+                  {streakStatus.currentStreak > 0 ? `Day ${streakStatus.currentStreak}` : 'Clock In'}
+                </Text>
+              </TouchableOpacity>
             </View>
             <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 2 }}>
               Unique Blink ID
             </Text>
-            {bio ? <Text style={[{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }]} numberOfLines={2}>{bio}</Text> : null}
+            {bio ? <Text style={[{ color: colors.textSecondary, fontSize: 10, marginTop: 4 }]} numberOfLines={2}>{bio}</Text> : null}
           </View>
 
           {/* Pencil icon to toggle edit form */}
@@ -634,11 +753,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
             {/* Live Status Hint */}
             {isCheckingUsername ? (
-              <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>Checking availability...</Text>
+              <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 4 }}>Checking availability...</Text>
             ) : isUsernameAvailable === true && username.trim().length >= 2 ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 }}>
                 <CheckCircle2 size={12} color="#10B981" />
-                <Text style={{ fontSize: 11.5, color: '#10B981', fontWeight: '700' }}>
+                <Text style={{ fontSize: 10.5, color: '#10B981', fontWeight: '700' }}>
                   @{username.trim()} is available!
                 </Text>
               </View>
@@ -646,7 +765,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <View style={{ gap: 5, marginTop: 4 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                   <AlertCircle size={12} color="#EF4444" />
-                  <Text style={{ fontSize: 11.5, color: '#EF4444', fontWeight: '700' }}>
+                  <Text style={{ fontSize: 10.5, color: '#EF4444', fontWeight: '700' }}>
                     {usernameError}
                   </Text>
                 </View>
@@ -671,14 +790,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                     activeOpacity={0.7}
                   >
                     <RefreshCw size={12} color={colors.accent} />
-                    <Text style={{ fontSize: 11.5, color: colors.accent, fontWeight: '600' }}>
+                    <Text style={{ fontSize: 10.5, color: colors.accent, fontWeight: '600' }}>
                       Tap to use: <Text style={{ fontWeight: '800' }}>@{suggestedAlternative}</Text>
                     </Text>
                   </TouchableOpacity>
                 )}
               </View>
             ) : (
-              <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>
+              <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 4 }}>
                 Unique Blink ID
               </Text>
             )}
@@ -728,7 +847,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </View>
 
         <Text style={[styles.sectionExplainer, { color: colors.textSecondary }]}>
-          Your Privy embedded Solana wallet operates in any browser without needing a browser extension. It signs NFC taps and transactions securely.
+          Your Privy embedded Wallet.
         </Text>
 
         {solanaAddress ? (
@@ -1058,28 +1177,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </View>
         )}
 
-        {/* Documentation & Help Centre Access Card */}
-        {onOpenAbout && (
-          <TouchableOpacity
-            style={[styles.docsCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
-            onPress={onOpenAbout}
-            activeOpacity={0.7}
-          >
-            <View style={styles.docsCardLeft}>
-              <View style={[styles.docsIconBox, { backgroundColor: colors.accentSoft }]}>
-                <BookOpen size={20} color={colors.accent} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.docsCardTitle, { color: colors.textPrimary }]}>Documentation & Help Centre</Text>
-                <Text style={[styles.docsCardSub, { color: colors.textSecondary }]}>
-                  NFC guides, live price updates, Solana Devnet & embedded wallets
-                </Text>
-              </View>
-            </View>
-            <ExternalLink size={16} color={colors.accent} />
-          </TouchableOpacity>
-        )}
-
         {/* Dedicated Full-Width Sign Out Button */}
         {authenticated && (
           <TouchableOpacity
@@ -1099,6 +1196,245 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         )}
       </View>
     </ScrollView>
+
+    {/* Floating Action Button (FAB) for Clock In Streak - Profile Screen Only */}
+    <TouchableOpacity
+      style={[
+        styles.clockInFab,
+        {
+          backgroundColor: streakStatus.canClockIn ? '#14F195' : (isDark ? '#161922' : '#E2E8F0'),
+          borderColor: streakStatus.canClockIn ? '#10B981' : colors.border,
+          opacity: streakStatus.canClockIn ? 1.0 : 0.65,
+        },
+      ]}
+      onPress={() => setIsClockInModalOpen(true)}
+      activeOpacity={0.85}
+      accessibilityLabel="Clock In Streak"
+    >
+      <Flame size={22} color={streakStatus.canClockIn ? '#000000' : '#14F195'} />
+      <View
+        style={[
+          styles.clockInFabBadge,
+          {
+            backgroundColor: streakStatus.canClockIn ? '#10B981' : '#5B67F6',
+          },
+        ]}
+      >
+        <Text style={styles.clockInFabBadgeText}>
+          {streakStatus.currentStreak > 0 ? `D${streakStatus.currentStreak}` : 'NEW'}
+        </Text>
+      </View>
+    </TouchableOpacity>
+
+    {/* Clock In Streak Modal */}
+    {isClockInModalOpen && (
+      <View style={styles.modalOverlay}>
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setIsClockInModalOpen(false)}
+        />
+        <View
+          style={[
+            styles.streakModalCard,
+            { backgroundColor: colors.bgCard, borderColor: colors.border },
+          ]}
+        >
+          {/* Modal Header */}
+          <View style={styles.cardTitleRow}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 10,
+                  backgroundColor: 'rgba(20, 241, 149, 0.12)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 1,
+                  borderColor: 'rgba(20, 241, 149, 0.3)',
+                }}
+              >
+                <Flame size={18} color="#14F195" />
+              </View>
+              <View>
+                <Text style={[styles.sectionHeaderTitle, { color: colors.textPrimary, fontSize: 13 }]}>CLOCK IN STREAK</Text>
+                <Text style={{ fontSize: 10, color: colors.textSecondary }}>Daily Solana Mobile Check-In</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              onPress={() => setIsClockInModalOpen(false)}
+              style={styles.modalCloseBtn}
+              activeOpacity={0.7}
+            >
+              <XIcon size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Streak Hero Banner */}
+          <View
+            style={{
+              alignItems: 'center',
+              paddingVertical: 12,
+              backgroundColor: 'rgba(20, 241, 149, 0.06)',
+              borderColor: 'rgba(20, 241, 149, 0.2)',
+              borderWidth: 1,
+              borderRadius: 12,
+              marginTop: 6,
+            }}
+          >
+            <View
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: 'rgba(20, 241, 149, 0.15)',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 6,
+              }}
+            >
+              <Flame size={24} color="#14F195" />
+            </View>
+            <Text style={{ fontSize: 24, fontWeight: '900', color: colors.textPrimary }}>
+              {streakStatus.currentStreak} {streakStatus.currentStreak === 1 ? 'Day' : 'Days'}
+            </Text>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: '#14F195', marginTop: 2 }}>
+              {streakStatus.bonusPercent > 0 ? `+${streakStatus.bonusPercent}% Extra SKR Discount Active` : 'Start your streak to unlock +1% off'}
+            </Text>
+          </View>
+
+          {/* 2-Metric Stats Row */}
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+            {/* Streak Bonus */}
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: colors.bgInput,
+                borderColor: colors.border,
+                borderWidth: 1,
+                borderRadius: 10,
+                padding: 10,
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 9, color: colors.textMuted, fontWeight: '700', textTransform: 'uppercase' }}>Streak Bonus</Text>
+              <Text style={{ fontSize: 16, fontWeight: '800', color: '#14F195', marginTop: 2 }}>
+                +{streakStatus.bonusPercent}% Off
+              </Text>
+            </View>
+
+            {/* Total SKR Discount */}
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: colors.bgInput,
+                borderColor: colors.border,
+                borderWidth: 1,
+                borderRadius: 10,
+                padding: 10,
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 9, color: colors.textMuted, fontWeight: '700', textTransform: 'uppercase' }}>Total SKR Discount</Text>
+              <Text style={{ fontSize: 16, fontWeight: '800', color: '#5B67F6', marginTop: 2 }}>
+                {10 + streakStatus.bonusPercent}% Off
+              </Text>
+            </View>
+          </View>
+
+          {/* Milestone Progress Track */}
+          <View style={{ marginTop: 8, gap: 4 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 10, color: colors.textSecondary }}>
+                {streakStatus.daysUntilNextMilestone === 10 && streakStatus.currentStreak > 0
+                  ? `Milestone unlocked! Keep going to +${streakStatus.bonusPercent + 1}%`
+                  : `${streakStatus.daysUntilNextMilestone} days until +${streakStatus.bonusPercent + 1}% bonus unlock`}
+              </Text>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: colors.textMuted }}>
+                {streakStatus.currentStreak % 10}/10
+              </Text>
+            </View>
+
+            <View
+              style={{
+                height: 6,
+                backgroundColor: colors.bgInput,
+                borderRadius: 3,
+                overflow: 'hidden',
+                borderColor: colors.border,
+                borderWidth: 1,
+              }}
+            >
+              <View
+                style={{
+                  height: '100%',
+                  width: `${Math.max(5, Math.min(100, Math.round(streakStatus.milestoneProgress * 100)))}%`,
+                  backgroundColor: '#14F195',
+                  borderRadius: 3,
+                }}
+              />
+            </View>
+          </View>
+
+          <Text style={[styles.sectionExplainer, { color: colors.textMuted, fontSize: 9.5, lineHeight: 14, marginTop: 4 }]}>
+            Clock in daily to earn +1% off every 10-day streak..
+          </Text>
+
+          {/* Interactive Clock In Button */}
+          {streakStatus.canClockIn ? (
+            <TouchableOpacity
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                backgroundColor: '#14F195',
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                borderRadius: 12,
+                marginTop: 6,
+              }}
+              onPress={handleClockIn}
+              activeOpacity={0.8}
+              disabled={isClockingIn}
+            >
+              {isClockingIn ? (
+                <ActivityIndicator size="small" color="#000000" />
+              ) : (
+                <Flame size={18} color="#000000" />
+              )}
+              <Text style={{ color: '#000000', fontSize: 13, fontWeight: '800' }}>
+                {isClockingIn ? 'Clocking In...' : `Clock In for Today (Day ${streakStatus.currentStreak + 1})`}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                backgroundColor: colors.bgCardAlt,
+                borderColor: colors.border,
+                borderWidth: 1,
+                paddingVertical: 11,
+                paddingHorizontal: 14,
+                borderRadius: 12,
+                marginTop: 6,
+              }}
+            >
+              <CheckCircle2 size={16} color="#10B981" />
+              <Text style={{ color: colors.textSecondary, fontSize: 11.5, fontWeight: '700' }}>
+                Clocked In Today • Next window in ~{streakStatus.hoursRemaining}h {streakStatus.minutesRemaining}m
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+    )}
+  </View>
   );
 };
 
@@ -1108,30 +1444,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#07080B',
   },
   contentContainer: {
-    paddingHorizontal: 6,
-    paddingTop: 12,
-    paddingBottom: 100,
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 110,
     maxWidth: 800,
     marginHorizontal: 'auto',
     width: '100%',
-    gap: 16,
+    gap: 6,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   screenTitle: {
     color: '#FFFFFF',
-    fontSize: 26,
+    fontSize: 15,
     fontWeight: '800',
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
   },
   screenSubtitle: {
     color: '#94A3B8',
-    fontSize: 13,
-    marginTop: 4,
+    fontSize: 9.5,
+    marginTop: 1,
   },
   signInBtn: {
     flexDirection: 'row',
@@ -1144,7 +1480,7 @@ const styles = StyleSheet.create({
   },
   signInBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   signOutBtn: {
@@ -1160,7 +1496,7 @@ const styles = StyleSheet.create({
   },
   signOutBtnText: {
     color: '#EF4444',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   toast: {
@@ -1176,16 +1512,16 @@ const styles = StyleSheet.create({
   },
   toastText: {
     color: '#10B981',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
   },
   card: {
     backgroundColor: '#0F111A',
-    borderRadius: 20,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#1D212E',
-    padding: 20,
-    gap: 16,
+    padding: 10,
+    gap: 8,
   },
   cardTitleRow: {
     flexDirection: 'row',
@@ -1194,34 +1530,34 @@ const styles = StyleSheet.create({
   },
   sectionHeaderTitle: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
   sectionExplainer: {
     color: '#94A3B8',
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 9.5,
+    lineHeight: 14,
   },
   avatarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 18,
+    gap: 12,
   },
   avatarContainer: {
     position: 'relative',
   },
   avatarImage: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     borderWidth: 2,
     borderColor: '#5B67F6',
   },
   avatarFallback: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     borderWidth: 2,
     borderColor: '#5B67F6',
     alignItems: 'center',
@@ -1229,12 +1565,12 @@ const styles = StyleSheet.create({
   },
   avatarCameraBadge: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
+    bottom: -2,
+    right: -2,
     backgroundColor: '#5B67F6',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -1246,12 +1582,12 @@ const styles = StyleSheet.create({
   },
   profileNameDisplay: {
     color: '#FFFFFF',
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: '800',
   },
   profileUsernameDisplay: {
     color: '#64748B',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
   },
   uploadGalleryBtn: {
@@ -1288,18 +1624,18 @@ const styles = StyleSheet.create({
   },
   mobileLinkText: {
     color: '#94A3B8',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '500',
   },
   mobileLinkUrl: {
     color: '#5B67F6',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
     flex: 1,
   },
   uploadGalleryBtnText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   presetSection: {
@@ -1310,7 +1646,7 @@ const styles = StyleSheet.create({
   },
   presetLabel: {
     color: '#64748B',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   presetRow: {
@@ -1344,7 +1680,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     color: '#94A3B8',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.3,
   },
@@ -1356,7 +1692,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
   },
   usernameInputWrap: {
     flexDirection: 'row',
@@ -1369,7 +1705,7 @@ const styles = StyleSheet.create({
   },
   atSymbol: {
     color: '#5B67F6',
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '800',
     marginRight: 4,
   },
@@ -1377,7 +1713,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
   },
   bioInput: {
     minHeight: 70,
@@ -1395,7 +1731,7 @@ const styles = StyleSheet.create({
   },
   saveProfileBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   verifiedBadge: {
@@ -1411,7 +1747,7 @@ const styles = StyleSheet.create({
   },
   verifiedBadgeText: {
     color: '#10B981',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   walletAddressBox: {
@@ -1424,13 +1760,13 @@ const styles = StyleSheet.create({
   },
   walletAddressLabel: {
     color: '#64748B',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   walletAddressText: {
     color: '#F1F5F9',
-    fontSize: 12,
+    fontSize: 10,
     fontFamily: 'monospace',
     marginTop: 4,
     wordBreak: 'break-all' as any,
@@ -1453,7 +1789,7 @@ const styles = StyleSheet.create({
   },
   addressActionText: {
     color: '#94A3B8',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   exportInfoBox: {
@@ -1466,12 +1802,12 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   exportInfoTitle: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
     marginBottom: 2,
   },
   exportInfoDesc: {
-    fontSize: 11,
+    fontSize: 10,
     lineHeight: 16,
   },
   connectWalletPrompt: {
@@ -1481,7 +1817,7 @@ const styles = StyleSheet.create({
   },
   connectWalletPromptText: {
     color: '#94A3B8',
-    fontSize: 13,
+    fontSize: 11,
     textAlign: 'center',
   },
   promptSignInBtn: {
@@ -1495,49 +1831,49 @@ const styles = StyleSheet.create({
   },
   promptSignInBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   identitiesCountText: {
     color: '#5B67F6',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   identitiesList: {
-    gap: 10,
+    gap: 5,
   },
   identityItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#141724',
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#202536',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   identityItemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     flex: 1,
   },
   providerIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
   providerName: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   providerStatus: {
     color: '#64748B',
-    fontSize: 12,
+    fontSize: 10,
     marginTop: 1,
   },
   bindBtn: {
@@ -1550,7 +1886,7 @@ const styles = StyleSheet.create({
   },
   bindBtnText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   unbindBtn: {
@@ -1566,7 +1902,7 @@ const styles = StyleSheet.create({
   },
   unbindBtnText: {
     color: '#EF4444',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   manualBindCard: {
@@ -1580,7 +1916,7 @@ const styles = StyleSheet.create({
   },
   manualBindTitle: {
     color: '#94A3B8',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   manualBindRow: {
@@ -1596,7 +1932,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
   },
   confirmManualBtn: {
     flexDirection: 'row',
@@ -1609,7 +1945,7 @@ const styles = StyleSheet.create({
   },
   confirmManualText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   docsCard: {
@@ -1636,11 +1972,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   docsCardTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   docsCardSub: {
-    fontSize: 11,
+    fontSize: 10,
     marginTop: 2,
     lineHeight: 16,
   },
@@ -1677,7 +2013,80 @@ const styles = StyleSheet.create({
   },
   fullSignOutBtnText: {
     color: '#EF4444',
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '700',
   },
+  clockInFab: {
+    position: 'absolute',
+    bottom: 120,
+    right: 20,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 10,
+    zIndex: 9999,
+  },
+  clockInFabBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderWidth: 1.5,
+    borderColor: '#07080B',
+  },
+  clockInFabBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 8.5,
+    fontWeight: '900',
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+    zIndex: 999,
+  },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+  },
+  streakModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 18,
+    gap: 8,
+    zIndex: 1000,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 16,
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
+

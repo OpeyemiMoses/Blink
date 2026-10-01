@@ -5,58 +5,63 @@ import { ToastService, ToastMessage } from '../services/toastService';
 import { useTheme } from '../theme/ThemeContext';
 
 export const Toast: React.FC = () => {
-  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const { colors, isDark } = useTheme();
 
   useEffect(() => {
-    const unsubscribe = ToastService.subscribe((current) => {
-      setToast(current);
+    const unsubscribe = ToastService.subscribeList((currentList) => {
+      setToasts(currentList);
     });
     return unsubscribe;
   }, []);
 
-  if (!toast) return null;
-
-  const isSuccess = toast.type === 'success';
-  const isError = toast.type === 'error';
-
-  const iconColor = isSuccess ? '#10B981' : isError ? '#EF4444' : colors.accent;
-  const borderColor = isSuccess
-    ? 'rgba(16, 185, 129, 0.4)'
-    : isError
-    ? 'rgba(239, 68, 68, 0.4)'
-    : colors.accentBorder;
-
-  const IconComponent = isSuccess ? CheckCircle2 : isError ? AlertCircle : Info;
+  if (!toasts || toasts.length === 0) return null;
 
   return (
     <View style={styles.container} pointerEvents="box-none">
-      <View
-        style={[
-          styles.toastCard,
-          {
-            backgroundColor: isDark ? 'rgba(20, 23, 36, 0.96)' : 'rgba(255, 255, 255, 0.98)',
-            borderColor,
-          },
-        ]}
-      >
-        <View style={styles.iconBox}>
-          <IconComponent size={18} color={iconColor} />
-        </View>
+      {toasts.map((toast) => {
+        const isSuccess = toast.type === 'success';
+        const isError = toast.type === 'error';
 
-        <Text style={[styles.message, { color: colors.textPrimary }]} numberOfLines={3}>
-          {toast.message}
-        </Text>
+        const iconColor = isSuccess ? '#10B981' : isError ? '#EF4444' : colors.accent;
+        const borderColor = isSuccess
+          ? 'rgba(16, 185, 129, 0.4)'
+          : isError
+          ? 'rgba(239, 68, 68, 0.4)'
+          : colors.accentBorder;
 
-        <TouchableOpacity
-          onPress={() => ToastService.dismiss()}
-          style={styles.closeBtn}
-          activeOpacity={0.7}
-          accessibilityLabel="Dismiss notification"
-        >
-          <X size={14} color={colors.textMuted} />
-        </TouchableOpacity>
-      </View>
+        const IconComponent = isSuccess ? CheckCircle2 : isError ? AlertCircle : Info;
+
+        return (
+          <View
+            key={toast.id}
+            style={[
+              styles.toastCard,
+              {
+                backgroundColor: isDark ? 'rgba(20, 23, 36, 0.96)' : 'rgba(255, 255, 255, 0.98)',
+                borderColor,
+              },
+            ]}
+          >
+            <View style={styles.iconBox}>
+              <IconComponent size={18} color={iconColor} />
+            </View>
+
+            <Text style={[styles.message, { color: colors.textPrimary }]} numberOfLines={3}>
+              {toast.message}
+            </Text>
+
+            <TouchableOpacity
+              onPress={() => ToastService.dismiss(toast.id)}
+              style={styles.closeBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Dismiss notification"
+            >
+              <X size={14} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        );
+      })}
     </View>
   );
 };
@@ -70,6 +75,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 99999,
     paddingHorizontal: 16,
+    gap: 8,
   },
   toastCard: {
     flexDirection: 'row',
@@ -92,7 +98,7 @@ const styles = StyleSheet.create({
   },
   message: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
     lineHeight: 18,
   },

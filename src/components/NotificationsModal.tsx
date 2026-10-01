@@ -16,12 +16,16 @@ import {
   CheckCheck,
   CheckCircle2,
   ExternalLink,
+  Trash2,
+  Filter,
+  ChevronDown,
 } from 'lucide-react-native';
 import { NotificationService, AppNotification } from '../services/notificationService';
 import { ReceiptService } from '../services/receiptService';
 import { ReceiptModal } from './ReceiptModal';
 import { TransactionReceipt } from '../types';
 import { useTheme } from '../theme/ThemeContext';
+import { BlinkBrandMark } from './BrandLogos';
 
 interface NotificationsModalProps {
   visible: boolean;
@@ -34,6 +38,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 }) => {
   const { colors } = useTheme();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'payments' | 'blinks'>('all');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState<TransactionReceipt | null>(null);
 
   const reloadNotifications = () => {
@@ -48,8 +54,10 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      window.addEventListener('blink_notifications_updated', reloadNotifications);
       window.addEventListener('tapblink_notifications_updated', reloadNotifications);
       return () => {
+        window.removeEventListener('blink_notifications_updated', reloadNotifications);
         window.removeEventListener('tapblink_notifications_updated', reloadNotifications);
       };
     }
@@ -57,6 +65,11 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
   const handleMarkAllRead = () => {
     NotificationService.markAllAsRead();
+    reloadNotifications();
+  };
+
+  const handleClearAll = () => {
+    NotificationService.clearAll();
     reloadNotifications();
   };
 
@@ -80,6 +93,16 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     return `${Math.floor(diffSec / 86400)}d ago`;
   };
 
+  const filteredNotifications = notifications.filter((n) => {
+    if (activeFilter === 'payments') {
+      return n.type === 'payment_received' || n.type === 'payment_sent';
+    }
+    if (activeFilter === 'blinks') {
+      return n.type === 'blink_paid';
+    }
+    return true;
+  });
+
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
@@ -99,11 +122,15 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                 )}
               </View>
 
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 {unreadCount > 0 && (
-                  <TouchableOpacity onPress={handleMarkAllRead} style={styles.markReadBtn} activeOpacity={0.7}>
-                    <CheckCheck size={14} color={colors.accent} />
-                    <Text style={[styles.markReadText, { color: colors.accent }]}>Mark read</Text>
+                  <TouchableOpacity onPress={handleMarkAllRead} style={[styles.closeBtn, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]} activeOpacity={0.7}>
+                    <CheckCheck size={16} color={colors.accent} />
+                  </TouchableOpacity>
+                )}
+                {notifications.length > 0 && (
+                  <TouchableOpacity onPress={handleClearAll} style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.12)', borderColor: 'rgba(239, 68, 68, 0.35)' }]} activeOpacity={0.7}>
+                    <Trash2 size={16} color="#EF4444" />
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]} activeOpacity={0.7}>
@@ -112,9 +139,80 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               </View>
             </View>
 
+            {/* Filter Dropdown Menu */}
+            <View style={{ paddingHorizontal: 12, paddingTop: 6, zIndex: 10 }}>
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: colors.bgCardAlt,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                  borderRadius: 8,
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                }}
+                onPress={() => setIsDropdownOpen(!isDropdownOpen)}
+                activeOpacity={0.8}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Filter size={14} color={colors.accent} />
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: colors.textPrimary }}>
+                    Filter: {activeFilter === 'all' ? 'All Activity' : activeFilter === 'payments' ? 'Transfers' : 'Blink Sales'}
+                  </Text>
+                </View>
+                <ChevronDown size={14} color={colors.textSecondary} />
+              </TouchableOpacity>
+
+              {isDropdownOpen && (
+                <View
+                  style={{
+                    marginTop: 4,
+                    backgroundColor: colors.bgCard,
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                    borderRadius: 8,
+                    paddingVertical: 4,
+                    elevation: 4,
+                  }}
+                >
+                  {[
+                    { id: 'all', label: 'All Activity' },
+                    { id: 'payments', label: 'Transfers' },
+                    { id: 'blinks', label: 'Blink Sales' },
+                  ].map((item) => {
+                    const selected = activeFilter === item.id;
+                    return (
+                      <TouchableOpacity
+                        key={item.id}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          backgroundColor: selected ? colors.accentSoft : 'transparent',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justify: 'space-between',
+                        }}
+                        onPress={() => {
+                          setActiveFilter(item.id as any);
+                          setIsDropdownOpen(false);
+                        }}
+                      >
+                        <Text style={{ fontSize: 10, fontWeight: selected ? '800' : '600', color: selected ? colors.accent : colors.textPrimary }}>
+                          {item.label}
+                        </Text>
+                        {selected && <CheckCheck size={12} color={colors.accent} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+
             {/* List */}
             <ScrollView style={styles.scrollList} contentContainerStyle={styles.scrollContent}>
-              {notifications.length === 0 ? (
+              {filteredNotifications.length === 0 ? (
                 <View style={styles.emptyBox}>
                   <Bell size={36} color={colors.textMuted} />
                   <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No notifications yet</Text>
@@ -152,8 +250,16 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                       onPress={() => handleSelectNotification(n)}
                       activeOpacity={0.7}
                     >
-                      <View style={[styles.iconWrap, { backgroundColor: iconBg }]}>
-                        <IconComponent size={18} color={iconColor} />
+                      <View style={[
+                        styles.iconWrap,
+                        { backgroundColor: iconBg },
+                        n.type === 'blink_paid' && { backgroundColor: 'rgba(99, 102, 241, 0.22)', borderColor: '#6366F1', borderWidth: 1 }
+                      ]}>
+                        {n.type === 'blink_paid' ? (
+                          <BlinkBrandMark size={20} />
+                        ) : (
+                          <IconComponent size={18} color={iconColor} />
+                        )}
                       </View>
 
                       <View style={{ flex: 1 }}>
@@ -168,12 +274,21 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                         <Text style={[styles.itemMessage, { color: colors.textSecondary }]} numberOfLines={2}>
                           {n.message}
                         </Text>
-                        {n.signature && (
-                          <View style={styles.receiptHintRow}>
-                            <Text style={[styles.receiptHintText, { color: colors.accent }]}>View Receipt</Text>
-                            <ExternalLink size={10} color={colors.accent} />
-                          </View>
-                        )}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                          {n.type === 'blink_paid' ? (
+                            <View style={{ backgroundColor: 'rgba(99, 102, 241, 0.15)', borderColor: 'rgba(99, 102, 241, 0.4)', borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                              <Text style={{ fontSize: 9, fontWeight: '800', color: colors.accent, letterSpacing: 0.5 }}>BLINK SALE</Text>
+                            </View>
+                          ) : (
+                            <View />
+                          )}
+                          {n.signature && (
+                            <View style={styles.receiptHintRow}>
+                              <Text style={[styles.receiptHintText, { color: colors.accent }]}>View Receipt</Text>
+                              <ExternalLink size={10} color={colors.accent} />
+                            </View>
+                          )}
+                        </View>
                       </View>
 
                       {!n.read && <View style={[styles.unreadDot, { backgroundColor: colors.accent }]} />}
@@ -213,8 +328,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
   },
   headerTitleRow: {
@@ -223,34 +338,34 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
   },
   unreadBadge: {
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
   },
   unreadBadgeText: {
     color: '#FFFFFF',
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '800',
   },
   markReadBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   markReadText: {
-    fontSize: 12,
+    fontSize: 9.5,
     fontWeight: '700',
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -259,36 +374,36 @@ const styles = StyleSheet.create({
     maxHeight: 460,
   },
   scrollContent: {
-    padding: 16,
-    gap: 10,
+    padding: 10,
+    gap: 5,
   },
   emptyBox: {
     alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-    gap: 10,
+    paddingVertical: 30,
+    paddingHorizontal: 16,
+    gap: 8,
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
   },
   emptySub: {
-    fontSize: 12,
+    fontSize: 10,
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 16,
   },
   itemCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
-    padding: 14,
-    borderRadius: 16,
+    gap: 10,
+    padding: 10,
+    borderRadius: 12,
     borderWidth: 1,
   },
   iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -299,14 +414,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   itemTitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   itemTime: {
     fontSize: 10,
   },
   itemMessage: {
-    fontSize: 12,
+    fontSize: 10,
     lineHeight: 16,
   },
   receiptHintRow: {
@@ -316,7 +431,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   receiptHintText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   unreadDot: {

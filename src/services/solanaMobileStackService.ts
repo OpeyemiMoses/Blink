@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { Transaction, PublicKey, Connection } from '@solana/web3.js';
 import * as LocalAuthentication from 'expo-local-authentication';
+import bs58 from 'bs58';
 import { SolanaService } from './solanaService';
 import { WalletAccount, WalletProviderService } from './walletProviderService';
 import { BiometricService } from './biometricService';
@@ -18,7 +19,7 @@ export interface BiometricSecurityStatus {
 }
 
 const SMS_APP_IDENTITY = {
-  name: 'Blink',
+  name: 'TapBlink',
   uri: 'https://seeker.blink.solana',
   icon: 'icon.png',
 };
@@ -82,18 +83,24 @@ export class SolanaMobileStackService {
    * If MWA is unavailable (e.g. running in web browser), falls back cleanly.
    */
   static async connectMWA(): Promise<WalletAccount | null> {
+    if (Platform.OS === 'web') {
+      console.log('MWA is designed for Android native / Seeker devices.');
+      return null;
+    }
+
     try {
-      // Dynamically import MWA protocol to avoid web bundle breakages
-      const mwa = await import('@solana-mobile/mobile-wallet-adapter-protocol');
-      if (typeof mwa.transact !== 'function') {
+      // Dynamically import MWA web3js to avoid web bundle breakages
+      const { transact } = await import('@solana-mobile/mobile-wallet-adapter-protocol-web3js');
+      if (typeof transact !== 'function') {
         throw new Error('MWA transact not available on this platform');
       }
 
       let authorizedAccount: WalletAccount | null = null;
+      const targetCluster = SolanaService.getNetwork() === 'devnet' ? 'devnet' : 'mainnet-beta';
 
-      await mwa.transact(async (wallet: any) => {
+      await transact(async (wallet: any) => {
         const authResult = await wallet.authorize({
-          cluster: 'devnet',
+          cluster: targetCluster,
           identity: SMS_APP_IDENTITY,
         });
 
@@ -105,7 +112,7 @@ export class SolanaMobileStackService {
 
           this.mwaAuthToken = authResult.auth_token || null;
           authorizedAccount = {
-            name: authResult.wallet_uri_base || 'Solana Mobile Wallet',
+            name: authResult.wallet_uri_base || 'Seeker Seed Vault (MWA)',
             publicKey: pubkeyBase58,
             isPrivy: false,
           };
@@ -168,26 +175,47 @@ export class SolanaMobileStackService {
    * Sign and send transaction via MWA if active, otherwise via WalletProviderService signer.
    */
   static async signAndSendTransaction(tx: Transaction): Promise<string> {
-    // 1. Try MWA if on Android
-    if (this.isSolanaMobileEnvironment() && this.mwaAuthToken) {
+    // 1. Try MWA if on Android or if MWA account is active
+    const activeAcc = WalletProviderService.getActiveAccount();
+    const isMwaActive = activeAcc?.name?.includes('MWA') || activeAcc?.name?.includes('Seed Vault') || activeAcc?.name?.includes('Mobile');
+
+    if (Platform.OS === 'android' || isMwaActive) {
       try {
-        const mwa = await import('@solana-mobile/mobile-wallet-adapter-protocol');
+        const { transact } = await import('@solana-mobile/mobile-wallet-adapter-protocol-web3js');
         let txSig = '';
+        const targetCluster = SolanaService.getNetwork() === 'devnet' ? 'devnet' : 'mainnet-beta';
 
-        await mwa.transact(async (wallet: any) => {
-          const authResult = await wallet.reauthorize({
-            auth_token: this.mwaAuthToken!,
-            identity: SMS_APP_IDENTITY,
-          });
-
-          this.mwaAuthToken = authResult.auth_token;
+        await transact(async (wallet: any) => {
+          if (this.mwaAuthToken) {
+            try {
+              const reauthResult = await wallet.reauthorize({
+                auth_token: this.mwaAuthToken,
+                identity: SMS_APP_IDENTITY,
+              });
+              this.mwaAuthToken = reauthResult.auth_token;
+            } catch {
+              // If reauth fails, re-authorize
+              const authResult = await wallet.authorize({
+                cluster: targetCluster,
+                identity: SMS_APP_IDENTITY,
+              });
+              this.mwaAuthToken = authResult.auth_token;
+            }
+          } else {
+            const authResult = await wallet.authorize({
+              cluster: targetCluster,
+              identity: SMS_APP_IDENTITY,
+            });
+            this.mwaAuthToken = authResult.auth_token;
+          }
 
           const signedTxs = await wallet.signAndSendTransactions({
-            transactions: [tx.serialize({ requireAllSignatures: false }).toString('base64')],
+            transactions: [tx],
           });
 
           if (signedTxs?.[0]) {
-            txSig = signedTxs[0];
+            const sig = signedTxs[0];
+            txSig = typeof sig === 'string' ? sig : bs58.encode(sig);
           }
         });
 
@@ -201,3 +229,4 @@ export class SolanaMobileStackService {
     return await WalletProviderService.signAndSendTransaction(tx);
   }
 }
+

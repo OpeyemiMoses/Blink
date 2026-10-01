@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import { Home, Radio, Store, Wallet, User, Bookmark, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { Layers, Radio, Wallet, User, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react-native';
 import { useTheme } from '../theme/ThemeContext';
 
 export type TabKey = 'markets' | 'saved' | 'tap' | 'studio' | 'wallet' | 'profile' | 'notifications' | 'settings';
@@ -20,11 +20,10 @@ export const FloatingMobileNav: React.FC<FloatingMobileNavProps> = ({
   const { colors, isDark } = useTheme();
 
   const tabs = [
-    { key: 'markets' as const, label: 'Markets', icon: Home },
-    { key: 'saved' as const, label: 'Saved', icon: Bookmark },
-    { key: 'tap' as const, label: 'Tap', icon: Radio },
-    { key: 'studio' as const, label: 'Studio', icon: Store },
-    { key: 'wallet' as const, label: 'Wallet', icon: Wallet },
+    { key: 'markets' as const, label: 'Blinks', icon: Layers },
+    { key: 'studio' as const, label: 'Studio', icon: TrendingUp },
+    { key: 'tap' as const, label: 'Tap & Scan', icon: Radio },
+    { key: 'wallet' as const, label: 'Pocket', icon: Wallet },
     ...(isAuthenticated ? [{ key: 'profile' as const, label: 'Profile', icon: User }] : []),
   ];
 
@@ -170,7 +169,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   collapsedLabel: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
 });

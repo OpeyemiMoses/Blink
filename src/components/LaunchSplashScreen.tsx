@@ -304,13 +304,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   brandTitleText: {
-    fontSize: 28,
+    fontSize: 18,
     fontWeight: '900',
     letterSpacing: 4,
     textAlign: 'center',
   },
   brandTagline: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 2.5,
     textAlign: 'center',
