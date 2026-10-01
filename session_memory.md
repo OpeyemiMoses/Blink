@@ -3,7 +3,7 @@
 ## Project
 Expo/React Native mobile app — Solana Blink payments with NFC & QR.  
 Workspace: `/Users/user/.gemini/antigravity-ide/scratch/seeker-tapblink`  
-GitHub Repo: `https://github.com/OpeyemiMoses/Blink.git` (Pushed & up to date on `main`)
+GitHub Repo: `https://github.com/OpeyemiMoses/Blink.git` (Pushed & up to date on `main` at commit `4319dc7`)
 
 ## Active Tunnels
 - **localtunnel**: `https://wise-peas-brake.loca.lt` (Password: `105.120.128.249`)
@@ -27,14 +27,20 @@ GitHub Repo: `https://github.com/OpeyemiMoses/Blink.git` (Pushed & up to date on
 
 ## Completed Features
 
+### Railway & Native APK API Ready (COMPLETED Oct 1)
+- Created centralized `src/services/apiConfig.ts`: resolves `getApiUrl(path)` using `EXPO_PUBLIC_API_URL` for native Android builds, and `window.location.origin` on Web.
+- Replaced all raw `/api/` fetch calls across `physicalBlinkRegistry.ts`, `userProfileService.ts`, `receiptService.ts`, `streakService.ts`, `blinkIdService.ts`, `priceService.ts`, `solanaService.ts`, and `databaseService.ts`.
+- Added runtime network switching in `SolanaService`: toggles between `devnet` and `mainnet-beta` dynamically at runtime without requiring an APK rebuild.
+- Configured Railway production deployment: added `Procfile` (`web: node server.js`), `railway.json`, and `"build": "expo export --platform web"` script in `package.json`.
+- Tested web export: `npm run build` completed with code 0 (`Exported: dist`).
+- Committed and pushed to `https://github.com/OpeyemiMoses/Blink.git` on `main`.
+
 ### Solana Mobile Stack (SMS) & Mobile Wallet Adapter (MWA) (COMPLETED Oct 1)
 - Installed official `@solana-mobile/mobile-wallet-adapter-protocol` and `@solana-mobile/mobile-wallet-adapter-protocol-web3js`.
 - Implemented native `transact` in `SolanaMobileStackService.ts` for MWA authorization, reauthorization, and transaction signing.
 - Integrated automatic MWA routing inside `WalletProviderService.signAndSendTransaction` for seamless Seed Vault / Android wallet signing.
 - Configured Android package `com.blink.solanamobile` in `app.json` for Android APK generation.
 - Added `skipLibCheck: true` in `tsconfig.json` for fast, reliable compilation with deep Web3 libraries.
-- Verified web and mobile compatibility: full web bundle exported cleanly (`npx expo export --platform web` exited with code 0).
-- Successfully committed and pushed to `https://github.com/OpeyemiMoses/Blink.git` on `main`.
 
 ### SKR Discount / Rebate System
 - SKR blink payments get 10% off — price set in USDC, backend queries live SKR price, applies 10% discount.
@@ -60,10 +66,3 @@ GitHub Repo: `https://github.com/OpeyemiMoses/Blink.git` (Pushed & up to date on
 - Profile edit form collapsed by default, pencil icon toggles.
 - Mascot vector avatars default for new profiles.
 - No emojis in UI text.
-
----
-
-## Remaining Hackathon Action Items
-1. **Generate Standalone Android APK**: Run EAS Build (`eas build -p android --profile preview`) or generate local APK for judges to install on Seeker/Android devices.
-2. **Record 3-Minute Demo Video**: Showcase NFC physical tap, live SKR price dynamic discount, and daily Clock-In streak.
-3. **Build 6-Slide Pitch Deck**: Highlighting Seeker POS, SKR token mechanics, and 30-day Solana dApp Store deployment roadmap.
