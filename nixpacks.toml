@@ -6,7 +6,7 @@ nixPkgs = ["nodejs_20", "npm-10_x"]
 cmds = ["npm ci --ignore-scripts"]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = ["CI=1 npm run build"]
 
 [start]
 cmd = "node server.js"

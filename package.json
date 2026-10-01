@@ -49,7 +49,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "expo start",
-    "build": "expo export --platform web",
+    "build": "CI=1 expo export --platform web",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web"

@@ -17,7 +17,7 @@
         },
         "build": {
           "cmds": [
-            "npm run build"
+            "CI=1 npm run build"
           ]
         }
       }
