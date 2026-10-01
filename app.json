@@ -21,6 +21,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "8ff31365-977e-4431-9328-e25fbe94e104"
+      }
+    },
+    "owner": "yemigraffix"
   }
 }
