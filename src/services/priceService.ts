@@ -3,6 +3,8 @@
  * Fetches live market prices from CoinGecko, DexScreener & backend API with persistent caching.
  */
 
+import { getApiUrl } from './apiConfig';
+
 export interface PriceData {
   solUsdt: number;
   skrUsdt: number;
@@ -248,8 +250,7 @@ export class PriceService {
 
       // 1. Try our direct high-speed backend /api/prices endpoint
       try {
-        const origin = typeof window !== 'undefined' ? window.location.origin : '';
-        const apiRes = await fetch(`${origin}/api/prices`, {
+        const apiRes = await fetch(getApiUrl('/api/prices'), {
           headers: { Accept: 'application/json' },
         });
         if (apiRes.ok) {

@@ -2,6 +2,7 @@ import { NotificationService } from './notificationService';
 import { ReceiptService } from './receiptService';
 import { TransactionReceipt } from '../types';
 import { PushNotificationService } from './pushNotificationService';
+import { getApiUrl } from './apiConfig';
 
 const NOTIFIED_STORAGE_KEY = 'tapblink_notified_sales_v1';
 
@@ -102,7 +103,7 @@ class SaleWatcherManager {
         username: this.activeUsername || '',
       });
 
-      const es = new EventSource(`/api/events?${params.toString()}`);
+      const es = new EventSource(getApiUrl(`/api/events?${params.toString()}`));
       this.eventSource = es;
 
       es.addEventListener('blink_sale', (evt: MessageEvent) => {
@@ -129,7 +130,7 @@ class SaleWatcherManager {
 
     try {
       const url = `/api/receipts?address=${encodeURIComponent(this.activeAddress)}${this.activeUsername ? `&username=${encodeURIComponent(this.activeUsername)}` : ''}`;
-      const res = await fetch(url);
+      const res = await fetch(getApiUrl(url));
       if (!res.ok) return;
 
       const data = await res.json();

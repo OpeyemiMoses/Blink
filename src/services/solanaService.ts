@@ -9,6 +9,7 @@ import {
 } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { ExternalWalletService } from './externalWalletService';
+import { getApiUrl } from './apiConfig';
 
 export const DEVNET_RPC = 'https://api.devnet.solana.com';
 export const MAINNET_RPC = 'https://api.mainnet-beta.solana.com';
@@ -20,6 +21,7 @@ export const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9
 export const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 
 const STORAGE_KEY = 'seeker_solana_private_key';
+const STORAGE_NETWORK_KEY = 'solana_active_network_mode';
 
 export interface OnChainTransactionInfo {
   signature: string;
@@ -39,18 +41,32 @@ export interface EnrichedTransactionInfo extends OnChainTransactionInfo {
 }
 
 export class SolanaService {
+  private static activeNetwork: 'devnet' | 'mainnet-beta' = 'devnet';
   private static connection = new Connection(DEVNET_RPC, { commitment: 'confirmed', disableRetryOnRateLimit: true });
-  private static activeNetwork: 'devnet' = 'devnet';
   private static currentKeypair: Keypair | null = null;
 
-  static setNetwork(_network?: string) {
-    // Strictly locked to devnet
-    this.activeNetwork = 'devnet';
-    this.connection = new Connection(DEVNET_RPC, { commitment: 'confirmed', disableRetryOnRateLimit: true });
+  static setNetwork(network?: string) {
+    const net = (network === 'mainnet' || network === 'mainnet-beta') ? 'mainnet-beta' : 'devnet';
+    this.activeNetwork = net;
+    const rpc = net === 'mainnet-beta' ? MAINNET_RPC : DEVNET_RPC;
+    this.connection = new Connection(rpc, { commitment: 'confirmed', disableRetryOnRateLimit: true });
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem(STORAGE_NETWORK_KEY, net);
+      } catch {}
+    }
   }
 
-  static getNetwork(): 'devnet' {
-    return 'devnet';
+  static getNetwork(): 'devnet' | 'mainnet-beta' {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const saved = window.localStorage.getItem(STORAGE_NETWORK_KEY);
+        if (saved === 'mainnet-beta' || saved === 'mainnet') {
+          return 'mainnet-beta';
+        }
+      } catch {}
+    }
+    return this.activeNetwork;
   }
 
   static getConnection(): Connection {
@@ -226,8 +242,8 @@ export class SolanaService {
 
     // 1. Primary: Backend /api/balance proxy (ultra-fast, bypasses mobile 429 & CORS)
     try {
-      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
-        const res = await fetch(`/api/balance?address=${encodeURIComponent(pubkeyStr.trim())}`);
+      if (typeof fetch !== 'undefined') {
+        const res = await fetch(getApiUrl(`/api/balance?address=${encodeURIComponent(pubkeyStr.trim())}`));
         if (res.ok) {
           const data = await res.json();
           if (data && data.success && typeof data.sol === 'number') {
@@ -308,8 +324,8 @@ export class SolanaService {
 
     // 1. Primary: Backend /api/balance proxy (ultra-fast, bypasses mobile 429 & CORS)
     try {
-      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
-        const res = await fetch(`/api/balance?address=${encodeURIComponent(pubkeyStr.trim())}`);
+      if (typeof fetch !== 'undefined') {
+        const res = await fetch(getApiUrl(`/api/balance?address=${encodeURIComponent(pubkeyStr.trim())}`));
         if (res.ok) {
           const data = await res.json();
           if (data && data.success && typeof data.usdc === 'number') {
@@ -412,8 +428,8 @@ export class SolanaService {
 
     // 1. Primary: Backend /api/balance proxy (ultra-fast, bypasses mobile 429 & CORS)
     try {
-      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
-        const res = await fetch(`/api/balance?address=${encodeURIComponent(pubkeyStr.trim())}`);
+      if (typeof fetch !== 'undefined') {
+        const res = await fetch(getApiUrl(`/api/balance?address=${encodeURIComponent(pubkeyStr.trim())}`));
         if (res.ok) {
           const data = await res.json();
           if (data && data.success && typeof data.skr === 'number') {
@@ -698,8 +714,8 @@ export class SolanaService {
 
     // 1. Primary: Use backend /api/tx-history proxy (bypasses mobile RPC rate limits & CORS)
     try {
-      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
-        const res = await fetch(`/api/tx-history?address=${encodeURIComponent(pubkeyStr)}&limit=${limit}`);
+      if (typeof fetch !== 'undefined') {
+        const res = await fetch(getApiUrl(`/api/tx-history?address=${encodeURIComponent(pubkeyStr)}&limit=${limit}`));
         if (res.ok) {
           const data = await res.json();
           if (data && data.success && Array.isArray(data.transactions)) {

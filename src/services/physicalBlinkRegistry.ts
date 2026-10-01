@@ -1,3 +1,5 @@
+import { getApiUrl } from './apiConfig';
+
 export type ActionType = 'payment' | 'tip' | 'claim' | 'mint' | 'checkin' | 'donation' | 'voucher';
 export type BlinkVisibility = 'global' | 'physical';
 
@@ -40,10 +42,10 @@ export class PhysicalBlinkRegistry {
    * Fetch global shareable blinks and creator blinks from the cloud backend.
    */
   static async syncFromCloud(): Promise<PhysicalBlink[]> {
-    if (typeof window === 'undefined') return [];
+    if (typeof fetch === 'undefined') return [];
     try {
       this.isSyncing = true;
-      const res = await fetch('/api/blinks');
+      const res = await fetch(getApiUrl('/api/blinks'));
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.blinks)) {
@@ -483,8 +485,8 @@ export class PhysicalBlinkRegistry {
     }
 
     // Sync to cloud backend in background
-    if (typeof window !== 'undefined' && typeof fetch === 'function') {
-      fetch('/api/blinks', {
+    if (typeof fetch === 'function') {
+      fetch(getApiUrl('/api/blinks'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newBlink),
@@ -559,8 +561,8 @@ export class PhysicalBlinkRegistry {
     this.saveRegistry();
     this.notifyChange(updatedItem);
 
-    if (typeof window !== 'undefined' && typeof fetch === 'function') {
-      fetch('/api/blinks', {
+    if (typeof fetch === 'function') {
+      fetch(getApiUrl('/api/blinks'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedItem),
@@ -611,8 +613,8 @@ export class PhysicalBlinkRegistry {
     }
 
     // 5. Send REST DELETE request to cloud backend
-    if (typeof window !== 'undefined' && typeof fetch === 'function') {
-      fetch(`/api/blinks/${cleanId}`, {
+    if (typeof fetch === 'function') {
+      fetch(getApiUrl(`/api/blinks/${cleanId}`), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ creatorAddress: requesterAddress }),
@@ -673,8 +675,8 @@ export class PhysicalBlinkRegistry {
       this.notifyChange(blink);
     }
 
-    if (typeof window !== 'undefined' && typeof fetch === 'function') {
-      fetch(`/api/blinks/${cleanId}/tap`, {
+    if (typeof fetch === 'function') {
+      fetch(getApiUrl(`/api/blinks/${cleanId}/tap`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ success, amountUsdc: computedUsdc }),

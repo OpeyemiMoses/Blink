@@ -1,5 +1,6 @@
 import { TransactionReceipt } from '../types';
 import { EnrichedTransactionInfo, SolanaService } from './solanaService';
+import { getApiUrl } from './apiConfig';
 
 const STORAGE_KEY = 'blink_transaction_receipts_v1';
 
@@ -59,8 +60,8 @@ export class ReceiptService {
     this.persist();
 
     // Asynchronously synchronize to cloud database so receiver device can load full metadata
-    if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
-      fetch('/api/receipts', {
+    if (typeof fetch !== 'undefined') {
+      fetch(getApiUrl('/api/receipts'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(receipt),
@@ -89,8 +90,8 @@ export class ReceiptService {
     this.init();
     if (!address) return [];
     try {
-      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
-        const res = await fetch(`/api/receipts?address=${encodeURIComponent(address)}`);
+      if (typeof fetch !== 'undefined') {
+        const res = await fetch(getApiUrl(`/api/receipts?address=${encodeURIComponent(address)}`));
         if (res.ok) {
           const data = await res.json();
           if (data && data.success && Array.isArray(data.receipts)) {
@@ -185,7 +186,7 @@ export class ReceiptService {
         ? `/api/receipts?blinkId=${encodeURIComponent(cleanId)}`
         : `/api/receipts?address=${encodeURIComponent(cleanAddr)}`;
 
-      const res = await fetch(url).catch(() => null);
+      const res = await fetch(getApiUrl(url)).catch(() => null);
       if (res && res.ok) {
         const data = await res.json();
         if (data && data.success && Array.isArray(data.receipts)) {
@@ -211,8 +212,8 @@ export class ReceiptService {
     this.init();
     if (!signature) return null;
     try {
-      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
-        const res = await fetch(`/api/receipts?signature=${encodeURIComponent(signature)}`);
+      if (typeof fetch !== 'undefined') {
+        const res = await fetch(getApiUrl(`/api/receipts?signature=${encodeURIComponent(signature)}`));
         if (res.ok) {
           const data = await res.json();
           if (data && data.success && data.receipt) {

@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { PushNotificationService } from './pushNotificationService';
 import { ToastService } from './toastService';
+import { getApiUrl } from './apiConfig';
 
 export interface StreakData {
   currentStreak: number;
@@ -237,9 +238,9 @@ export class StreakService {
     }
 
     // Sync to backend if handle or wallet provided
-    if (userWalletOrHandle) {
+    if (userWalletOrHandle && typeof fetch === 'function') {
       try {
-        fetch('/api/profile/streak', {
+        fetch(getApiUrl('/api/profile/streak'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

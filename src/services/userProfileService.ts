@@ -7,6 +7,7 @@ import {
   MASCOT_GOLD_URI,
 } from '../constants/mascotAvatars';
 import { BlinkIdService } from './blinkIdService';
+import { getApiUrl } from './apiConfig';
 
 export interface LinkedAccounts {
   email: string | null;
@@ -277,7 +278,7 @@ export class UserProfileService {
   static async syncCloudProfile(addressOrEmail?: string, fallbackEmail?: string): Promise<UserProfile | null> {
     if (!addressOrEmail || typeof fetch !== 'function') return null;
     try {
-      let res = await fetch(`/api/users/${encodeURIComponent(addressOrEmail)}`);
+      let res = await fetch(getApiUrl(`/api/users/${encodeURIComponent(addressOrEmail)}`));
       let data = res.ok ? await res.json() : null;
 
       // If initial result has a temporary/auto-generated username and we have an email, check email profile
@@ -287,7 +288,7 @@ export class UserProfileService {
         (!data?.user || !data.user.username || data.user.username.startsWith('user_') || data.user.username === 'seeker_user')
       ) {
         try {
-          const emailRes = await fetch(`/api/users/${encodeURIComponent(fallbackEmail)}`);
+          const emailRes = await fetch(getApiUrl(`/api/users/${encodeURIComponent(fallbackEmail)}`));
           if (emailRes.ok) {
             const emailData = await emailRes.json();
             if (emailData?.user?.username && !emailData.user.username.startsWith('user_')) {
@@ -332,8 +333,10 @@ export class UserProfileService {
       } catch (err) {
         console.error('Failed to save profile:', err);
       }
+    }
 
-      // Background Cloud Sync to server database
+    // Background Cloud Sync to server database
+    if (this.profile && typeof fetch === 'function') {
       try {
         const p = this.profile;
         const userKey = p.address || p.publicKey || p.username;
@@ -343,7 +346,7 @@ export class UserProfileService {
           publicKey: userKey,
           updatedAt: p.updatedAt || Date.now(),
         };
-        fetch('/api/users', {
+        fetch(getApiUrl('/api/users'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),

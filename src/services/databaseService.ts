@@ -1,4 +1,5 @@
 import { PhysicalBlink, ActionType } from './physicalBlinkRegistry';
+import { getApiUrl } from './apiConfig';
 
 export interface UserRecord {
   id: string;
@@ -96,8 +97,8 @@ export class DatabaseService {
     this.emitEvent('blink_user_saved', updatedUser);
 
     // Sync to cloud backend in background so user carries over across all devices
-    if (typeof window !== 'undefined' && typeof fetch === 'function') {
-      fetch('/api/users', {
+    if (typeof fetch === 'function') {
+      fetch(getApiUrl('/api/users'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedUser),
@@ -113,9 +114,9 @@ export class DatabaseService {
    * Sync a user account from cloud backend across devices.
    */
   static async syncUserFromCloud(identifier: string): Promise<UserRecord | null> {
-    if (!identifier || typeof window === 'undefined' || typeof fetch !== 'function') return null;
+    if (!identifier || typeof fetch !== 'function') return null;
     try {
-      const res = await fetch(`/api/users/${encodeURIComponent(identifier)}`);
+      const res = await fetch(getApiUrl(`/api/users/${encodeURIComponent(identifier)}`));
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.user) {

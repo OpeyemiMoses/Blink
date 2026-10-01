@@ -5,6 +5,7 @@
  */
 
 import { PhysicalBlinkRegistry } from './physicalBlinkRegistry';
+import { getApiUrl } from './apiConfig';
 
 export interface ResolvedBlinkId {
   blinkId: string; // e.g. "@yemi"
@@ -84,7 +85,7 @@ export class BlinkIdService {
     // 2. Synchronize to backend server database
     if (typeof fetch === 'function') {
       try {
-        await fetch('/api/blink-ids', {
+        await fetch(getApiUrl('/api/blink-ids'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...record, email: email || '' }),
@@ -144,7 +145,7 @@ export class BlinkIdService {
     // 4. Query backend server /api/blink-ids/:id
     if (typeof fetch === 'function') {
       try {
-        const res = await fetch(`/api/blink-ids/${encodeURIComponent(withAt)}`);
+        const res = await fetch(getApiUrl(`/api/blink-ids/${encodeURIComponent(withAt)}`));
         if (res.ok) {
           const json = await res.json();
           if (json && json.success && json.data?.address) {
@@ -164,7 +165,7 @@ export class BlinkIdService {
 
       // Fallback query to /api/users/:id
       try {
-        const resUser = await fetch(`/api/users/${encodeURIComponent(cleanHandle)}`);
+        const resUser = await fetch(getApiUrl(`/api/users/${encodeURIComponent(cleanHandle)}`));
         if (resUser.ok) {
           const json = await resUser.json();
           const u = json.user;
@@ -223,7 +224,7 @@ export class BlinkIdService {
           address: currentAddress || '',
           email: currentEmail || '',
         });
-        const res = await fetch(`/api/users/check-username?${query.toString()}`);
+        const res = await fetch(getApiUrl(`/api/users/check-username?${query.toString()}`));
         if (res.ok) {
           const data = await res.json();
           if (data && typeof data.available === 'boolean') {
