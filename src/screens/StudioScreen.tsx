@@ -194,9 +194,6 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     }
   }, []);
 
-  useEffect(() => {
-    setBlinks([...PhysicalBlinkRegistry.loadRegistry(true)]);
-  }, [refreshTrigger]);
 
   useEffect(() => {
     if (activeAccount?.publicKey && !formRecipient) {
@@ -1879,5 +1876,23 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '800',
+  },
+  guestBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  guestBannerTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  guestBannerSub: {
+    fontSize: 10,
+    lineHeight: 14,
   },
 });

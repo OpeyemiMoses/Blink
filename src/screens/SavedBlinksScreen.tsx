@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
+  Image,
 } from 'react-native';
 import { ToastService } from '../services/toastService';
 import {

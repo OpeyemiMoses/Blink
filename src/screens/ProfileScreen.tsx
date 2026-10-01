@@ -1769,7 +1769,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: 'monospace',
     marginTop: 4,
-    wordBreak: 'break-all' as any,
   },
   walletAddressActions: {
     flexDirection: 'row',

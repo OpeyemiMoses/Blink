@@ -265,6 +265,17 @@ export class UserProfileService {
     return this.updateProfile({ linkedAccounts: updatedAccounts });
   }
 
+  static resetProfile(): void {
+    UserProfileService.profile = null;
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        localStorage.removeItem(PROFILE_KEY);
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
   static unbindAccount(provider: keyof LinkedAccounts): UserProfile {
     const current = this.getProfile();
     const updatedAccounts: LinkedAccounts = {

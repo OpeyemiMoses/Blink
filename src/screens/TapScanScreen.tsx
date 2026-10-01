@@ -8,6 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Modal,
+  Image,
 } from 'react-native';
 import {
   Radio,

@@ -697,7 +697,7 @@ export class SolanaService {
         slot: s.slot,
         err: s.err,
         memo: s.memo,
-        blockTime: s.blockTime
+        blockTime: s.blockTime ?? null
       }));
     } catch (err) {
       console.error('Error fetching signatures:', err);
@@ -761,7 +761,7 @@ export class SolanaService {
           slot: sigInfo.slot,
           err: sigInfo.err,
           memo: sigInfo.memo,
-          blockTime: sigInfo.blockTime,
+          blockTime: sigInfo.blockTime ?? null,
           direction: details?.direction || 'unknown',
           amountSol: details?.amountSol !== null && details?.amountSol !== undefined ? Number(details.amountSol.toFixed(6)) : null,
           amountUsdc: details?.amountUsdc !== null && details?.amountUsdc !== undefined ? Number(details.amountUsdc.toFixed(2)) : null,
@@ -917,7 +917,7 @@ export class SolanaService {
       } else if (diff > 0) {
         direction = 'receive';
         amountSol = Number((diff / LAMPORTS_PER_SOL).toFixed(4));
-        recipient = userAddress;
+        recipient = userAddress || null;
         sender = feePayer;
         counterparty = feePayer;
       }
