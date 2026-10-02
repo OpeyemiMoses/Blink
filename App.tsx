@@ -116,9 +116,91 @@ function BlinkMainApp() {
     });
   }, []);
 
-  // Listen for signout to reset guest mode
+  // Native Connected Mobile Wallet (Phantom / Solflare / MWA)
+  const [nativeWalletAccount, setNativeWalletAccount] = useState<WalletAccount | null>(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const saved = window.localStorage.getItem('blink_connected_native_wallet');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return WalletProviderService.getActiveAccount();
+  });
+
+  // Listen for native wallet connect / update events
+  useEffect(() => {
+    const handleWalletConnected = (e: any) => {
+      const acc = e?.detail || WalletProviderService.getActiveAccount();
+      if (acc) {
+        setNativeWalletAccount(acc);
+        setIsGuestMode(false);
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('blink_wallet_connected', handleWalletConnected);
+      return () => window.removeEventListener('blink_wallet_connected', handleWalletConnected);
+    }
+  }, []);
+
+  // Listen for inbound deep links (e.g. blink://onConnect from Phantom / Solflare)
+  useEffect(() => {
+    let removeListener: (() => void) | null = null;
+    const initDeepLinkListener = async () => {
+      try {
+        const { App: CapApp } = await import('@capacitor/app');
+        const handleUrl = (urlStr: string) => {
+          if (!urlStr) return;
+          console.log('[App] Received deep link URL:', urlStr);
+          if (
+            urlStr.includes('onConnect') ||
+            urlStr.includes('phantom_encryption_public_key') ||
+            urlStr.includes('solflare_encryption_public_key')
+          ) {
+            SolanaMobileStackService.handleConnectCallback(urlStr);
+          }
+        };
+
+        const sub = await CapApp.addListener('appUrlOpen', (event) => {
+          handleUrl(event.url);
+        });
+        removeListener = () => sub.remove();
+
+        const launchUrl = await CapApp.getLaunchUrl();
+        if (launchUrl?.url) {
+          handleUrl(launchUrl.url);
+        }
+      } catch (e) {
+        // Fallback on web/browser
+      }
+
+      if (typeof window !== 'undefined' && window.location) {
+        const href = window.location.href;
+        if (
+          href.includes('phantom_encryption_public_key') ||
+          href.includes('solflare_encryption_public_key')
+        ) {
+          SolanaMobileStackService.handleConnectCallback(href);
+        }
+      }
+    };
+
+    initDeepLinkListener();
+    return () => {
+      if (removeListener) removeListener();
+    };
+  }, []);
+
+  // Listen for signout to reset guest mode & native wallet
   useEffect(() => {
     const handleSignOut = () => {
+      setNativeWalletAccount(null);
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem('blink_connected_native_wallet');
+        window.localStorage.removeItem('solana_connected_wallet_name');
+        window.localStorage.removeItem('wallet_mobile_session');
+        window.localStorage.removeItem('wallet_shared_secret');
+      }
+      WalletProviderService.disconnect();
       setIsGuestMode(false);
       setCurrentTab('markets');
     };
@@ -286,7 +368,12 @@ function BlinkMainApp() {
     return null;
   }, [user?.id]);
 
-  const effectiveAddress = solanaAddress || fallbackSolanaAddress;
+  const effectiveAddress =
+    nativeWalletAccount?.publicKey ||
+    solanaAddress ||
+    fallbackSolanaAddress;
+
+  const isUserLoggedIn = authenticated || Boolean(nativeWalletAccount?.publicKey);
 
   // Global background poller for incoming cloud receipts and global Blink stats sync
   const initialSyncDoneRef = React.useRef(false);
@@ -429,7 +516,7 @@ function BlinkMainApp() {
 
   // Open profile handler: if guest, returns user to front page (WelcomeAuthScreen) to sign in/up
   const handleOpenProfile = () => {
-    if (!authenticated) {
+    if (!isUserLoggedIn) {
       setIsGuestMode(false);
     } else {
       setCurrentTab('profile');
@@ -437,44 +524,46 @@ function BlinkMainApp() {
   };
 
   const activeAccount: WalletAccount | null =
-    authenticated && effectiveAddress
-      ? {
-          name: (userProfile.displayName && userProfile.displayName !== 'Seeker Pioneer')
-            ? userProfile.displayName
-            : user?.email?.address
-            ? user.email.address
-            : user?.google
-            ? (user.google.email || (user.google as any)?.name || 'Google User')
-            : user?.twitter
-            ? `@${user.twitter.username}`
-            : user?.github
-            ? `@${user.github.username}`
-            : user?.discord
-            ? (user.discord.username || 'Discord User')
-            : user?.telegram
-            ? `@${user.telegram.username}`
-            : (activeSolanaWallet as any)?.walletClientType === 'phantom'
-            ? 'Phantom'
-            : (activeSolanaWallet as any)?.walletClientType === 'solflare'
-            ? 'Solflare'
-            : userProfile.displayName || 'Privy Solana Wallet',
-          publicKey: effectiveAddress,
-          isPrivy: true,
-        }
-      : null;
+    nativeWalletAccount
+      ? nativeWalletAccount
+      : (authenticated && effectiveAddress
+          ? {
+              name: (userProfile.displayName && userProfile.displayName !== 'Seeker Pioneer')
+                ? userProfile.displayName
+                : user?.email?.address
+                ? user.email.address
+                : user?.google
+                ? (user.google.email || (user.google as any)?.name || 'Google User')
+                : user?.twitter
+                ? `@${user.twitter.username}`
+                : user?.github
+                ? `@${user.github.username}`
+                : user?.discord
+                ? (user.discord.username || 'Discord User')
+                : user?.telegram
+                ? `@${user.telegram.username}`
+                : (activeSolanaWallet as any)?.walletClientType === 'phantom'
+                ? 'Phantom'
+                : (activeSolanaWallet as any)?.walletClientType === 'solflare'
+                ? 'Solflare'
+                : userProfile.displayName || 'Privy Solana Wallet',
+              publicKey: effectiveAddress,
+              isPrivy: true,
+            }
+          : null);
 
   // Ensure unauthenticated users never have a profile page to navigate to
   useEffect(() => {
-    if (!authenticated || !activeAccount) {
+    if (!isUserLoggedIn || !activeAccount) {
       if (currentTab === 'profile') {
         setCurrentTab('markets');
       }
     }
-  }, [authenticated, activeAccount, currentTab]);
+  }, [isUserLoggedIn, activeAccount, currentTab]);
 
-  // Persist user account into database ONLY when authenticated via real Privy user
+  // Persist user account into database when authenticated via Privy or native wallet
   useEffect(() => {
-    if (authenticated && !isGuestMode && activeAccount?.publicKey && (activeAccount.isPrivy || user?.id)) {
+    if (isUserLoggedIn && !isGuestMode && activeAccount?.publicKey) {
       DatabaseService.saveUserAccount({
         id: activeAccount.publicKey,
         address: activeAccount.publicKey,
@@ -485,25 +574,25 @@ function BlinkMainApp() {
         avatarUrl: userProfile.avatarUrl,
       });
     }
-  }, [authenticated, isGuestMode, activeAccount?.publicKey, activeAccount?.name, activeAccount?.isPrivy, user?.id, userProfile.avatarUrl]);
+  }, [isUserLoggedIn, isGuestMode, activeAccount?.publicKey, activeAccount?.name, activeAccount?.isPrivy, user?.id, userProfile.avatarUrl]);
 
   // Cloud Account Restoration across devices & Google/Custom auto-derivation
   useEffect(() => {
-    if (!authenticated || !user) return;
+    if (!isUserLoggedIn) return;
 
     const lookupKey = effectiveAddress || user?.email?.address || user?.id;
     if (!lookupKey) return;
 
     const googleAccount =
-      user.google ||
-      (user.linkedAccounts?.find((acc: any) => acc.type === 'google_oauth') as any);
+      user?.google ||
+      (user?.linkedAccounts?.find((acc: any) => acc.type === 'google_oauth') as any);
 
     const googleEmail =
-      user.google?.email ||
+      user?.google?.email ||
       googleAccount?.email ||
-      (user.email?.address && user.email.address.toLowerCase().endsWith('@gmail.com') ? user.email.address : null);
+      (user?.email?.address && user.email.address.toLowerCase().endsWith('@gmail.com') ? user.email.address : null);
 
-    const userEmail = googleEmail || user.email?.address || null;
+    const userEmail = googleEmail || user?.email?.address || null;
 
     // Check cloud database first to restore profile on this device
     DatabaseService.syncUserFromCloud(lookupKey).then(async (cloudUser) => {
@@ -559,7 +648,7 @@ function BlinkMainApp() {
 
       if (isGoogleAuth && googleEmail) {
         if (!currentProf.hasCustomizedProfile || currentProf.username === 'seeker_user') {
-          const googleName = user.google?.name || googleAccount?.name;
+          const googleName = user?.google?.name || googleAccount?.name;
           const { profile: updated, wasUsernameTaken, assignedUsername, originalRequested } =
             await UserProfileService.setupGoogleProfileAsync(googleEmail, googleName, effectiveAddress || undefined);
           setUserProfile(updated);
@@ -902,8 +991,8 @@ function BlinkMainApp() {
 
   let mainScreenContent: React.ReactNode = null;
 
-  // 2. Gate unauthenticated users to Privy login/signup page unless browsing as guest
-  if (!authenticated && !isGuestMode) {
+  // 2. Gate unauthenticated users to login/signup page unless browsing as guest
+  if (!isUserLoggedIn && !isGuestMode) {
     mainScreenContent = (
       <WelcomeAuthScreen
         onContinueGuest={() => setIsGuestMode(true)}
@@ -1123,7 +1212,7 @@ function BlinkMainApp() {
           <FloatingMobileNav
             currentTab={currentTab}
             onSelectTab={setCurrentTab}
-            isAuthenticated={authenticated && !!activeAccount}
+            isAuthenticated={isUserLoggedIn && !!activeAccount}
           />
         </View>
       );

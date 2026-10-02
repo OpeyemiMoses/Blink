@@ -2,9 +2,12 @@ import { Platform, Linking } from 'react-native';
 import { Transaction, PublicKey, Connection } from '@solana/web3.js';
 import * as LocalAuthentication from 'expo-local-authentication';
 import bs58 from 'bs58';
+import nacl from 'tweetnacl';
+import { AppLauncher } from '@capacitor/app-launcher';
 import { SolanaService } from './solanaService';
 import { WalletAccount, WalletProviderService } from './walletProviderService';
 import { BiometricService } from './biometricService';
+import { ToastService } from './toastService';
 
 export interface MobileWalletAuthResult {
   address: string;
@@ -31,35 +34,74 @@ const SMS_APP_IDENTITY = {
   icon: 'favicon.ico',
 };
 
+const encodeBs58 = (bytes: Uint8Array): string => {
+  if (typeof (bs58 as any).encode === 'function') return (bs58 as any).encode(bytes);
+  if (typeof (bs58 as any).default?.encode === 'function') return (bs58 as any).default.encode(bytes);
+  return Buffer.from(bytes).toString('base64');
+};
+
+const decodeBs58 = (str: string): Uint8Array => {
+  if (typeof (bs58 as any).decode === 'function') return (bs58 as any).decode(str);
+  if (typeof (bs58 as any).default?.decode === 'function') return (bs58 as any).default.decode(str);
+  return new Uint8Array(Buffer.from(str, 'base64'));
+};
+
 export class SolanaMobileStackService {
   private static mwaAuthToken: string | null = null;
   private static cachedSecurityStatus: BiometricSecurityStatus | null = null;
 
   /**
-   * Query device for installed Solana mobile wallets (Phantom, Solflare, Backpack).
+   * Query device for installed Solana mobile wallets (Phantom, Solflare, Backpack, MWA).
+   * Actively queries native package visibility on Android via Capacitor AppLauncher.
    */
   static async getInstalledWallets(): Promise<InstalledWalletInfo[]> {
     const list: InstalledWalletInfo[] = [
       { id: 'phantom', name: 'Phantom', scheme: 'phantom://', isInstalled: false },
       { id: 'solflare', name: 'Solflare', scheme: 'solflare://', isInstalled: false },
       { id: 'backpack', name: 'Backpack', scheme: 'backpack://', isInstalled: false },
+      { id: 'mwa', name: 'Solana Mobile (MWA)', scheme: 'solana-wallet://', isInstalled: false },
     ];
 
-    if (Platform.OS === 'web') {
-      return list.map((w) => ({
-        ...w,
-        isInstalled: typeof window !== 'undefined' && Boolean((window as any).solana || (window as any).phantom?.solana),
-      }));
+    let checkedWithNative = false;
+
+    // Check with Capacitor AppLauncher on native platforms (Android APK)
+    try {
+      if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable?.('AppLauncher')) {
+        for (const w of list) {
+          try {
+            const res = await AppLauncher.canOpenUrl({ url: w.scheme });
+            w.isInstalled = Boolean(res?.value);
+          } catch {
+            w.isInstalled = false;
+          }
+        }
+        checkedWithNative = true;
+      }
+    } catch (err) {
+      console.warn('Capacitor AppLauncher check error:', err);
     }
 
-    for (const w of list) {
-      try {
-        const canOpen = await Linking.canOpenURL(w.scheme);
-        w.isInstalled = Boolean(canOpen);
-      } catch {
-        w.isInstalled = false;
+    if (!checkedWithNative && Platform.OS !== 'web') {
+      for (const w of list) {
+        try {
+          const canOpen = await Linking.canOpenURL(w.scheme);
+          w.isInstalled = Boolean(canOpen);
+        } catch {
+          w.isInstalled = false;
+        }
       }
+      checkedWithNative = true;
     }
+
+    // Web extension detection fallback
+    if (!checkedWithNative && typeof window !== 'undefined') {
+      const anyWin = window as any;
+      list[0].isInstalled = Boolean(anyWin.phantom?.solana?.isPhantom || anyWin.solana?.isPhantom);
+      list[1].isInstalled = Boolean(anyWin.solflare?.isSolflare);
+      list[2].isInstalled = Boolean(anyWin.backpack?.isBackpack || anyWin.xnft?.solana?.isBackpack);
+      list[3].isInstalled = Boolean(anyWin.solana);
+    }
+
     return list;
   }
 
@@ -70,7 +112,13 @@ export class SolanaMobileStackService {
     if (Platform.OS === 'android') return true;
     if (typeof window !== 'undefined') {
       const ua = navigator.userAgent.toLowerCase();
-      return ua.includes('android') || ua.includes('solana') || ua.includes('saga') || ua.includes('seeker');
+      return (
+        ua.includes('android') ||
+        ua.includes('solana') ||
+        ua.includes('saga') ||
+        ua.includes('seeker') ||
+        Boolean((window as any).Capacitor?.isNativePlatform?.())
+      );
     }
     return false;
   }
@@ -115,16 +163,10 @@ export class SolanaMobileStackService {
 
   /**
    * Authorize with Mobile Wallet Adapter (MWA) on Android / Seeker device.
-   * If MWA is unavailable (e.g. running in web browser), falls back cleanly.
    */
   static async connectMWA(): Promise<WalletAccount | null> {
-    if (Platform.OS === 'web') {
-      console.log('MWA is designed for Android native / Seeker devices.');
-      return null;
-    }
-
     try {
-      // Dynamically import MWA web3js to avoid web bundle breakages
+      // Dynamically import MWA web3js
       const { transact } = await import('@solana-mobile/mobile-wallet-adapter-protocol-web3js');
       if (typeof transact !== 'function') {
         throw new Error('MWA transact not available on this platform');
@@ -141,9 +183,10 @@ export class SolanaMobileStackService {
 
         if (authResult?.accounts?.[0]) {
           const rawPubkey = authResult.accounts[0].address;
-          const pubkeyBase58 = typeof rawPubkey === 'string'
-            ? rawPubkey
-            : new PublicKey(rawPubkey).toBase58();
+          const pubkeyBase58 =
+            typeof rawPubkey === 'string'
+              ? rawPubkey
+              : new PublicKey(rawPubkey).toBase58();
 
           this.mwaAuthToken = authResult.auth_token || null;
           authorizedAccount = {
@@ -156,6 +199,7 @@ export class SolanaMobileStackService {
 
       if (authorizedAccount) {
         WalletProviderService.setActiveAccount(authorizedAccount);
+        await this.syncOrRegisterWalletAccount(authorizedAccount);
         return authorizedAccount;
       }
     } catch (err: any) {
@@ -166,21 +210,267 @@ export class SolanaMobileStackService {
   }
 
   /**
-   * Connect to a specific installed wallet app (Phantom, Solflare, Backpack).
-   * Attempts MWA first, and if not responsive, launches wallet scheme.
+   * Launch Phantom mobile app with official Universal / Scheme connect handshake.
+   */
+  static async connectPhantomMobile(): Promise<void> {
+    try {
+      const dappKeyPair = nacl.box.keyPair();
+      const secretHex = Buffer.from(dappKeyPair.secretKey).toString('hex');
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('phantom_dapp_secret_key', secretHex);
+      }
+
+      const dappPubkeyBase58 = encodeBs58(dappKeyPair.publicKey);
+      const appUrl = encodeURIComponent('https://blink-production-5c36.up.railway.app');
+      const redirectLink = encodeURIComponent('blink://onConnect');
+      const cluster = SolanaService.getNetwork() === 'devnet' ? 'devnet' : 'mainnet-beta';
+
+      const phantomUrl = `phantom://ul/v1/connect?app_url=${appUrl}&dapp_encryption_public_key=${dappPubkeyBase58}&redirect_link=${redirectLink}&cluster=${cluster}`;
+
+      console.log('[SolanaMobileStack] Launching Phantom connect URL:', phantomUrl);
+
+      let launched = false;
+      try {
+        if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable?.('AppLauncher')) {
+          await AppLauncher.openUrl({ url: phantomUrl });
+          launched = true;
+        }
+      } catch (e) {
+        console.warn('AppLauncher openUrl failed:', e);
+      }
+
+      if (!launched) {
+        try {
+          await Linking.openURL(phantomUrl);
+          launched = true;
+        } catch {
+          const universalUrl = `https://phantom.app/ul/v1/connect?app_url=${appUrl}&dapp_encryption_public_key=${dappPubkeyBase58}&redirect_link=${redirectLink}&cluster=${cluster}`;
+          if (typeof window !== 'undefined') {
+            window.location.href = universalUrl;
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to initiate Phantom mobile connection:', err);
+      ToastService.error(`Could not open Phantom: ${err?.message || err}`);
+    }
+  }
+
+  /**
+   * Launch Solflare mobile app with official connect handshake.
+   */
+  static async connectSolflareMobile(): Promise<void> {
+    try {
+      const dappKeyPair = nacl.box.keyPair();
+      const secretHex = Buffer.from(dappKeyPair.secretKey).toString('hex');
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('solflare_dapp_secret_key', secretHex);
+      }
+
+      const dappPubkeyBase58 = encodeBs58(dappKeyPair.publicKey);
+      const appUrl = encodeURIComponent('https://blink-production-5c36.up.railway.app');
+      const redirectLink = encodeURIComponent('blink://onConnect');
+      const cluster = SolanaService.getNetwork() === 'devnet' ? 'devnet' : 'mainnet-beta';
+
+      const solflareUrl = `solflare://ul/v1/connect?app_url=${appUrl}&dapp_encryption_public_key=${dappPubkeyBase58}&redirect_link=${redirectLink}&cluster=${cluster}`;
+
+      console.log('[SolanaMobileStack] Launching Solflare connect URL:', solflareUrl);
+
+      let launched = false;
+      try {
+        if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable?.('AppLauncher')) {
+          await AppLauncher.openUrl({ url: solflareUrl });
+          launched = true;
+        }
+      } catch (e) {
+        console.warn('AppLauncher openUrl failed:', e);
+      }
+
+      if (!launched) {
+        try {
+          await Linking.openURL(solflareUrl);
+        } catch {
+          const universalUrl = `https://solflare.com/ul/v1/connect?app_url=${appUrl}&dapp_encryption_public_key=${dappPubkeyBase58}&redirect_link=${redirectLink}&cluster=${cluster}`;
+          if (typeof window !== 'undefined') {
+            window.location.href = universalUrl;
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to initiate Solflare mobile connection:', err);
+      ToastService.error(`Could not open Solflare: ${err?.message || err}`);
+    }
+  }
+
+  /**
+   * Handle incoming deep link callback from Phantom / Solflare.
+   * Decrypts the authorization payload, extracts public key,
+   * registers/syncs the account, and triggers immediate app login.
+   */
+  static async handleConnectCallback(urlString: string): Promise<WalletAccount | null> {
+    try {
+      console.log('[SolanaMobileStack] Processing wallet connect callback:', urlString);
+      const cleanUrl = urlString.replace('blink://', 'https://blink.local/').replace('solana-wallet://', 'https://blink.local/');
+      const parsedUrl = new URL(cleanUrl);
+      const searchParams = parsedUrl.searchParams;
+
+      const errorCode = searchParams.get('errorCode');
+      const errorMessage = searchParams.get('errorMessage');
+      if (errorCode || errorMessage) {
+        console.warn('Wallet connection cancelled or rejected by user:', errorCode, errorMessage);
+        ToastService.info(errorMessage || 'Wallet connection was cancelled.');
+        return null;
+      }
+
+      const walletPubkeyBase58 =
+        searchParams.get('phantom_encryption_public_key') ||
+        searchParams.get('solflare_encryption_public_key');
+      const nonceBase58 = searchParams.get('nonce');
+      const dataBase58 = searchParams.get('data');
+
+      if (!walletPubkeyBase58 || !nonceBase58 || !dataBase58) {
+        console.warn('Missing crypto handshake parameters in callback:', urlString);
+        return null;
+      }
+
+      const storedSecretHex =
+        typeof window !== 'undefined' && window.localStorage
+          ? window.localStorage.getItem('phantom_dapp_secret_key') ||
+            window.localStorage.getItem('solflare_dapp_secret_key')
+          : null;
+
+      if (!storedSecretHex) {
+        console.error('Dapp encryption secret key not found in storage.');
+        return null;
+      }
+
+      const dappSecretKey = new Uint8Array(Buffer.from(storedSecretHex, 'hex'));
+      const walletEncryptionPubkey = decodeBs58(walletPubkeyBase58);
+      const nonce = decodeBs58(nonceBase58);
+      const encryptedData = decodeBs58(dataBase58);
+
+      // Decrypt X25519 box
+      const sharedSecret = nacl.box.before(walletEncryptionPubkey, dappSecretKey);
+      const decrypted = nacl.box.open.after(encryptedData, nonce, sharedSecret);
+
+      if (!decrypted) {
+        console.error('Failed to decrypt wallet payload.');
+        return null;
+      }
+
+      const payloadStr = new TextDecoder().decode(decrypted);
+      const payload = JSON.parse(payloadStr);
+
+      const solanaPubkey = payload.public_key;
+      const session = payload.session;
+
+      if (!solanaPubkey) {
+        console.error('No public_key found in decrypted wallet payload.');
+        return null;
+      }
+
+      const walletName = searchParams.get('phantom_encryption_public_key') ? 'Phantom' : 'Solflare';
+
+      const account: WalletAccount = {
+        name: `${walletName} Mobile`,
+        publicKey: solanaPubkey,
+        isPrivy: false,
+      };
+
+      if (typeof window !== 'undefined' && window.localStorage) {
+        if (session) {
+          window.localStorage.setItem('wallet_mobile_session', session);
+          window.localStorage.setItem('wallet_shared_secret', Buffer.from(sharedSecret).toString('hex'));
+        }
+        window.localStorage.setItem('solana_connected_wallet_name', account.name);
+        window.localStorage.setItem('blink_connected_native_wallet', JSON.stringify(account));
+      }
+
+      WalletProviderService.setActiveAccount(account);
+      await this.syncOrRegisterWalletAccount(account);
+
+      return account;
+    } catch (err: any) {
+      console.error('Error handling wallet callback:', err);
+      ToastService.error(`Wallet connection failed: ${err?.message || err}`);
+      return null;
+    }
+  }
+
+  /**
+   * Helper: Restore cloud account or register new profile for connected wallet
+   */
+  private static async syncOrRegisterWalletAccount(account: WalletAccount) {
+    try {
+      const { DatabaseService } = await import('./databaseService');
+      const { UserProfileService } = await import('./userProfileService');
+      const { BlinkIdService } = await import('./blinkIdService');
+
+      const solanaPubkey = account.publicKey;
+      const walletName = account.name || 'Solana Wallet';
+
+      let cloudUser = await DatabaseService.syncUserFromCloud(solanaPubkey).catch(() => null);
+      if (cloudUser && cloudUser.username && cloudUser.username !== 'seeker_user') {
+        const updated = UserProfileService.updateProfile({
+          displayName: cloudUser.displayName,
+          username: cloudUser.username,
+          avatarUrl: cloudUser.avatarUrl || UserProfileService.getRandomMascot(),
+          bio: cloudUser.bio || '',
+          hasCustomizedProfile: true,
+        });
+        ToastService.success(`Welcome back @${cloudUser.username}! Connected with ${walletName}`);
+      } else {
+        const defaultHandle = `user_${solanaPubkey.slice(0, 4).toLowerCase()}${solanaPubkey.slice(-4).toLowerCase()}`;
+        const newProf = UserProfileService.updateProfile({
+          displayName: `${walletName.replace(' Mobile', '')} User`,
+          username: defaultHandle,
+          avatarUrl: UserProfileService.getRandomMascot(),
+          hasCustomizedProfile: false,
+        });
+        DatabaseService.saveUserAccount({
+          id: solanaPubkey,
+          address: solanaPubkey,
+          publicKey: solanaPubkey,
+          displayName: newProf.displayName,
+          username: newProf.username,
+          name: newProf.displayName,
+          avatarUrl: newProf.avatarUrl,
+          createdAt: Date.now(),
+        });
+        BlinkIdService.registerBlinkId(`@${newProf.username}`, solanaPubkey, newProf.displayName, newProf.avatarUrl);
+        ToastService.success(`Connected to ${walletName}! Account ready: @${newProf.username}`);
+      }
+
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('blink_wallet_connected', { detail: account }));
+        window.dispatchEvent(new CustomEvent('blink_profile_updated'));
+      }
+    } catch (e) {
+      console.warn('syncOrRegisterWalletAccount error:', e);
+    }
+  }
+
+  /**
+   * Connect to a specific installed wallet app (Phantom, Solflare, Backpack, MWA).
    */
   static async connectWalletApp(walletId: 'phantom' | 'solflare' | 'backpack' | 'mwa'): Promise<WalletAccount | null> {
-    try {
-      const mwaResult = await this.connectMWA();
-      if (mwaResult) return mwaResult;
-    } catch (e) {
-      console.warn('MWA connect attempt:', e);
+    if (walletId === 'phantom') {
+      await this.connectPhantomMobile();
+      return null;
+    }
+    if (walletId === 'solflare') {
+      await this.connectSolflareMobile();
+      return null;
+    }
+    if (walletId === 'mwa') {
+      return await this.connectMWA();
     }
 
-    const scheme = walletId === 'solflare' ? 'solflare://' : walletId === 'backpack' ? 'backpack://' : 'phantom://';
+    const scheme = walletId === 'backpack' ? 'backpack://' : 'phantom://';
     try {
-      const canOpen = await Linking.canOpenURL(scheme);
-      if (canOpen) {
+      if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable?.('AppLauncher')) {
+        await AppLauncher.openUrl({ url: scheme });
+      } else {
         await Linking.openURL(scheme);
       }
     } catch (err) {
@@ -191,9 +481,6 @@ export class SolanaMobileStackService {
 
   /**
    * Execute payment authorization using device biometric (fingerprint/face/pin).
-   * If security is enrolled, user authenticates with their fingerprint/face
-   * and the transaction executes automatically WITHOUT needing redundant signing screens!
-   * If no security is enrolled on device, returns needsManualSigning: true.
    */
   static async authorizePaymentWithDeviceBiometrics(
     title: string,
@@ -234,9 +521,11 @@ export class SolanaMobileStackService {
    * Sign and send transaction via MWA if active, otherwise via WalletProviderService signer.
    */
   static async signAndSendTransaction(tx: Transaction): Promise<string> {
-    // 1. Try MWA if on Android or if MWA account is active
     const activeAcc = WalletProviderService.getActiveAccount();
-    const isMwaActive = activeAcc?.name?.includes('MWA') || activeAcc?.name?.includes('Seed Vault') || activeAcc?.name?.includes('Mobile');
+    const isMwaActive =
+      activeAcc?.name?.includes('MWA') ||
+      activeAcc?.name?.includes('Seed Vault') ||
+      activeAcc?.name?.includes('Mobile');
 
     if (Platform.OS === 'android' || isMwaActive) {
       try {
@@ -253,7 +542,6 @@ export class SolanaMobileStackService {
               });
               this.mwaAuthToken = reauthResult.auth_token;
             } catch {
-              // If reauth fails, re-authorize
               const authResult = await wallet.authorize({
                 cluster: targetCluster,
                 identity: SMS_APP_IDENTITY,
@@ -274,7 +562,7 @@ export class SolanaMobileStackService {
 
           if (signedTxs?.[0]) {
             const sig = signedTxs[0];
-            txSig = typeof sig === 'string' ? sig : bs58.encode(sig);
+            txSig = typeof sig === 'string' ? sig : encodeBs58(sig);
           }
         });
 
@@ -284,8 +572,6 @@ export class SolanaMobileStackService {
       }
     }
 
-    // 2. Fall back to WalletProviderService signer (Privy embedded key / browser wallet)
     return await WalletProviderService.signAndSendTransaction(tx);
   }
 }
-

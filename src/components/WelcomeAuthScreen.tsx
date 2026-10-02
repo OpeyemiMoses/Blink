@@ -30,7 +30,7 @@ import {
   TelegramLogo,
 } from './SocialLogos';
 import { PhantomIcon, SolflareIcon } from './WalletIcons';
-import { SolanaMobileStackService } from '../services/solanaMobileStackService';
+import { SolanaMobileStackService, InstalledWalletInfo } from '../services/solanaMobileStackService';
 import { ToastService } from '../services/toastService';
 
 interface WelcomeAuthScreenProps {
@@ -45,6 +45,26 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
   const { colors, isDark } = useTheme();
   const { login } = usePrivy();
   const [authNotice, setAuthNotice] = React.useState<string | null>(null);
+  const [installedWallets, setInstalledWallets] = React.useState<InstalledWalletInfo[]>([]);
+  const [isDetectingWallets, setIsDetectingWallets] = React.useState(true);
+
+  React.useEffect(() => {
+    let active = true;
+    SolanaMobileStackService.getInstalledWallets()
+      .then((wallets) => {
+        if (active) {
+          setInstalledWallets(wallets);
+          setIsDetectingWallets(false);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to detect wallets:', err);
+        if (active) setIsDetectingWallets(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const { initOAuth } = useLoginWithOAuth({
     onError: (err: any) => {
@@ -72,22 +92,36 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
     login({ provider });
   };
 
+  const handleConnectInstalledWallet = async (walletId: 'phantom' | 'solflare' | 'backpack' | 'mwa') => {
+    try {
+      const name = walletId === 'phantom' ? 'Phantom' : walletId === 'solflare' ? 'Solflare' : 'Solana Wallet';
+      ToastService.info(`Connecting to ${name}...`);
+      await SolanaMobileStackService.connectWalletApp(walletId);
+    } catch (err: any) {
+      console.warn('Wallet connection error:', err);
+      ToastService.error(`Could not connect: ${err?.message || err}`);
+    }
+  };
+
   const handleMwaConnect = async () => {
     try {
+      ToastService.info('Checking device for Solana wallets...');
       const wallets = await SolanaMobileStackService.getInstalledWallets();
       const detected = wallets.filter((w) => w.isInstalled);
       if (detected.length > 0) {
         ToastService.info(`Connecting to ${detected[0].name}...`);
-        const account = await SolanaMobileStackService.connectWalletApp(detected[0].id);
-        if (account) {
-          ToastService.success(`Connected to ${account.name || detected[0].name}`);
-          return;
-        }
+        await SolanaMobileStackService.connectWalletApp(detected[0].id);
+        return;
       }
-      login({ mode: 'wallet' });
+      const mwaResult = await SolanaMobileStackService.connectMWA();
+      if (mwaResult) {
+        ToastService.success(`Connected to ${mwaResult.name}`);
+        return;
+      }
+      ToastService.info('No external Solana wallet app responded. You can sign in with Privy below or install Phantom.');
     } catch (err: any) {
       console.warn('MWA connect error:', err);
-      login({ mode: 'wallet' });
+      ToastService.info('No external Solana wallet responded. Please use Privy login.');
     }
   };
 
@@ -221,20 +255,74 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Mobile Wallet Adapter button for Android/Seeker */}
-        <TouchableOpacity
-          style={[styles.mwaButton, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
-          onPress={handleMwaConnect}
-          activeOpacity={0.8}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Wallet size={16} color={colors.accent} />
-            <Text style={[styles.mwaButtonText, { color: colors.textPrimary }]}>
-              Mobile Wallet Adapter (MWA) / Phantom
-            </Text>
+        {/* Detected Native Mobile Wallets (Phantom / Solflare / MWA) */}
+        {installedWallets.some((w) => w.isInstalled) ? (
+          <View style={styles.detectedWalletsBox}>
+            <View style={styles.detectedWalletsHeader}>
+              <View style={styles.greenPulseDot} />
+              <Text style={[styles.detectedWalletsHeaderText, { color: '#10B981' }]}>
+                SOLANA WALLETS DETECTED ON THIS DEVICE
+              </Text>
+            </View>
+
+            {installedWallets
+              .filter((w) => w.isInstalled)
+              .map((w) => (
+                <TouchableOpacity
+                  key={w.id}
+                  style={[
+                    styles.detectedWalletBtn,
+                    w.id === 'phantom'
+                      ? { backgroundColor: 'rgba(171, 159, 242, 0.12)', borderColor: '#AB9FF2' }
+                      : w.id === 'solflare'
+                      ? { backgroundColor: 'rgba(252, 129, 34, 0.12)', borderColor: '#FC8122' }
+                      : { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+                  ]}
+                  onPress={() => handleConnectInstalledWallet(w.id)}
+                  activeOpacity={0.8}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    {w.id === 'phantom' ? (
+                      <PhantomIcon size={24} />
+                    ) : w.id === 'solflare' ? (
+                      <SolflareIcon size={24} />
+                    ) : (
+                      <Wallet size={20} color={colors.accent} />
+                    )}
+                    <View>
+                      <Text style={[styles.detectedWalletTitle, { color: colors.textPrimary }]}>
+                        Connect {w.name}
+                      </Text>
+                      <Text style={[styles.detectedWalletSub, { color: colors.textSecondary }]}>
+                        Installed • 1-tap instant login
+                      </Text>
+                    </View>
+                  </View>
+                  <ArrowRight
+                    size={16}
+                    color={
+                      w.id === 'phantom' ? '#AB9FF2' : w.id === 'solflare' ? '#FC8122' : colors.accent
+                    }
+                  />
+                </TouchableOpacity>
+              ))}
           </View>
-          <ArrowRight size={14} color={colors.textMuted} />
-        </TouchableOpacity>
+        ) : (
+          /* Mobile Wallet Adapter button fallback */
+          <TouchableOpacity
+            style={[styles.mwaButton, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
+            onPress={handleMwaConnect}
+            activeOpacity={0.8}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Wallet size={16} color={colors.accent} />
+              <Text style={[styles.mwaButtonText, { color: colors.textPrimary }]}>
+                Mobile Wallet Adapter (MWA) / Phantom
+              </Text>
+            </View>
+            <ArrowRight size={14} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
 
         {authNotice && (
           <View style={[styles.authNoticeBox, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
@@ -480,6 +568,44 @@ const styles = StyleSheet.create({
   mwaButtonText: {
     fontSize: 11,
     fontWeight: '700',
+  },
+  detectedWalletsBox: {
+    gap: 8,
+    marginTop: 6,
+  },
+  detectedWalletsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  greenPulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  detectedWalletsHeaderText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  detectedWalletBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  detectedWalletTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  detectedWalletSub: {
+    fontSize: 10,
+    marginTop: 1,
   },
   featuresList: {
     gap: 12,

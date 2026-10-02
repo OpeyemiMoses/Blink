@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Blink',
   webDir: 'dist',
   server: {
-    androidScheme: 'https',
+    url: 'https://blink-production-5c36.up.railway.app',
     cleartext: true,
   },
   plugins: {
