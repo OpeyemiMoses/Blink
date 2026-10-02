@@ -83,7 +83,7 @@ const dispatchEventPolyfill = (event: any) => {
   return true;
 };
 
-// 3. Polyfill window.localStorage for React Native native runtimes
+// 3. Polyfill window.localStorage and sessionStorage safely
 class MemoryStoragePolyfill {
   private store: Map<string, string> = new Map();
 
@@ -113,23 +113,61 @@ class MemoryStoragePolyfill {
   }
 }
 
-const memoryStorageInstance = new MemoryStoragePolyfill();
+function createSafeStorage(name: 'localStorage' | 'sessionStorage') {
+  try {
+    if (typeof window !== 'undefined' && (window as any)[name]) {
+      const storage = (window as any)[name];
+      const testKey = `__blink_${name}_test__`;
+      storage.setItem(testKey, '1');
+      storage.removeItem(testKey);
+      return storage;
+    }
+  } catch (e) {
+    // Storage access is denied, disabled or threw SecurityError in WebView
+    console.warn(`[SafeStorage] ${name} is restricted or threw SecurityError, using in-memory fallback`);
+  }
+  return new MemoryStoragePolyfill();
+}
 
-if (typeof (globalThis as any).localStorage === 'undefined') {
-  (globalThis as any).localStorage = memoryStorageInstance;
-}
-if (typeof (global as any) !== 'undefined' && typeof (global as any).localStorage === 'undefined') {
-  (global as any).localStorage = memoryStorageInstance;
-}
-if (typeof (window as any) !== 'undefined' && typeof (window as any).localStorage === 'undefined') {
-  (window as any).localStorage = memoryStorageInstance;
-}
+const safeLocalStorage = createSafeStorage('localStorage');
+const safeSessionStorage = createSafeStorage('sessionStorage');
 
 const polyfillTargets = [
   globalThis,
   typeof global !== 'undefined' ? global : null,
   typeof window !== 'undefined' ? window : null,
 ].filter(Boolean);
+
+for (const target of polyfillTargets) {
+  const t = target as any;
+  try {
+    if (!t.localStorage) {
+      t.localStorage = safeLocalStorage;
+    }
+  } catch (_) {
+    try {
+      Object.defineProperty(t, 'localStorage', {
+        value: safeLocalStorage,
+        writable: true,
+        configurable: true,
+      });
+    } catch (__) {}
+  }
+
+  try {
+    if (!t.sessionStorage) {
+      t.sessionStorage = safeSessionStorage;
+    }
+  } catch (_) {
+    try {
+      Object.defineProperty(t, 'sessionStorage', {
+        value: safeSessionStorage,
+        writable: true,
+        configurable: true,
+      });
+    } catch (__) {}
+  }
+}
 
 for (const target of polyfillTargets) {
   const t = target as any;

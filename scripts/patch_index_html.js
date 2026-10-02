@@ -1,31 +1,18 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-    <title>Blink</title>
-    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
-    <style id="expo-reset">
-      /* These styles make the body full-height */
-      html,
-      body {
-        background-color: #07080B;
-        color: #FFFFFF;
-        height: 100%;
-      }
-      /* These styles disable body scrolling if you are using <ScrollView> */
-      body {
-        overflow: hidden;
-      }
-      /* These styles make the root element full-height */
-      #root {
-        display: flex;
-        height: 100%;
-        flex: 1;
-      }
-    </style>
-  <link rel="icon" href="/favicon.ico"/>
+const fs = require('fs');
+const path = require('path');
+
+const distIndex = path.join(__dirname, '../dist/index.html');
+
+if (fs.existsSync(distIndex)) {
+  let html = fs.readFileSync(distIndex, 'utf8');
+
+  // 1. Ensure body has dark background
+  if (!html.includes('background-color: #07080B')) {
+    html = html.replace('body {', 'body {\n        background-color: #07080B;\n        color: #FFFFFF;');
+  }
+
+  // 2. Inject storage safeguard into <head>
+  const storageGuard = `
     <script>
       (function() {
         try {
@@ -62,18 +49,14 @@
         }
       })();
     </script>
+`;
 
-</head>
+  if (!html.includes('__b_t__')) {
+    html = html.replace('</head>', `${storageGuard}\n</head>`);
+  }
 
-  <body>
-    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
-    <noscript>
-      You need to enable JavaScript to run this app.
-    </noscript>
-    <!-- The root element for your Expo app. -->
-    <div id="root"></div>
-  <script src="/_expo/static/js/web/__expo-metro-runtime-1f8f5d3ca6b7f58204d51e14506d73fb.js" defer></script><script src="/_expo/static/js/web/__common-ed2991b9cf50dbd8ab3917072f68018d.js" defer></script><script src="/_expo/static/js/web/index-d9fcad7a0f871de4443dbe9d7b7ef716.js" defer></script>
-
+  // 3. Inject fallback recovery script into <body>
+  const recoveryScript = `
     <script>
       setTimeout(function() {
         var root = document.getElementById('root');
@@ -87,6 +70,14 @@
         }
       }, 4000);
     </script>
+`;
 
-</body>
-</html>
+  if (!html.includes('[Blink Boot Guard]')) {
+    html = html.replace('</body>', `${recoveryScript}\n</body>`);
+  }
+
+  fs.writeFileSync(distIndex, html, 'utf8');
+  console.log('Successfully patched dist/index.html with dark theme, storage guard, and recovery watchdog');
+} else {
+  console.error('dist/index.html not found to patch');
+}

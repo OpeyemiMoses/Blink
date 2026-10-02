@@ -3,16 +3,37 @@
 ## Project
 Expo/React Native mobile app — Solana Blink payments with NFC & QR.  
 Workspace: `/Users/user/.gemini/antigravity-ide/scratch/seeker-tapblink`  
-GitHub Repo: `https://github.com/OpeyemiMoses/Blink.git` (Pushed & up to date on `main` at commit `f5853c3`)
+GitHub Repo: `https://github.com/OpeyemiMoses/Blink.git`
 
 ## Active Mobile Test URLs
 - **localtunnel**: `https://every-baboons-knock.loca.lt` (Password: `105.120.131.143`)
 - **Railway Cloud Backend**: `https://blink-production-5c36.up.railway.app`
-- **EAS Build 3 (Previous)**: https://expo.dev/accounts/yemigraffix/projects/blink/builds/34643ec7-5b23-4ab5-a2b0-b9ecf39f18af
-- **EAS Build 4 (Active Live Build)**: https://expo.dev/accounts/yemigraffix/projects/blink/builds/68f1187d-3cb9-461c-b59b-c919dfd2166d
 - **GitHub Release (APK)**: https://github.com/OpeyemiMoses/Blink/releases
 
 ---
+
+## Latest Fixes (Capacitor Android APK Icon & Blank Screen Resolution)
+
+### 1. App Icon Replaced with Authentic Blink Logo
+- **Issue**: The compiled APK had the generic Capacitor blue icon on home screen and app drawer instead of the user's authentic Blink brand mark.
+- **Root Cause**: The previous build ran from commit `32bf9fe` before generated mipmap launcher icon assets were committed.
+- **Fix**:
+  - Replaced all density launcher icons (`mipmap-mdpi`, `hdpi`, `xhdpi`, `xxhdpi`, `xxxhdpi`) for `ic_launcher.png`, `ic_launcher_round.png`, and `ic_launcher_foreground.png`.
+  - Added solid black `#000000` background and circular mask for legacy/round launchers, and configured adaptive foreground with centered logo within the 66% safe zone.
+  - Set `ic_launcher_background.xml` to `#000000`.
+  - Replaced all portrait and landscape splash drawables in `drawable/` densities with `#07080B` and centered Blink logo.
+
+### 2. Blank Screen Root Causes & Fixes
+- **Root Cause 1 (DOMStorage SecurityError)**: Android WebView has DOMStorage disabled by default. When `@privy-io/react-auth` evaluated, accessing `window.localStorage` threw an uncaught `SecurityError: Access is denied for this document`, crashing script evaluation before React could mount.
+- **Root Cause 2 (Storage Property Getter Crash in Polyfill)**: `src/polyfill.ts` evaluated `typeof (window as any).localStorage === 'undefined'` on line 124, which triggered the getter and threw `SecurityError` during app startup.
+- **Root Cause 3 (LaunchSplashScreen Stalling on Web)**: `LaunchSplashScreen.tsx` used `useNativeDriver: true` for the opacity fade-out callback on web, which failed to fire the completion callback, leaving the splash screen stuck at `opacity: 0` indefinitely.
+- **Fixes Applied**:
+  - In `MainActivity.java`: Configured `WebSettings` on `onCreate`, `onStart`, and `onResume` to enable `setDomStorageEnabled(true)`, `setDatabaseEnabled(true)`, `setAllowFileAccess(true)`, `setAllowContentAccess(true)`, `setMixedContentMode(MIXED_CONTENT_ALWAYS_ALLOW)`, and `setWebContentsDebuggingEnabled(true)`.
+  - In `src/polyfill.ts`: Wrapped storage tests in safe try-catch blocks and installed an in-memory storage fallback if `localStorage` or `sessionStorage` throws or is denied.
+  - In `scripts/patch_index_html.js`: Injected head storage safeguards and a 4-second boot watchdog that renders a clean reload recovery button if `#root` is empty.
+  - In `LaunchSplashScreen.tsx`: Set `useNativeDriver: false` for web opacity transitions and added an unconditional hard timeout fallback. Reduced duration to 1.2s in `App.tsx`.
+  - Added `android:usesCleartextTraffic="true"` to `AndroidManifest.xml`.
+  - Ran `npm run cap:sync` to rebuild web bundle and sync assets to `android/app/src/main/assets/public`.
 
 ## Hackathon Intelligence ("Clock In" — Solana Mobile Hackathon)
 - **Source**: `https://solanamobile.radiant.nexus/` (Radiants DAO & Solana Mobile)
@@ -28,35 +49,29 @@ GitHub Repo: `https://github.com/OpeyemiMoses/Blink.git` (Pushed & up to date on
 
 ## Completed Fixes & Diagnoses (Turn Update — Oct 2, 2026)
 
-### 1. In-App Privy WebView Blank Screen & Status Bar Collision
-- **Issue 1 (Status Bar Collision)**: Top modal header overlapped directly with Android status bar icons (clock, battery, 4G, camera cutout).
-  - **Fix**: Added `paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0` to `PrivyAuthModal.tsx` container styles.
-- **Issue 2 (WebView Going Blank)**: Modal displayed "Connecting to Privy secure authentication..." and then turned completely blank black.
-  - **Root Cause**:
-    1. `PROD_AUTH_URL` targeted `/auth-modal.html`, which executed a client-side redirect (`window.location.replace('/?auth_modal=1')`) that dropped or failed in React Native WebView.
-    2. Railway lacked the pre-compiled `dist/` bundle because `dist/` was in `.gitignore` and Railway Nixpacks ran out of memory compiling `expo export --platform web`.
-    3. Missing Android WebView flags (`javaScriptCanOpenWindowsAutomatically={true}`, `setSupportMultipleWindows={false}`) caused OAuth popup windows to be silently dropped into a blank state.
-  - **Fix**:
-    1. Targeted `PROD_AUTH_URL` directly to `https://blink-production-5c36.up.railway.app/?auth_modal=1` (zero redirect latency).
-    2. Removed `dist/` from `.gitignore` and committed the pre-compiled production web bundle directly.
-    3. Configured `railway.json` to skip memory-intensive building and serve the pre-built `dist/` bundle instantly.
-    4. Enabled `javaScriptCanOpenWindowsAutomatically={true}`, `setSupportMultipleWindows={false}`, `userAgent` mobile Chrome string, `domStorageEnabled`, and cache disable in `PrivyAuthModal.tsx`.
-    5. Added an external browser fallback button (`Linking.openURL`) in the modal header so users can also authenticate via their system browser if needed.
+### 1. Excised WebView Hack & Replaced with 100% Native In-App Privy Modal
+- **Issue**: The previous build attempted to render Privy inside an in-app WebView tab via Railway, which caused browser tab bars, popup blocking, and blank black screens on Android.
+- **Fix**: Completely excised `react-native-webview` from the authentication flow. Built an authentic 100% native in-app modal (`PrivyAuthModal.tsx`):
+  - **Native Email OTP**: Users enter their email address and type an instant 6-digit OTP code directly in the native UI.
+  - **One-Tap Social Grid**: Fast native buttons for Google, X (Twitter), Telegram, Discord, and GitHub.
+  - **Direct Device Wallet Detection**: Scans the Android OS for installed Solana wallets (Phantom, Solflare, Backpack) and displays green "Detected on device" badges.
+  - **Non-Custodial Keypair Provisioning**: On successful verification, immediately generates/loads the user's embedded Solana keypair via `SolanaService.getOrCreateKeypair()`.
 
-### 2. Mobile Wallet Adapter (MWA) & Phantom App Visibility on Android
-- **Issue**: Tapping MWA / Phantom did not discover or trigger installed Solana wallet apps on the user's Android device.
-- **Root Cause**: Android 11+ (API 30+) restricts inter-app package visibility unless intent filters and `<queries>` tags are explicitly declared in the app manifest.
+### 2. Mobile Wallet Adapter (MWA) & Direct Installed Wallet Connection
+- **Issue**: Solana Mobile Wallet Adapter rejected connections from Phantom/Solflare and defaulted to the broken webview.
+- **Root Cause**: Phantom and Solflare require a valid HTTPS URI in `SMS_APP_IDENTITY.uri` during the MWA handshake (`https://seeker.blink.solana` was unresolvable and rejected).
 - **Fix**:
-  - Created Expo config plugin `plugins/withAndroidQueries.js` declaring intent schemes (`solana-wallet`, `phantom`, `solflare`) and packages (`app.phantom`, `com.solflare.mobile`).
-  - Added `intentFilters` to `app.json` for `solana-wallet` and `phantom`.
-  - Bumped `versionCode` to `4` in `app.json`.
+  - Updated identity URI to `https://blink-production-5c36.up.railway.app`.
+  - Added `getInstalledWallets()` using `Linking.canOpenURL` to detect `phantom://`, `solflare://`, `backpack://`.
+  - Added `connectWalletApp(walletId)` to connect via MWA first with instant deep link fallback without ever opening an in-app browser tab.
 
-### 3. Guest Mode Delete Account Button Removed
-- **Issue**: Guest accounts viewing the app without an account saw an "ACCOUNT DANGER ZONE" and "Delete Account" button in `SettingsScreen.tsx`.
+### 3. Guest Mode & Account Deletion (Global DB & UI)
+- **Issue**: Guest accounts saw "Delete Account" button; account deletion only deleted local storage and not the global database.
 - **Fix**:
-  - Replaced "ACCOUNT DANGER ZONE" with a dedicated "GUEST SESSION" card for unauthenticated visitors.
-  - Only authenticated users can see the "Delete Account" button.
-  - Guests now see an "Exit Guest Mode & Sign In" button that brings them to the Welcome/Auth screen.
+  - Completely hid the "Danger Zone / Delete Account" button for guest mode in `SettingsScreen.tsx`.
+  - Clicking Profile as a guest routes back to the main Welcome/Auth screen.
+  - Reduced toast notification copy strictly to `"Account deleted."`.
+  - Account deletion purges the user from the global Railway database (`server_users_db.json`) as well as local storage.
 
 ### 4. Global Database Deletion & Clean Toast Copy
 - **Issue**: Deleting an account only cleared localStorage without purging the account record globally from the backend database, and the toast copy was verbose ("Account deleted and local session cleared.").

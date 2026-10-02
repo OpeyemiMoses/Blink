@@ -50,11 +50,61 @@
         opacity: 0.6 !important;
         color: #94A3B8 !important;
       }
-    </style>
+    <script>
+      (function() {
+        // Immediate storage safeguard in head before any bundle evaluates
+        try {
+          if (!window.localStorage) throw new Error();
+          var k = '__b_t__';
+          window.localStorage.setItem(k, '1');
+          window.localStorage.removeItem(k);
+        } catch(e) {
+          var mem = {};
+          window.localStorage = {
+            getItem: function(k) { return mem[k] || null; },
+            setItem: function(k, v) { mem[k] = String(v); },
+            removeItem: function(k) { delete mem[k]; },
+            clear: function() { mem = {}; },
+            get length() { return Object.keys(mem).length; },
+            key: function(i) { return Object.keys(mem)[i] || null; }
+          };
+        }
+        try {
+          if (!window.sessionStorage) throw new Error();
+          var sk = '__b_st__';
+          window.sessionStorage.setItem(sk, '1');
+          window.sessionStorage.removeItem(sk);
+        } catch(e) {
+          var smem = {};
+          window.sessionStorage = {
+            getItem: function(k) { return smem[k] || null; },
+            setItem: function(k, v) { smem[k] = String(v); },
+            removeItem: function(k) { delete smem[k]; },
+            clear: function() { smem = {}; },
+            get length() { return Object.keys(smem).length; },
+            key: function(i) { return Object.keys(smem)[i] || null; }
+          };
+        }
+      })();
+    </script>
     <link rel="icon" href="/favicon.ico"/>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run Blink.</noscript>
     <div id="root"></div>
+    <script>
+      // Blank screen fallback recovery
+      setTimeout(function() {
+        var root = document.getElementById('root');
+        if (root && root.children.length === 0) {
+          console.warn('[Blink Boot Guard] Root is still empty after 5 seconds. Rendering recovery screen.');
+          root.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#07080B;color:#FFF;padding:24px;font-family:sans-serif;text-align:center;">' +
+            '<h2 style="font-size:22px;font-weight:800;margin-bottom:12px;">Welcome to Blink</h2>' +
+            '<p style="color:#94A3B8;font-size:14px;max-width:320px;margin-bottom:24px;">Initializing application resources. If this takes longer than usual, tap below to reload.</p>' +
+            '<button onclick="window.location.reload()" style="background:#5B67F6;color:#FFF;border:none;padding:12px 28px;border-radius:24px;font-weight:700;font-size:14px;cursor:pointer;">Reload App</button>' +
+          '</div>';
+        }
+      }, 5000);
+    </script>
   </body>
 </html>

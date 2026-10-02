@@ -58,7 +58,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "expo start",
-    "build": "CI=1 expo export --platform web",
+    "build": "CI=1 expo export --platform web && node scripts/patch_index_html.js",
     "cap:sync": "npm run build && npx cap sync android",
     "android": "expo start --android",
     "ios": "expo start --ios",

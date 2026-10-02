@@ -895,9 +895,9 @@ function BlinkMainApp() {
     setRefreshTrigger((prev) => prev + 1);
   };
 
-  // 1. Loading splash screen with disassociating pixels & Lego mascots (3s duration)
+  // 1. Loading splash screen with disassociating pixels & Lego mascots (1.2s duration)
   if (showSplash) {
-    return <LaunchSplashScreen onFinish={() => setShowSplash(false)} durationMs={3000} />;
+    return <LaunchSplashScreen onFinish={() => setShowSplash(false)} durationMs={1200} />;
   }
 
   let mainScreenContent: React.ReactNode = null;

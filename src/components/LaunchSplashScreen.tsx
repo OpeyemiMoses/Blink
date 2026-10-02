@@ -121,24 +121,38 @@ export const LaunchSplashScreen: React.FC<LaunchSplashScreenProps> = ({
       useNativeDriver: false,
     }).start();
 
-    // 4. Dissolve screen after 3 seconds
+    // 4. Dissolve screen after durationMs
     const dissolveTimer = setTimeout(() => {
       Animated.timing(screenOpacity, {
         toValue: 0,
-        duration: 500,
+        duration: 400,
         easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
+        useNativeDriver: false,
       }).start(() => {
-        disassociateLoop.stop();
-        pulseLoop.stop();
+        try {
+          disassociateLoop.stop();
+          pulseLoop.stop();
+        } catch (_) {}
         onFinish();
       });
-    }, durationMs - 500);
+    }, Math.max(500, durationMs - 400));
+
+    // Hard fallback safety guard: unconditionally finish after durationMs
+    const hardFallback = setTimeout(() => {
+      try {
+        disassociateLoop.stop();
+        pulseLoop.stop();
+      } catch (_) {}
+      onFinish();
+    }, durationMs + 100);
 
     return () => {
       clearTimeout(dissolveTimer);
-      disassociateLoop.stop();
-      pulseLoop.stop();
+      clearTimeout(hardFallback);
+      try {
+        disassociateLoop.stop();
+        pulseLoop.stop();
+      } catch (_) {}
     };
   }, []);
 
