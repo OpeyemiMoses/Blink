@@ -25,9 +25,6 @@ try {
     NfcManager = nfcModule.default || nfcModule.NfcManager;
     NfcTech = nfcModule.NfcTech;
     Ndef = nfcModule.Ndef;
-    if (NfcManager && typeof NfcManager.start === 'function') {
-      NfcManager.start().catch((err: any) => console.warn('NfcManager start error:', err));
-    }
   }
 } catch (e) {
   console.warn('Native NFC Manager loading omitted:', e);
@@ -36,6 +33,22 @@ try {
 export class NfcService {
   private static status: NfcStatus = 'idle';
   private static listeners: TagCallback[] = [];
+  private static isInitialized = false;
+
+  private static async ensureInitialized(): Promise<boolean> {
+    if (this.isInitialized) return true;
+    if (Platform.OS === 'web' || !NfcManager) return false;
+    try {
+      if (typeof NfcManager.start === 'function') {
+        await NfcManager.start();
+        this.isInitialized = true;
+        return true;
+      }
+    } catch (err) {
+      console.warn('[NfcService] Safe init caught error:', err);
+    }
+    return false;
+  }
 
   static getStatus(): NfcStatus {
     return this.status;
@@ -62,6 +75,7 @@ export class NfcService {
     // 1. Native APK (Android/iOS via react-native-nfc-manager)
     if (Platform.OS !== 'web' && NfcManager && NfcTech && Ndef) {
       try {
+        await this.ensureInitialized();
         await NfcManager.requestTechnology(NfcTech.Ndef);
         const tag = await NfcManager.getTag();
         if (tag && tag.ndefMessage && tag.ndefMessage.length > 0) {

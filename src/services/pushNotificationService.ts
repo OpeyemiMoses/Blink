@@ -28,52 +28,57 @@ export class PushNotificationService {
     if (!Notifications || !Device) return; // Web/dev — skip
     if (Platform.OS === 'web') return;
 
-    // Set default handler behaviour
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-      }),
-    });
-
-    // Request permissions
-    if (Device.isDevice) {
-      const { status: existing } = await Notifications.getPermissionsAsync();
-      let finalStatus = existing;
-      if (existing !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
+    try {
+      // Set default handler behaviour
+      if (Notifications.setNotificationHandler) {
+        Notifications.setNotificationHandler({
+          handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: true,
+          }),
+        });
       }
-      this._permissionGranted = finalStatus === 'granted';
-    } else {
-      // Emulator — still configure, just won't receive remote pushes
-      this._permissionGranted = true;
-    }
 
-    // Android notification channel
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('blink-sales', {
-        name: 'Blink Sales',
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 100, 250],
-        lightColor: '#5B67F6',
-        sound: 'default',
-      });
-      await Notifications.setNotificationChannelAsync('blink-payments', {
-        name: 'Payments',
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 200],
-        lightColor: '#10B981',
-        sound: 'default',
-      });
-      await Notifications.setNotificationChannelAsync('clock-in-reminder', {
-        name: 'Clock In Streaks',
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 100, 250],
-        lightColor: '#10B981',
-        sound: 'default',
-      });
+      // Request permissions
+      if (Device.isDevice && Notifications.getPermissionsAsync) {
+        const { status: existing } = await Notifications.getPermissionsAsync();
+        let finalStatus = existing;
+        if (existing !== 'granted' && Notifications.requestPermissionsAsync) {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+        this._permissionGranted = finalStatus === 'granted';
+      } else {
+        this._permissionGranted = true;
+      }
+
+      // Android notification channel
+      if (Platform.OS === 'android' && Notifications.setNotificationChannelAsync) {
+        await Notifications.setNotificationChannelAsync('blink-sales', {
+          name: 'Blink Sales',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 100, 250],
+          lightColor: '#5B67F6',
+          sound: 'default',
+        });
+        await Notifications.setNotificationChannelAsync('blink-payments', {
+          name: 'Payments',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 200],
+          lightColor: '#10B981',
+          sound: 'default',
+        });
+        await Notifications.setNotificationChannelAsync('clock-in-reminder', {
+          name: 'Clock In Streaks',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 100, 250],
+          lightColor: '#10B981',
+          sound: 'default',
+        });
+      }
+    } catch (err) {
+      console.warn('[PushNotificationService] Safe initialize caught error:', err);
     }
   }
 
