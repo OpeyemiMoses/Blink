@@ -36,7 +36,7 @@ import {
   Trash2,
   Camera,
 } from 'lucide-react-native';
-import { QRCodeSVG } from 'qrcode.react';
+import { UniversalQrCode } from '../components/UniversalQrCode';
 import {
   PhysicalBlinkRegistry,
   PhysicalBlink,
@@ -929,10 +929,9 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
 
               {/* High-Resolution QR Box */}
               <View style={styles.qrBox}>
-                <QRCodeSVG
+                <UniversalQrCode
                   value={PhysicalBlinkRegistry.getShareableUrl(selectedBlinkForQr)}
                   size={200}
-                  level="H"
                   bgColor="#FFFFFF"
                   fgColor="#0A0C10"
                 />

@@ -38,7 +38,7 @@ import {
   Printer,
   Download,
 } from 'lucide-react-native';
-import { QRCodeSVG } from 'qrcode.react';
+import { UniversalQrCode } from './UniversalQrCode';
 import { PhysicalBlink, PhysicalBlinkRegistry } from '../services/physicalBlinkRegistry';
 import { PrintableCardService } from '../services/printableCardService';
 import { DatabaseService } from '../services/databaseService';
@@ -1389,11 +1389,9 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
               </View>
 
               <View style={styles.qrCodeBox}>
-                <QRCodeSVG
+                <UniversalQrCode
                   value={PhysicalBlinkRegistry.getShareableUrl(currentBlink)}
                   size={200}
-                  level="H"
-                  includeMargin
                 />
               </View>
 

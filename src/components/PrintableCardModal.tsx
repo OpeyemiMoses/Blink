@@ -11,7 +11,7 @@ import {
   Image,
 } from 'react-native';
 import { X, Printer, Download, Copy, Check, QrCode } from 'lucide-react-native';
-import { QRCodeSVG } from 'qrcode.react';
+import { UniversalQrCode } from './UniversalQrCode';
 import { PhysicalBlink, PhysicalBlinkRegistry } from '../services/physicalBlinkRegistry';
 import { PrintableCardService } from '../services/printableCardService';
 import { PriceService } from '../services/priceService';
@@ -166,11 +166,9 @@ export const PrintableCardModal: React.FC<PrintableCardModalProps> = ({
 
                 {/* High-Resolution QR Code Box */}
                 <View style={styles.qrBox}>
-                  <QRCodeSVG
+                  <UniversalQrCode
                     value={qrUrl}
                     size={140}
-                    level="H"
-                    includeMargin
                   />
                 </View>
 

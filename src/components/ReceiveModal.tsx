@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { X, Copy, Check, ExternalLink, QrCode, Send, ArrowDownLeft } from 'lucide-react-native';
-import { QRCodeSVG } from 'qrcode.react';
+import { UniversalQrCode } from './UniversalQrCode';
 import { SolanaService } from '../services/solanaService';
 
 interface ReceiveModalProps {
@@ -66,12 +66,11 @@ export const ReceiveModal: React.FC<ReceiveModalProps> = ({
           {/* QR Code Container */}
           <View style={styles.qrContainer}>
             <View style={styles.qrBox}>
-              <QRCodeSVG
+              <UniversalQrCode
                 value={publicKey}
                 size={180}
                 bgColor="#FFFFFF"
                 fgColor="#090A0F"
-                level="M"
               />
             </View>
           </View>
