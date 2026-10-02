@@ -41,6 +41,9 @@ server_users_db.json
 server_deleted_db.json
 ACTIVE_TUNNEL_URL.txt
 *.log
+fast_download_and_release.js
+upload_release.js
+
 
 # typescript
 *.tsbuildinfo
