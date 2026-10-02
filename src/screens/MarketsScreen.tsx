@@ -117,7 +117,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({
   // Filter blinks strictly to those created by the current user / active wallet
   const userAddress = (activeAccount?.publicKey || '').toLowerCase();
   const myBlinks = allBlinks.filter((b) => {
-    if (!userAddress) return true; // Show blinks in preview
+    if (!userAddress) return false; // Unauthenticated/guest mode has 0 created blinks
     const recip = (b.recipient || '').toLowerCase();
     const creator = ((b as any).creatorAddress || (b as any).owner || '').toLowerCase();
     return recip === userAddress || creator === userAddress;

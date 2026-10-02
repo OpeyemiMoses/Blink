@@ -1070,6 +1070,17 @@ const server = http.createServer((req, res) => {
           }
         }
 
+        const mergedLinkedAccounts = {
+          ...(existing.linkedAccounts || {}),
+        };
+        if (data.linkedAccounts && typeof data.linkedAccounts === 'object') {
+          for (const [k, v] of Object.entries(data.linkedAccounts)) {
+            if (v !== undefined) {
+              mergedLinkedAccounts[k] = v;
+            }
+          }
+        }
+
         const updated = {
           ...existing,
           ...data,
@@ -1079,6 +1090,7 @@ const server = http.createServer((req, res) => {
           username: cleanUsername,
           blinkId: canonicalBlinkId,
           avatarUrl: data.avatarUrl || existing.avatarUrl || '',
+          linkedAccounts: mergedLinkedAccounts,
           updatedAt: Date.now(),
         };
 

@@ -91,7 +91,7 @@ export const BlinkStudioScreen: React.FC<BlinkStudioScreenProps> = ({
 
   const userAddress = (activeAccount?.publicKey || '').toLowerCase();
   const myBlinks = allBlinks.filter((b) => {
-    if (!userAddress) return true;
+    if (!userAddress) return false;
     const recip = (b.recipient || '').toLowerCase();
     const creator = ((b as any).creatorAddress || (b as any).owner || '').toLowerCase();
     return recip === userAddress || creator === userAddress;

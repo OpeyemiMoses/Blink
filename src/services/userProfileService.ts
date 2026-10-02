@@ -329,17 +329,25 @@ export class UserProfileService {
         const cloud = data.user;
         const current = this.getProfile();
         if (cloud.hasCustomizedProfile || cloud.displayName || cloud.avatarUrl || cloud.bio) {
+          const mergedLinkedAccounts: LinkedAccounts = { ...current.linkedAccounts };
+          if (cloud.linkedAccounts) {
+            for (const [k, v] of Object.entries(cloud.linkedAccounts)) {
+              if (v) {
+                (mergedLinkedAccounts as any)[k] = v;
+              }
+            }
+          }
+          if (fallbackEmail && !mergedLinkedAccounts.email) {
+            mergedLinkedAccounts.email = fallbackEmail;
+          }
+
           const updated = this.updateProfile({
             displayName: cloud.displayName || current.displayName,
             username: cloud.username || current.username,
             avatarUrl: cloud.avatarUrl || current.avatarUrl,
             bio: cloud.bio !== undefined ? cloud.bio : current.bio,
             hasCustomizedProfile: cloud.hasCustomizedProfile ?? true,
-            linkedAccounts: {
-              ...current.linkedAccounts,
-              ...(cloud.linkedAccounts || {}),
-              ...(fallbackEmail ? { email: fallbackEmail, google: fallbackEmail } : {}),
-            },
+            linkedAccounts: mergedLinkedAccounts,
           });
           return updated;
         }

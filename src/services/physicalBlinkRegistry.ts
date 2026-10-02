@@ -108,11 +108,8 @@ export class PhysicalBlinkRegistry {
                 };
                 DatabaseService.saveBlink(current[existingIdx]);
                 changed = true;
-              } else {
-                current.unshift(cb);
-                DatabaseService.saveBlink(cb);
-                changed = true;
               }
+              // Note: Non-local cloud blinks remain in this.globalCloudBlinks and are accessible via resolve() and getGlobalBlinks()
             }
           }
           if (changed) {
@@ -177,8 +174,8 @@ export class PhysicalBlinkRegistry {
 
     const map = new Map<string, PhysicalBlink>();
 
-    // Merge in order: memory -> localStored -> dbBlinks -> globalCloudBlinks
-    const allSources = [...this.blinks, ...localStored, ...dbBlinks, ...this.globalCloudBlinks];
+    // Merge in order: memory -> localStored -> dbBlinks (creator/locally-managed blinks only)
+    const allSources = [...this.blinks, ...localStored, ...dbBlinks];
     for (const b of allSources) {
       if (!b || !b.id) continue;
       const key = b.id.trim().toLowerCase();

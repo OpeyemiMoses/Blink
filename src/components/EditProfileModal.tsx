@@ -86,22 +86,33 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   // Sync with Privy user when available
   useEffect(() => {
     if (user) {
-      const email = user.email?.address || null;
-      const google = user.google?.email || user.google?.name || null;
-      const twitter = user.twitter?.username || null;
-      const discord = user.discord?.username || null;
-      const telegram = user.telegram?.username || null;
-      const github = user.github?.username || null;
+      const githubLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'github_oauth' || a.type === 'github');
+      const googleLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'google_oauth' || a.type === 'google');
+      const twitterLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'twitter_oauth' || a.type === 'twitter');
+      const discordLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'discord_oauth' || a.type === 'discord');
+      const telegramLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'telegram');
+      const emailLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'email');
 
-      if (email || google || twitter || discord || telegram || github) {
+      const email = user.email?.address || emailLinked?.address || null;
+      const google = user.google?.email || user.google?.name || googleLinked?.email || googleLinked?.name || null;
+      const twitter = user.twitter?.username || twitterLinked?.username || null;
+      const discord = user.discord?.username || discordLinked?.username || null;
+      const telegram = user.telegram?.username || telegramLinked?.username || null;
+      const github = user.github?.username || githubLinked?.username || null;
+
+      const newAccounts: Partial<LinkedAccounts> = {};
+      if (email && email !== profile.linkedAccounts.email) newAccounts.email = email;
+      if (google && google !== profile.linkedAccounts.google) newAccounts.google = google;
+      if (twitter && twitter !== profile.linkedAccounts.twitter) newAccounts.twitter = twitter;
+      if (discord && discord !== profile.linkedAccounts.discord) newAccounts.discord = discord;
+      if (telegram && telegram !== profile.linkedAccounts.telegram) newAccounts.telegram = telegram;
+      if (github && github !== profile.linkedAccounts.github) newAccounts.github = github;
+
+      if (Object.keys(newAccounts).length > 0) {
         const synced = UserProfileService.updateProfile({
           linkedAccounts: {
-            email: email || profile.linkedAccounts.email,
-            google: google || profile.linkedAccounts.google,
-            twitter: twitter || profile.linkedAccounts.twitter,
-            discord: discord || profile.linkedAccounts.discord,
-            telegram: telegram || profile.linkedAccounts.telegram,
-            github: github || profile.linkedAccounts.github,
+            ...profile.linkedAccounts,
+            ...newAccounts,
           },
         });
         setProfile(synced);
@@ -277,18 +288,30 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
   const handleUnbind = async (provider: keyof LinkedAccounts) => {
     try {
-      if (provider === 'email' && user?.email?.address && typeof unlinkEmail === 'function') {
-        await unlinkEmail(user.email.address);
-      } else if (provider === 'google' && user?.google?.subject && typeof unlinkGoogle === 'function') {
-        await unlinkGoogle(user.google.subject);
-      } else if (provider === 'github' && user?.github?.subject && typeof unlinkGithub === 'function') {
-        await unlinkGithub(user.github.subject);
-      } else if (provider === 'twitter' && user?.twitter?.subject && typeof unlinkTwitter === 'function') {
-        await unlinkTwitter(user.twitter.subject);
-      } else if (provider === 'discord' && user?.discord?.subject && typeof unlinkDiscord === 'function') {
-        await unlinkDiscord(user.discord.subject);
-      } else if (provider === 'telegram' && user?.telegram?.telegramUserId && typeof unlinkTelegram === 'function') {
-        await unlinkTelegram(user.telegram.telegramUserId);
+      const githubLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'github_oauth' || a.type === 'github');
+      const googleLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'google_oauth' || a.type === 'google');
+      const twitterLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'twitter_oauth' || a.type === 'twitter');
+      const discordLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'discord_oauth' || a.type === 'discord');
+      const telegramLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'telegram');
+
+      if (provider === 'email' && typeof unlinkEmail === 'function') {
+        const addr = user?.email?.address || profile.linkedAccounts.email;
+        if (addr) await unlinkEmail(addr);
+      } else if (provider === 'google' && typeof unlinkGoogle === 'function') {
+        const sub = user?.google?.subject || googleLinked?.subject;
+        if (sub) await unlinkGoogle(sub);
+      } else if (provider === 'github' && typeof unlinkGithub === 'function') {
+        const sub = user?.github?.subject || githubLinked?.subject;
+        if (sub) await unlinkGithub(sub);
+      } else if (provider === 'twitter' && typeof unlinkTwitter === 'function') {
+        const sub = user?.twitter?.subject || twitterLinked?.subject;
+        if (sub) await unlinkTwitter(sub);
+      } else if (provider === 'discord' && typeof unlinkDiscord === 'function') {
+        const sub = user?.discord?.subject || discordLinked?.subject;
+        if (sub) await unlinkDiscord(sub);
+      } else if (provider === 'telegram' && typeof unlinkTelegram === 'function') {
+        const sub = user?.telegram?.telegramUserId || telegramLinked?.telegramUserId;
+        if (sub) await unlinkTelegram(sub);
       }
     } catch (err) {
       console.log('Privy unlink error:', err);
