@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { X, ArrowRight, ArrowUpRight, CheckCircle2, AlertCircle, ExternalLink, Fingerprint, Send, QrCode, Scan } from 'lucide-react-native';
 import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { SolanaService } from '../services/solanaService';
@@ -171,7 +171,7 @@ export const SendModal: React.FC<SendModalProps> = ({
       setIsResolving(false);
       if (res && res.address) {
         setResolvedUser({
-          username: res.username || res.blinkId,
+          username: (res as any).username || res.blinkId || '',
           displayName: res.displayName,
           address: res.address,
         });
@@ -339,7 +339,7 @@ export const SendModal: React.FC<SendModalProps> = ({
       const rcpt: TransactionReceipt = {
         id: `rcpt_${sig.slice(0, 10)}`,
         signature: sig,
-        blinkTitle: resolvedBlinkInfo ? resolvedBlinkInfo.name : undefined,
+        blinkTitle: resolvedBlinkInfo?.name || 'Direct Transfer',
         blinkId: resolvedBlinkInfo ? resolvedBlinkInfo.id : undefined,
         actionType: resolvedBlinkInfo ? resolvedBlinkInfo.actionType : undefined,
         amount: numAmount,
@@ -395,7 +395,7 @@ export const SendModal: React.FC<SendModalProps> = ({
         const fallbackRcpt: TransactionReceipt = {
           id: `rcpt_${matchedSig.slice(0, 10)}`,
           signature: matchedSig,
-          blinkTitle: resolvedBlinkInfo ? resolvedBlinkInfo.name : undefined,
+          blinkTitle: resolvedBlinkInfo?.name || 'Direct Transfer',
           blinkId: resolvedBlinkInfo ? resolvedBlinkInfo.id : undefined,
           actionType: resolvedBlinkInfo ? resolvedBlinkInfo.actionType : undefined,
           amount: numAmount,
@@ -639,7 +639,7 @@ export const SendModal: React.FC<SendModalProps> = ({
                       <View style={{ flex: 1 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                           <Text style={{ fontSize: 10, fontWeight: '800', color: '#10B981' }}>
-                            Verified User: {resolvedUser.username.startsWith('@') ? resolvedUser.username : `@${resolvedUser.username}`}
+                            Verified User: {resolvedUser.username ? (resolvedUser.username.startsWith('@') ? resolvedUser.username : `@${resolvedUser.username}`) : 'User'}
                           </Text>
                           {resolvedUser.displayName && resolvedUser.displayName !== resolvedUser.username && (
                             <Text style={{ fontSize: 10, color: '#D1D5DB' }}>({resolvedUser.displayName})</Text>

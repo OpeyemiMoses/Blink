@@ -269,7 +269,7 @@ export class UserProfileService {
     UserProfileService.profile = null;
     if (typeof window !== 'undefined' && window.localStorage) {
       try {
-        localStorage.removeItem(PROFILE_KEY);
+        localStorage.removeItem(STORAGE_PROFILE_KEY);
       } catch (e) {
         // ignore
       }

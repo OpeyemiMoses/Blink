@@ -19,6 +19,14 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       type: 'sourceFile',
     };
   }
+  if (platform !== 'web') {
+    if (moduleName === '@privy-io/react-auth' || moduleName === '@privy-io/react-auth/solana') {
+      return {
+        filePath: path.resolve(__dirname, 'src/auth/privyAdapter.native.tsx'),
+        type: 'sourceFile',
+      };
+    }
+  }
   return context.resolveRequest(context, moduleName, platform);
 };
 

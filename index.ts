@@ -1,3 +1,4 @@
+import 'react-native-get-random-values';
 import './src/polyfill';
 import { injectAppFont } from './src/styles/loadCursiveFont';
 import { registerRootComponent } from 'expo';

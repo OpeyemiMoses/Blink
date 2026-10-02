@@ -2,15 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Platform, useWindowDimensions } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
-import { PrivyProvider, usePrivy } from '@privy-io/react-auth';
 import {
+  PrivyProvider,
+  usePrivy,
   toSolanaWalletConnectors,
   useWallets as useSolanaWallets,
   useCreateWallet as useCreateSolanaWallet,
   useSignAndSendTransaction,
   useSignTransaction,
   defaultSolanaRpcsPlugin,
-} from '@privy-io/react-auth/solana';
+} from './src/auth/privyAdapter';
 import bs58 from 'bs58';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 
@@ -119,7 +120,7 @@ function BlinkMainApp() {
     const unsub = PushNotificationService.addResponseListener((response) => {
       const data = response?.notification?.request?.content?.data;
       if (data?.type === 'blink_sale' || data?.type === 'payment_received') {
-        setCurrentTab('pocket');
+        setCurrentTab('wallet');
       }
     });
     return () => { if (unsub) unsub(); };
@@ -417,9 +418,9 @@ function BlinkMainApp() {
             ? (user.discord.username || 'Discord User')
             : user?.telegram
             ? `@${user.telegram.username}`
-            : activeSolanaWallet?.walletClientType === 'phantom'
+            : (activeSolanaWallet as any)?.walletClientType === 'phantom'
             ? 'Phantom'
-            : activeSolanaWallet?.walletClientType === 'solflare'
+            : (activeSolanaWallet as any)?.walletClientType === 'solflare'
             ? 'Solflare'
             : userProfile.displayName || 'Privy Solana Wallet',
           publicKey: effectiveAddress,
@@ -997,7 +998,7 @@ function BlinkMainApp() {
                   </Text>
                   <TouchableOpacity
                     style={{ backgroundColor: '#5B67F6', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 14 }}
-                    onPress={login}
+                    onPress={() => login()}
                     activeOpacity={0.8}
                   >
                     <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>Sign In with Privy</Text>
@@ -1013,8 +1014,6 @@ function BlinkMainApp() {
           <Header
             network={network}
             activeAccount={activeAccount}
-            onToggleNetwork={toggleNetwork}
-            onOpenWalletConnect={login}
             onOpenNotifications={() => setCurrentTab('notifications')}
             unreadNotificationsCount={unreadNotificationsCount}
             onOpenSettings={() => setCurrentTab('settings')}
@@ -1199,7 +1198,7 @@ function BlinkMainApp() {
       <CreateBlinkModal
         visible={createBlinkModalVisible}
         onClose={() => setCreateBlinkModalVisible(false)}
-        creatorPublicKey={activePublicKey}
+        defaultRecipient={activePublicKey || undefined}
         onBlinkCreated={(blink) => {
           setCreateBlinkModalVisible(false);
           setRefreshTrigger((prev) => prev + 1);
@@ -1285,7 +1284,6 @@ export default function App() {
             },
             loginMethods: ['email', 'google', 'twitter', 'discord', 'telegram', 'github', 'wallet'],
         embeddedWallets: {
-          createOnLogin: 'users-without-wallets',
           showWalletUIs: false,
           solana: {
             createOnLogin: 'users-without-wallets',

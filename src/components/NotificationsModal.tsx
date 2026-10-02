@@ -192,7 +192,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                           backgroundColor: selected ? colors.accentSoft : 'transparent',
                           flexDirection: 'row',
                           alignItems: 'center',
-                          justify: 'space-between',
+                          justifyContent: 'space-between',
                         }}
                         onPress={() => {
                           setActiveFilter(item.id as any);

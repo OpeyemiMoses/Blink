@@ -32,6 +32,7 @@ import {
   LinkedAccounts,
 } from '../services/userProfileService';
 import { BlinkIdService } from '../services/blinkIdService';
+import { DatabaseService } from '../services/databaseService';
 import { MASCOT_AVATARS } from '../constants/mascotAvatars';
 import {
   EmailLogo,
@@ -41,7 +42,7 @@ import {
   XLogo,
   DiscordLogo,
 } from './SocialLogos';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy } from '../auth/privyAdapter';
 
 interface EditProfileModalProps {
   visible: boolean;

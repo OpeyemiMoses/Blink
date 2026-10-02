@@ -8,6 +8,7 @@ import {
   Platform,
   ActivityIndicator,
   TextInput,
+  Image,
 } from 'react-native';
 import {
   ArrowLeft,

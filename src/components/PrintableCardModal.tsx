@@ -8,11 +8,13 @@ import {
   ScrollView,
   Platform,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { X, Printer, Download, Copy, Check, QrCode } from 'lucide-react-native';
 import { QRCodeSVG } from 'qrcode.react';
 import { PhysicalBlink, PhysicalBlinkRegistry } from '../services/physicalBlinkRegistry';
 import { PrintableCardService } from '../services/printableCardService';
+import { PriceService } from '../services/priceService';
 import { ToastService } from '../services/toastService';
 import { BlinkBrandMark, CoffeeShopLogo, HackerHouseLogo } from './BrandLogos';
 import { useTheme } from '../theme/ThemeContext';

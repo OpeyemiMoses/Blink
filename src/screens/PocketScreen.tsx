@@ -35,12 +35,12 @@ import { LinkedAction, SolanaActionMetadata } from '../types';
 import { PhantomIcon, SolflareIcon, BackpackIcon, CoinbaseIcon } from '../components/WalletIcons';
 import { SolanaCoinLogo, UsdcCoinLogo, SkrCoinLogo, BlinkBrandMark } from '../components/BrandLogos';
 import { PrivyIcon } from '../components/PrivyIcon';
-import { usePrivy } from '@privy-io/react-auth';
-import { useExportWallet } from '@privy-io/react-auth/solana';
+import { usePrivy, useExportWallet } from '../auth/privyAdapter';
 import { useTheme } from '../theme/ThemeContext';
 import { ToastService } from '../services/toastService';
 import { ReceiptService } from '../services/receiptService';
 import { NotificationService } from '../services/notificationService';
+import { PhysicalBlinkRegistry } from '../services/physicalBlinkRegistry';
 import { ReceiptModal } from '../components/ReceiptModal';
 import { TransactionReceipt } from '../types';
 
@@ -208,7 +208,7 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
             sig.direction = cachedRcpt.payerAddress === activePublicKey ? 'send' : 'receive';
           }
           if (!sig.counterparty) {
-            sig.counterparty = sig.direction === 'send' ? cachedRcpt.recipientAddress : cachedRcpt.payerAddress;
+            sig.counterparty = (sig.direction === 'send' ? cachedRcpt.recipientAddress : cachedRcpt.payerAddress) || null;
           }
         }
       }
@@ -231,7 +231,7 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
             amountSol: r.token === 'SOL' ? r.amount : null,
             amountUsdc: r.token === 'USDC' ? r.amount : null,
             token: r.token || 'SOL',
-            counterparty: isSend ? r.recipientAddress : r.payerAddress,
+            counterparty: (isSend ? r.recipientAddress : r.payerAddress) || null,
           };
         });
 
@@ -445,7 +445,7 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
           </Text>
           <TouchableOpacity
             style={styles.connectWalletBtn}
-            onPress={login}
+            onPress={() => login()}
             activeOpacity={0.8}
           >
             <PrivyIcon size={16} />
@@ -617,7 +617,7 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
                   gap: 4,
                   paddingVertical: 5,
                   paddingHorizontal: 9,
-                  backgroundColor: colors.surfaceHover || '#1A1C24',
+                  backgroundColor: (colors as any).surfaceHover || colors.bgCard || '#1A1C24',
                   borderRadius: 8,
                   borderWidth: 1,
                   borderColor: colors.border || '#232733',

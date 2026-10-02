@@ -17,7 +17,7 @@ import {
   Globe,
   CheckCircle2,
 } from 'lucide-react-native';
-import { usePrivy, useLoginWithOAuth } from '@privy-io/react-auth';
+import { usePrivy, useLoginWithOAuth } from '../auth/privyAdapter';
 import { useTheme } from '../theme/ThemeContext';
 import { BlinkBrandMark, BlinkLogo } from './BrandLogos';
 import { PrivyIcon } from './PrivyIcon';

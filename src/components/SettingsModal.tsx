@@ -26,8 +26,7 @@ import {
   Fingerprint,
 } from 'lucide-react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { usePrivy } from '@privy-io/react-auth';
-import { useExportWallet } from '@privy-io/react-auth/solana';
+import { usePrivy, useExportWallet } from '../auth/privyAdapter';
 import { UserProfileService } from '../services/userProfileService';
 import { ToastService } from '../services/toastService';
 import { WalletAccount } from '../services/walletProviderService';

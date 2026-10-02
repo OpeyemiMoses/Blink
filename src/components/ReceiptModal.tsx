@@ -23,6 +23,7 @@ import {
 } from 'lucide-react-native';
 import { TransactionReceipt } from '../types';
 import { SolanaService } from '../services/solanaService';
+import { ReceiptService } from '../services/receiptService';
 import { ReceiptImageService } from '../services/receiptImageService';
 import { ToastService } from '../services/toastService';
 import { WalletProviderService } from '../services/walletProviderService';
@@ -64,7 +65,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
         receipt.recipientAddress.includes('External');
 
       if (isMissingData) {
-        ReceiptService.getReceiptAsync(receipt.signature, activeWallet || receipt.recipientAddress || receipt.payerAddress).then((upgraded) => {
+        ReceiptService.getReceiptAsync(receipt.signature, activeWallet || receipt.recipientAddress || receipt.payerAddress).then((upgraded: any) => {
           if (upgraded) {
             setCurrentReceipt(upgraded);
           }

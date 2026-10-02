@@ -40,8 +40,7 @@ import {
   Flame,
 } from 'lucide-react-native';
 import { BiometricService } from '../services/biometricService';
-import { usePrivy } from '@privy-io/react-auth';
-import { useExportWallet } from '@privy-io/react-auth/solana';
+import { usePrivy, useExportWallet } from '../auth/privyAdapter';
 import { UserProfileService, UserProfile, DEFAULT_AVATARS, LinkedAccounts } from '../services/userProfileService';
 import { StreakService } from '../services/streakService';
 import { MASCOT_AVATARS } from '../constants/mascotAvatars';
@@ -565,7 +564,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         {!authenticated && (
           <TouchableOpacity
             style={styles.signInBtn}
-            onPress={login}
+            onPress={() => login()}
             activeOpacity={0.8}
           >
             <PrivyIcon size={16} />
@@ -914,7 +913,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             </Text>
             <TouchableOpacity
               style={styles.promptSignInBtn}
-              onPress={login}
+              onPress={() => login()}
               activeOpacity={0.8}
             >
               <PrivyIcon size={16} />
