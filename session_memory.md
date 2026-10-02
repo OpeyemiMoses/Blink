@@ -6,9 +6,10 @@ Workspace: `/Users/user/.gemini/antigravity-ide/scratch/seeker-tapblink`
 GitHub Repo: `https://github.com/OpeyemiMoses/Blink.git`
 
 ## Active Mobile Test URLs
-- **localtunnel**: `https://every-baboons-knock.loca.lt` (Password: `105.120.131.143`)
+- **localtunnel**: `https://funny-liger-39.loca.lt` (Password: `105.120.131.143`)
 - **Railway Cloud Backend**: `https://blink-production-5c36.up.railway.app`
 - **GitHub Release (APK)**: https://github.com/OpeyemiMoses/Blink/releases
+- **Direct APK Download**: https://github.com/OpeyemiMoses/Blink/releases/download/v1.0.0/blink.apk
 
 ---
 
