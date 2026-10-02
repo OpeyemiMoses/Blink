@@ -1,0 +1,126 @@
+name: Build Capacitor Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'android/**'
+      - 'App.tsx'
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - '.github/workflows/build-capacitor-apk.yml'
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Build Web Bundle
+        env:
+          EXPO_PUBLIC_PRIVY_APP_ID: ${{ secrets.EXPO_PUBLIC_PRIVY_APP_ID || 'cmujr1sl4036y0cifxks01maa' }}
+          EXPO_PUBLIC_SOLANA_NETWORK: devnet
+          EXPO_PUBLIC_SOLANA_RPC_URL: https://api.devnet.solana.com
+          EXPO_PUBLIC_API_URL: https://blink-production-5c36.up.railway.app
+        run: npm run build
+
+      - name: Sync Capacitor Android
+        run: npx cap sync android
+
+      - name: Grant Execute Permission to gradlew
+        run: chmod +x android/gradlew
+
+      - name: Build Android Debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Verify APK Generated
+        run: |
+          ls -la android/app/build/outputs/apk/debug/
+          cp android/app/build/outputs/apk/debug/app-debug.apk ./blink.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: blink-capacitor-debug-apk
+          path: ./blink.apk
+          retention-days: 14
+
+      - name: Release APK to GitHub Release v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node -e "
+            const https = require('https');
+            const fs = require('fs');
+            const token = process.env.GITHUB_TOKEN;
+            const repo = 'OpeyemiMoses/Blink';
+            
+            async function run() {
+              console.log('Finding v1.0.0 release...');
+              const releasesRes = await fetch('https://api.github.com/repos/' + repo + '/releases', {
+                headers: { 'Authorization': 'token ' + token, 'User-Agent': 'Actions' }
+              });
+              const releases = await releasesRes.json();
+              const rel = releases.find(r => r.tag_name === 'v1.0.0') || releases[0];
+              if (!rel) {
+                console.log('No release found to update.');
+                return;
+              }
+              console.log('Found release: ' + rel.tag_name + ' (ID: ' + rel.id + ')');
+              
+              // Delete old asset if exists
+              const oldAsset = rel.assets && rel.assets.find(a => a.name === 'blink.apk' || a.name === 'blink-capacitor.apk');
+              if (oldAsset) {
+                console.log('Deleting old asset ' + oldAsset.id);
+                await fetch('https://api.github.com/repos/' + repo + '/releases/assets/' + oldAsset.id, {
+                  method: 'DELETE',
+                  headers: { 'Authorization': 'token ' + token, 'User-Agent': 'Actions' }
+                });
+              }
+              
+              // Upload new APK
+              const stat = fs.statSync('./blink.apk');
+              console.log('Uploading blink.apk (' + (stat.size / 1048576).toFixed(2) + ' MB)...');
+              const uploadUrl = 'https://uploads.github.com/repos/' + repo + '/releases/' + rel.id + '/assets?name=blink.apk';
+              
+              const fileStream = fs.createReadStream('./blink.apk');
+              const upReq = https.request(uploadUrl, {
+                method: 'POST',
+                headers: {
+                  'Authorization': 'token ' + token,
+                  'User-Agent': 'Actions',
+                  'Content-Type': 'application/vnd.android.package-archive',
+                  'Content-Length': stat.size
+                }
+              }, res => {
+                let d = '';
+                res.on('data', c => d += c);
+                res.on('end', () => console.log('Upload completed:', res.statusCode, d));
+              });
+              fileStream.pipe(upReq);
+            }
+            run().catch(console.error);
+          "

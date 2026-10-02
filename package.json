@@ -6,6 +6,10 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/browser": "^8.0.5",
+    "@capacitor/core": "^8.5.2",
     "@expo/metro-runtime": "~57.0.16",
     "@privy-io/react-auth": "^3.45.0",
     "@solana-mobile/mobile-wallet-adapter-protocol": "^2.3.0",
@@ -41,6 +45,7 @@
     "stream-browserify": "^3.0.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.6.9",
     "@types/react": "~19.2.2",
     "jimp": "^1.6.1",
     "typescript": "~6.0.3"
@@ -54,6 +59,7 @@
     "start": "node server.js",
     "dev": "expo start",
     "build": "CI=1 expo export --platform web",
+    "cap:sync": "npm run build && npx cap sync android",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web"
