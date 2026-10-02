@@ -16,7 +16,7 @@
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
       "package": "com.blink.solanamobile",
-      "versionCode": 3,
+      "versionCode": 4,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.INTERNET",
@@ -26,6 +26,23 @@
         "android.permission.USE_FINGERPRINT",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.VIBRATE"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "solana-wallet"
+            },
+            {
+              "scheme": "phantom"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
       ]
     },
     "androidStatusBar": {
@@ -34,6 +51,7 @@
       "translucent": false
     },
     "plugins": [
+      "./plugins/withAndroidQueries",
       "expo-local-authentication",
       [
         "expo-notifications",

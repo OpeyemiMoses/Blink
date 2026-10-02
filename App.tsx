@@ -427,10 +427,10 @@ function BlinkMainApp() {
     };
   }, [effectiveAddress, userProfile?.username]);
 
-  // Open profile handler: if guest, opens Privy sign-up / sign-in directly
+  // Open profile handler: if guest, returns user to front page (WelcomeAuthScreen) to sign in/up
   const handleOpenProfile = () => {
     if (!authenticated) {
-      login();
+      setIsGuestMode(false);
     } else {
       setCurrentTab('profile');
     }
@@ -1002,33 +1002,20 @@ function BlinkMainApp() {
             )}
 
             {currentTab === 'settings' && (
-              <SettingsScreen activeAccount={activeAccount} onOpenWalletConnect={login} />
+              <SettingsScreen
+                activeAccount={activeAccount}
+                onOpenWalletConnect={login}
+                onReturnToAuth={() => setIsGuestMode(false)}
+              />
             )}
 
             {currentTab === 'profile' && (
-              authenticated && activeAccount ? (
-                <ProfileScreen
-                  activeAccount={activeAccount}
-                  onOpenWalletConnect={login}
-                  network={network}
-                />
-              ) : (
-                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-                  <Text style={{ color: colors.textPrimary, fontSize: 20, fontWeight: '800', marginBottom: 8 }}>
-                    Sign In Required
-                  </Text>
-                  <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center', marginBottom: 20, maxWidth: 300 }}>
-                    Create an account or sign in to customize your profile, export private keys, and link social accounts.
-                  </Text>
-                  <TouchableOpacity
-                    style={{ backgroundColor: '#5B67F6', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 14 }}
-                    onPress={() => login()}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>Sign In with Privy</Text>
-                  </TouchableOpacity>
-                </View>
-              )
+              <ProfileScreen
+                activeAccount={activeAccount}
+                onOpenWalletConnect={login}
+                network={network}
+                onReturnToAuth={() => setIsGuestMode(false)}
+              />
             )}
           </View>
         </View>
@@ -1115,33 +1102,20 @@ function BlinkMainApp() {
             )}
 
             {currentTab === 'settings' && (
-              <SettingsScreen activeAccount={activeAccount} onOpenWalletConnect={login} />
+              <SettingsScreen
+                activeAccount={activeAccount}
+                onOpenWalletConnect={login}
+                onReturnToAuth={() => setIsGuestMode(false)}
+              />
             )}
 
             {currentTab === 'profile' && (
-              authenticated && activeAccount ? (
-                <ProfileScreen
-                  activeAccount={activeAccount}
-                  onOpenWalletConnect={login}
-                  network={network}
-                />
-              ) : (
-                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-                  <Text style={{ color: colors.textPrimary, fontSize: 20, fontWeight: '800', marginBottom: 8 }}>
-                    Sign In Required
-                  </Text>
-                  <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center', marginBottom: 20, maxWidth: 300 }}>
-                    Create an account or sign in to customize your profile, export private keys, and link social accounts.
-                  </Text>
-                  <TouchableOpacity
-                    style={{ backgroundColor: '#5B67F6', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 14 }}
-                    onPress={login}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>Sign In with Privy</Text>
-                  </TouchableOpacity>
-                </View>
-              )
+              <ProfileScreen
+                activeAccount={activeAccount}
+                onOpenWalletConnect={login}
+                network={network}
+                onReturnToAuth={() => setIsGuestMode(false)}
+              />
             )}
           </View>
 

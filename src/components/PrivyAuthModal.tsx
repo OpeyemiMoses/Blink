@@ -8,9 +8,11 @@ import {
   ActivityIndicator,
   Platform,
   SafeAreaView,
+  StatusBar as RNStatusBar,
+  Linking,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { X, Shield, RefreshCw } from 'lucide-react-native';
+import { X, Shield, RefreshCw, ExternalLink } from 'lucide-react-native';
 import { BlinkBrandMark } from './BrandLogos';
 import { PrivyIcon } from './PrivyIcon';
 import { PrivyNativeBridge } from '../auth/privyAdapter';
@@ -22,9 +24,9 @@ export interface PrivyAuthModalProps {
   options?: any;
 }
 
-// Production and fallback endpoints for Privy In-App Auth Bridge
-const PROD_AUTH_URL = 'https://blink-production-5c36.up.railway.app/auth-modal.html';
-const LOCAL_TUNNEL_URL = 'https://every-baboons-knock.loca.lt/auth-modal.html';
+// Production and fallback endpoints for Privy In-App Auth Bridge (direct target without redirect hop)
+const PROD_AUTH_URL = 'https://blink-production-5c36.up.railway.app/?auth_modal=1';
+const LOCAL_TUNNEL_URL = 'https://every-baboons-knock.loca.lt/?auth_modal=1';
 
 export const PrivyAuthModal: React.FC<PrivyAuthModalProps> = ({
   visible,
@@ -46,7 +48,9 @@ export const PrivyAuthModal: React.FC<PrivyAuthModalProps> = ({
   }
 
   const baseTarget = useTunnel ? LOCAL_TUNNEL_URL : PROD_AUTH_URL;
-  const targetUrl = `${baseTarget}?${queryParams.toString()}`;
+  const targetUrl = baseTarget.includes('?') 
+    ? `${baseTarget}&${queryParams.toString().replace('auth_modal=1&', '')}`
+    : `${baseTarget}?${queryParams.toString()}`;
 
   const handleMessage = (event: any) => {
     try {
@@ -74,6 +78,10 @@ export const PrivyAuthModal: React.FC<PrivyAuthModalProps> = ({
     if (webViewRef.current) {
       webViewRef.current.reload();
     }
+  };
+
+  const handleOpenBrowser = () => {
+    Linking.openURL(targetUrl).catch((err) => console.warn('Cannot open browser:', err));
   };
 
   if (!visible) return null;
@@ -106,9 +114,19 @@ export const PrivyAuthModal: React.FC<PrivyAuthModalProps> = ({
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity
+              onPress={handleOpenBrowser}
+              style={[styles.iconBtn, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
+              activeOpacity={0.7}
+              accessibilityLabel="Open in external browser"
+            >
+              <ExternalLink size={16} color={colors.textSecondary} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
               onPress={handleReload}
               style={[styles.iconBtn, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
               activeOpacity={0.7}
+              accessibilityLabel="Reload authentication view"
             >
               <RefreshCw size={16} color={colors.textSecondary} />
             </TouchableOpacity>
@@ -117,6 +135,7 @@ export const PrivyAuthModal: React.FC<PrivyAuthModalProps> = ({
               onPress={onClose}
               style={[styles.iconBtn, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
               activeOpacity={0.7}
+              accessibilityLabel="Close authentication"
             >
               <X size={18} color={colors.textPrimary} />
             </TouchableOpacity>
@@ -134,6 +153,12 @@ export const PrivyAuthModal: React.FC<PrivyAuthModalProps> = ({
               domStorageEnabled={true}
               startInLoadingState={true}
               scalesPageToFit={true}
+              javaScriptCanOpenWindowsAutomatically={true}
+              setSupportMultipleWindows={false}
+              userAgent="Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+              mixedContentMode="always"
+              allowsInlineMediaPlayback={true}
+              cacheEnabled={false}
               originWhitelist={['*']}
               onMessage={handleMessage}
               onLoadStart={() => setLoading(true)}
@@ -199,6 +224,7 @@ export const PrivyAuthModal: React.FC<PrivyAuthModalProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0,
   },
   header: {
     flexDirection: 'row',

@@ -17,7 +17,7 @@
         },
         "build": {
           "cmds": [
-            "CI=1 npm run build"
+            "node -e 'console.log(\"Using pre-built dist bundle\")'"
           ]
         }
       }

@@ -276,6 +276,22 @@ export class UserProfileService {
     }
   }
 
+  static async deleteAccountGlobally(addressOrEmail?: string): Promise<boolean> {
+    const prof = this.getProfile();
+    const target = addressOrEmail || prof.address || prof.publicKey || prof.username;
+    if (target && typeof fetch === 'function') {
+      try {
+        await fetch(getApiUrl(`/api/users/${encodeURIComponent(target)}`), {
+          method: 'DELETE',
+        });
+      } catch (e) {
+        console.warn('Global delete error:', e);
+      }
+    }
+    this.resetProfile();
+    return true;
+  }
+
   static unbindAccount(provider: keyof LinkedAccounts): UserProfile {
     const current = this.getProfile();
     const updatedAccounts: LinkedAccounts = {

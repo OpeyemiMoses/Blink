@@ -67,6 +67,7 @@ interface ProfileScreenProps {
   onOpenWalletConnect: () => void;
   network: string;
   onOpenAbout?: () => void;
+  onReturnToAuth?: () => void;
 }
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({
@@ -74,6 +75,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onOpenWalletConnect,
   network,
   onOpenAbout,
+  onReturnToAuth,
 }) => {
   const { colors, isDark, theme, setTheme } = useTheme();
   const {
@@ -516,14 +518,25 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </View>
 
         {!authenticated && (
-          <TouchableOpacity
-            style={styles.signInBtn}
-            onPress={() => login()}
-            activeOpacity={0.8}
-          >
-            <PrivyIcon size={16} />
-            <Text style={styles.signInBtnText}>Sign In with Privy</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+            {onReturnToAuth && (
+              <TouchableOpacity
+                style={[styles.signInBtn, { backgroundColor: colors.accent }]}
+                onPress={onReturnToAuth}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.signInBtnText}>Sign In / Login</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.signInBtn, { backgroundColor: colors.bgCardAlt, borderColor: colors.border, borderWidth: 1 }]}
+              onPress={() => login()}
+              activeOpacity={0.8}
+            >
+              <PrivyIcon size={16} />
+              <Text style={[styles.signInBtnText, { color: colors.textPrimary }]}>Privy Modal</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
@@ -1138,7 +1151,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                       onPress: async () => {
                         try {
                           await deleteAccount();
-                          ToastService.info('Account deleted successfully.');
+                          ToastService.success('Account deleted.');
                         } catch {
                           ToastService.error('Failed to delete account.');
                         }

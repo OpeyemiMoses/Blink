@@ -32,17 +32,20 @@ import { BiometricService } from '../services/biometricService';
 interface SettingsScreenProps {
   activeAccount: WalletAccount | null;
   onOpenWalletConnect?: () => void;
+  onReturnToAuth?: () => void;
 }
 
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   activeAccount,
   onOpenWalletConnect,
+  onReturnToAuth,
 }) => {
   const { colors, isDark, toggleTheme, setTheme } = useTheme();
-  const { logout, authenticated } = usePrivy();
+  const { logout, authenticated, deleteAccount } = usePrivy();
   const { exportWallet } = useExportWallet();
   const [isExporting, setIsExporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [bioEnabled, setBioEnabled] = useState<boolean>(() => BiometricService.isBiometricsEnabled());
   const [isAuthenticatingBio, setIsAuthenticatingBio] = useState<boolean>(false);
 
@@ -82,18 +85,26 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     }
   };
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
+    if (isDeleting) return;
+    setIsDeleting(true);
     try {
-      UserProfileService.resetProfile();
+      if (typeof deleteAccount === 'function') {
+        await deleteAccount();
+      } else {
+        await UserProfileService.deleteAccountGlobally(activeAccount?.publicKey);
+        await logout();
+      }
       if (typeof window !== 'undefined') {
         localStorage.removeItem('tapblink_user_profile_v1');
         localStorage.removeItem('justblink_user_profile_v2');
       }
-      logout();
       setShowDeleteConfirm(false);
-      ToastService.success('Account deleted and local session cleared.');
+      ToastService.success('Account deleted.');
     } catch (err) {
-      ToastService.error('Failed to delete account data.');
+      ToastService.error('Failed to delete account.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -208,48 +219,76 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </View>
       )}
 
-      {/* Account Danger Zone (Delete Account at the bottom) */}
-      <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-        <Text style={[styles.sectionLabel, { color: '#EF4444' }]}>ACCOUNT DANGER ZONE</Text>
-
-        {showDeleteConfirm ? (
-          <View style={styles.deleteConfirmCard}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <AlertTriangle size={20} color="#EF4444" />
-              <Text style={styles.deleteConfirmTitle}>Delete Account & Local Data?</Text>
-            </View>
-            <Text style={styles.deleteConfirmSub}>
-              This will permanently clear your profile handle, local storage database, saved preferences, and sign out of this device.
+      {/* If unauthenticated / guest, show clean Guest Session card with option to sign in. NO delete button! */}
+      {!authenticated ? (
+        <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <Text style={[styles.sectionLabel, { color: colors.accent }]}>GUEST SESSION</Text>
+          <View style={[styles.guestCard, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}>
+            <Text style={[styles.guestTitle, { color: colors.textPrimary }]}>Exploring as Guest</Text>
+            <Text style={[styles.guestSub, { color: colors.textSecondary }]}>
+              You are currently browsing Blink without an account. Sign in to link external wallets, save blinks, and access your profile.
             </Text>
-            <View style={styles.deleteActionRow}>
-              <TouchableOpacity
-                style={styles.cancelDeleteBtn}
-                onPress={() => setShowDeleteConfirm(false)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.cancelDeleteText, { color: colors.textSecondary }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmDeleteBtn}
-                onPress={handleDeleteAccount}
-                activeOpacity={0.8}
-              >
-                <Trash2 size={14} color="#FFFFFF" />
-                <Text style={styles.confirmDeleteText}>Yes, Delete Account</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={[styles.guestSignInBtn, { backgroundColor: colors.accent }]}
+              onPress={onReturnToAuth}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.guestSignInBtnText}>Exit Guest Mode & Sign In</Text>
+            </TouchableOpacity>
           </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.deleteCardBtn}
-            onPress={() => setShowDeleteConfirm(true)}
-            activeOpacity={0.8}
-          >
-            <Trash2 size={20} color="#EF4444" />
-            <Text style={styles.deleteCardBtnText}>Delete Account</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      ) : (
+        /* Account Danger Zone (Delete Account at the bottom for authenticated users only) */
+        <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <Text style={[styles.sectionLabel, { color: '#EF4444' }]}>ACCOUNT DANGER ZONE</Text>
+
+          {showDeleteConfirm ? (
+            <View style={styles.deleteConfirmCard}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <AlertTriangle size={20} color="#EF4444" />
+                <Text style={styles.deleteConfirmTitle}>Delete Account?</Text>
+              </View>
+              <Text style={styles.deleteConfirmSub}>
+                This will permanently delete your account from the database and sign you out of this device.
+              </Text>
+              <View style={styles.deleteActionRow}>
+                <TouchableOpacity
+                  style={styles.cancelDeleteBtn}
+                  onPress={() => setShowDeleteConfirm(false)}
+                  disabled={isDeleting}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.cancelDeleteText, { color: colors.textSecondary }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.confirmDeleteBtn}
+                  onPress={handleDeleteAccount}
+                  disabled={isDeleting}
+                  activeOpacity={0.8}
+                >
+                  {isDeleting ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Trash2 size={14} color="#FFFFFF" />
+                      <Text style={styles.confirmDeleteText}>Yes, Delete Account</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.deleteCardBtn}
+              onPress={() => setShowDeleteConfirm(true)}
+              activeOpacity={0.8}
+            >
+              <Trash2 size={20} color="#EF4444" />
+              <Text style={styles.deleteCardBtnText}>Delete Account</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
     </ScrollView>
   );
 };
@@ -446,6 +485,33 @@ const styles = StyleSheet.create({
   confirmDeleteText: {
     color: '#FFFFFF',
     fontSize: 11,
+    fontWeight: '700',
+  },
+  guestCard: {
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 8,
+  },
+  guestTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  guestSub: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  guestSignInBtn: {
+    marginTop: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  guestSignInBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '700',
   },
 });
