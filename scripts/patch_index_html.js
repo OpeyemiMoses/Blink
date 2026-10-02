@@ -8,7 +8,7 @@ const jsDir = path.join(__dirname, '../dist/_expo/static/js/web');
 if (fs.existsSync(jsDir)) {
   const files = fs.readdirSync(jsDir);
   for (const file of files) {
-    if (file.startsWith('index-') && file.endsWith('.js')) {
+    if (file.endsWith('.js')) {
       const filePath = path.join(jsDir, file);
       let content = fs.readFileSync(filePath, 'utf8');
       let patched = false;
@@ -119,6 +119,10 @@ if (fs.existsSync(distIndex)) {
     html = html.replace('</body>', `${recoveryScript}\n</body>`);
   }
 
+  // Cache-bust all JS scripts so browsers never serve a stale cached bundle
+  const cacheBuster = Date.now();
+  html = html.replace(/src="(\/_expo\/static\/js\/web\/[^"?]+)(\?[^"]*)?"/g, `src="$1?v=${cacheBuster}"`);
+
   fs.writeFileSync(distIndex, html, 'utf8');
-  console.log('[Patch] Successfully updated dist/index.html with error tracker & recovery watchdog');
+  console.log('[Patch] Successfully updated dist/index.html with error tracker, recovery watchdog, and cache-busting');
 }

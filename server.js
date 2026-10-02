@@ -1679,7 +1679,7 @@ const server = http.createServer((req, res) => {
       const headers = {
         'Content-Type': contentType,
         'Access-Control-Allow-Origin': '*',
-        'Cache-Control': ext === '.html' ? 'no-cache, no-store, must-revalidate' : 'public, max-age=3600',
+        'Cache-Control': ['.html', '.js', '.json'].includes(ext) ? 'no-cache, no-store, must-revalidate' : 'public, max-age=3600',
       };
 
       if (canGzip && compressible) {
