@@ -1614,7 +1614,7 @@ const styles = StyleSheet.create({
     flex: 1,
     maxWidth: 680,
     width: '100%',
-    marginHorizontal: 'auto',
+    alignSelf: 'center',
     backgroundColor: '#07080B',
   },
   topBar: {

@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     maxWidth: 960,
     width: '100%',
-    marginHorizontal: 'auto',
+    alignSelf: 'center',
   },
   brandGroup: {
     flexDirection: 'row',

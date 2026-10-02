@@ -989,7 +989,7 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     maxWidth: 680,
     width: '100%',
-    marginHorizontal: 'auto',
+    alignSelf: 'center',
   },
   heroSection: {
     flexDirection: 'row',

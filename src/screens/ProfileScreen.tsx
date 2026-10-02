@@ -1410,7 +1410,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 110,
     maxWidth: 800,
-    marginHorizontal: 'auto',
+    alignSelf: 'center',
     width: '100%',
     gap: 6,
   },

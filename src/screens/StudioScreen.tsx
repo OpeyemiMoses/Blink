@@ -1163,7 +1163,7 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     maxWidth: 680,
     width: '100%',
-    marginHorizontal: 'auto',
+    alignSelf: 'center',
   },
   introCard: {
     backgroundColor: '#0F111A',

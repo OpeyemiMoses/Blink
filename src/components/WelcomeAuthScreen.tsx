@@ -31,6 +31,7 @@ import {
 } from './SocialLogos';
 import { PhantomIcon, SolflareIcon } from './WalletIcons';
 import { SolanaMobileStackService } from '../services/solanaMobileStackService';
+import { ToastService } from '../services/toastService';
 
 interface WelcomeAuthScreenProps {
   onContinueGuest: () => void;
@@ -77,14 +78,19 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
 
   const handleMwaConnect = async () => {
     try {
+      ToastService.info('Connecting to Mobile Wallet Adapter...');
       const account = await SolanaMobileStackService.connectMWA();
       if (account) {
+        ToastService.success(`Connected to ${account.name || 'Solana Wallet'}`);
         onContinueGuest();
       } else {
-        login();
+        ToastService.info('No MWA wallet app detected. Opening wallet connector...');
+        login({ loginMethods: ['wallet', 'email', 'google'] });
       }
-    } catch {
-      login();
+    } catch (err: any) {
+      console.warn('MWA connect error:', err);
+      ToastService.info('Opening wallet connector...');
+      login({ loginMethods: ['wallet', 'email', 'google'] });
     }
   };
 
@@ -297,11 +303,11 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 44 : 24,
+    paddingTop: Platform.OS === 'ios' ? 44 : 16,
     paddingBottom: 60,
     maxWidth: 580,
     width: '100%',
-    marginHorizontal: 'auto',
+    alignSelf: 'center',
     gap: 20,
   },
   topHeader: {

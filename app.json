@@ -16,7 +16,7 @@
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
       "package": "com.blink.solanamobile",
-      "versionCode": 2,
+      "versionCode": 3,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.INTERNET",
@@ -27,6 +27,11 @@
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.VIBRATE"
       ]
+    },
+    "androidStatusBar": {
+      "barStyle": "light-content",
+      "backgroundColor": "#07080B",
+      "translucent": false
     },
     "plugins": [
       "expo-local-authentication",

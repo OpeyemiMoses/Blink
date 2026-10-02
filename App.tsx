@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Platform, useWindowDimensions, StatusBar as RNStatusBar } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
 import {
@@ -74,7 +74,7 @@ const solanaConnectors = toSolanaWalletConnectors();
 
 function BlinkMainApp() {
   const { width } = useWindowDimensions();
-  const isDesktop = width >= 768;
+  const isDesktop = Platform.OS === 'web' && width >= 768;
   const { colors, toggleTheme, isDark, theme } = useTheme();
 
   // If in Privy Web Auth Bridge mode inside WebView, render dedicated auth UI
@@ -900,33 +900,22 @@ function BlinkMainApp() {
     return <LaunchSplashScreen onFinish={() => setShowSplash(false)} durationMs={3000} />;
   }
 
+  let mainScreenContent: React.ReactNode = null;
+
   // 2. Gate unauthenticated users to Privy login/signup page unless browsing as guest
   if (!authenticated && !isGuestMode) {
-    return (
-      <SafeAreaView style={[styles.appRoot, { backgroundColor: colors.bg }]}>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
-        <WelcomeAuthScreen
-          onContinueGuest={() => setIsGuestMode(true)}
-        />
-      </SafeAreaView>
+    mainScreenContent = (
+      <WelcomeAuthScreen
+        onContinueGuest={() => setIsGuestMode(true)}
+      />
     );
-  }
-
-  // 2b. First-time user onboarding (after sign-in, before main app)
-  if (showOnboarding) {
-    return (
-      <SafeAreaView style={[styles.appRoot, { backgroundColor: colors.bg }]}>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
-        <OnboardingScreen onFinish={finishOnboarding} />
-      </SafeAreaView>
+  } else if (showOnboarding) {
+    // 2b. First-time user onboarding (after sign-in, before main app)
+    mainScreenContent = (
+      <OnboardingScreen onFinish={finishOnboarding} />
     );
-  }
-
-  return (
-    <SafeAreaView style={[styles.appRoot, { backgroundColor: colors.bg }]}>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
-
-      {isDesktop ? (
+  } else {
+    mainScreenContent = isDesktop ? (
         /* Desktop Viewport with Left Side Navigation */
         <View style={styles.desktopLayout}>
           <DesktopSidebar
@@ -1163,7 +1152,14 @@ function BlinkMainApp() {
             isAuthenticated={authenticated && !!activeAccount}
           />
         </View>
-      )}
+      );
+  }
+
+  return (
+    <SafeAreaView style={[styles.appRoot, { backgroundColor: colors.bg }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+
+      {mainScreenContent}
 
       {/* Interactive Detail View Modal */}
       <BlinkDetailModal
@@ -1350,6 +1346,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
+    paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0,
   },
   desktopLayout: {
     flex: 1,

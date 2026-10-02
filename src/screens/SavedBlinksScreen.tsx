@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     maxWidth: 720,
     width: '100%',
-    marginHorizontal: 'auto',
+    alignSelf: 'center',
   },
   toastBar: {
     position: 'absolute',
