@@ -9,6 +9,7 @@ import {
   Image,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import {
   User,
@@ -46,6 +47,7 @@ import { StreakService } from '../services/streakService';
 import { MASCOT_AVATARS } from '../constants/mascotAvatars';
 import { DatabaseService } from '../services/databaseService';
 import { ToastService } from '../services/toastService';
+import { ImagePickerService } from '../services/imagePickerService';
 import { BlinkBrandMark } from '../components/BrandLogos';
 import { WalletAccount } from '../services/walletProviderService';
 import { PrivyIcon } from '../components/PrivyIcon';
@@ -91,6 +93,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     unlinkTwitter,
     unlinkDiscord,
     unlinkTelegram,
+    deleteAccount,
   } = usePrivy();
 
 
@@ -293,75 +296,33 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     ToastService.show(msg);
   };
 
-  // Camera-only avatar picker with automatic canvas compression
-  const handlePickFromCamera = () => {
-    if (typeof document !== 'undefined') {
-      const fileInput = document.createElement('input');
-      fileInput.type = 'file';
-      fileInput.accept = 'image/*';
-      fileInput.setAttribute('capture', 'environment');
-      fileInput.onchange = (event: any) => {
-        const file = event.target?.files?.[0];
-        if (!file) return;
+  // Camera-only avatar picker (strictly launches camera per user constraint)
+  const handlePickFromCamera = async () => {
+    try {
+      const compressed = await ImagePickerService.pickFromCamera();
+      if (!compressed) return;
 
-        if (file.size > 20 * 1024 * 1024) {
-          ToastService.error('Image exceeds 20MB limit.');
-          return;
-        }
+      setAvatarUrl(compressed);
+      const updated = UserProfileService.updateProfile({
+        avatarUrl: compressed,
+        hasCustomizedProfile: true,
+      });
+      setProfile(updated);
 
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const rawDataUrl = e.target?.result as string;
-          if (!rawDataUrl) return;
+      const userAddress = activeAccount?.publicKey || 'local_user';
+      DatabaseService.saveUserAccount({
+        id: userAddress,
+        address: userAddress,
+        publicKey: userAddress,
+        displayName: updated.displayName,
+        username: updated.username,
+        avatarUrl: compressed,
+      });
 
-          const img = new (window as any).Image();
-          img.onload = () => {
-            try {
-              const MAX = 256;
-              const scale = Math.min(MAX / img.width, MAX / img.height, 1);
-              const canvas = document.createElement('canvas');
-              canvas.width = Math.round(img.width * scale);
-              canvas.height = Math.round(img.height * scale);
-              const ctx = canvas.getContext('2d');
-              if (!ctx) {
-                ToastService.error('Could not process canvas context.');
-                return;
-              }
-              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-              // JPEG at 0.82 quality produces ~18-25KB, well within localStorage quota
-              const compressed = canvas.toDataURL('image/jpeg', 0.82);
-
-              setAvatarUrl(compressed);
-              const updated = UserProfileService.updateProfile({
-                avatarUrl: compressed,
-                hasCustomizedProfile: true,
-              });
-              setProfile(updated);
-
-              const userAddress = activeAccount?.publicKey || 'local_user';
-              DatabaseService.saveUserAccount({
-                id: userAddress,
-                address: userAddress,
-                publicKey: userAddress,
-                displayName: updated.displayName,
-                username: updated.username,
-                avatarUrl: compressed,
-              });
-
-              ToastService.success('Avatar saved.');
-            } catch (err) {
-              console.error('Failed to compress avatar:', err);
-              ToastService.error('Could not compress photo.');
-            }
-          };
-          img.onerror = () => {
-            ToastService.error('Could not decode camera image.');
-          };
-          img.src = rawDataUrl;
-        };
-        reader.readAsDataURL(file);
-      };
-      fileInput.click();
+      ToastService.success('Avatar updated from camera.');
+    } catch (err) {
+      console.error('Failed to take camera avatar:', err);
+      ToastService.error('Could not take photo.');
     }
   };
 
@@ -435,35 +396,28 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const handleStartBind = async (provider: keyof LinkedAccounts) => {
     try {
       if (provider === 'email' && typeof linkEmail === 'function') {
-        linkEmail();
+        await linkEmail();
         return;
       }
       if (provider === 'google' && typeof linkGoogle === 'function') {
-        linkGoogle();
+        await linkGoogle();
         return;
       }
       if (provider === 'github' && typeof linkGithub === 'function') {
-        linkGithub();
+        await linkGithub();
         return;
       }
       if (provider === 'twitter' && typeof linkTwitter === 'function') {
-        linkTwitter();
+        await linkTwitter();
         return;
       }
       if (provider === 'discord' && typeof linkDiscord === 'function') {
-        linkDiscord();
-        return;
-      }
-      if (provider === 'telegram' && typeof linkTelegram === 'function') {
-        linkTelegram();
+        await linkDiscord();
         return;
       }
     } catch (err: any) {
       console.log('Privy link trigger error:', err);
     }
-
-    setActiveBindingProvider(provider);
-    setBindingInput(profile.linkedAccounts[provider] || '');
   };
 
   const handleConfirmBind = (provider: keyof LinkedAccounts) => {
@@ -1149,49 +1103,58 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </View>
         </View>
 
-        {/* Manual Handle Input Fallback if Active */}
-        {activeBindingProvider && (
-          <View style={[styles.manualBindCard, { backgroundColor: colors.bgInput, borderColor: colors.border }]}>
-            <Text style={[styles.manualBindTitle, { color: colors.textSecondary }]}>
-              Enter {activeBindingProvider} handle manually:
-            </Text>
-            <View style={styles.manualBindRow}>
-              <TextInput
-                style={[styles.manualInput, { backgroundColor: colors.bgCard, borderColor: colors.border, color: colors.textPrimary }]}
-                placeholder={`Your ${activeBindingProvider} username/email`}
-                placeholderTextColor={colors.textMuted}
-                value={bindingInput}
-                onChangeText={setBindingInput}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity
-                style={styles.confirmManualBtn}
-                onPress={() => handleConfirmBind(activeBindingProvider)}
-                activeOpacity={0.8}
-              >
-                <Check size={14} color="#FFFFFF" />
-                <Text style={styles.confirmManualText}>Save</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Dedicated Full-Width Sign Out Button */}
+        {/* Dedicated Full-Width Sign Out & Delete Account Buttons */}
         {authenticated && (
-          <TouchableOpacity
-            style={[
-              styles.fullSignOutBtn,
-              { backgroundColor: 'rgba(239, 68, 68, 0.08)', borderColor: 'rgba(239, 68, 68, 0.3)' },
-            ]}
-            onPress={() => {
-              logout();
-              ToastService.info('Signed out of account');
-            }}
-            activeOpacity={0.8}
-          >
-            <LogOut size={18} color="#EF4444" />
-            <Text style={styles.fullSignOutBtnText}>Sign Out of Account</Text>
-          </TouchableOpacity>
+          <View style={{ gap: 10, marginTop: 4 }}>
+            <TouchableOpacity
+              style={[
+                styles.fullSignOutBtn,
+                { backgroundColor: 'rgba(239, 68, 68, 0.08)', borderColor: 'rgba(239, 68, 68, 0.3)' },
+              ]}
+              onPress={async () => {
+                await logout();
+                ToastService.info('Signed out of account');
+              }}
+              activeOpacity={0.8}
+            >
+              <LogOut size={18} color="#EF4444" />
+              <Text style={styles.fullSignOutBtnText}>Sign Out of Account</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.fullSignOutBtn,
+                { backgroundColor: 'rgba(239, 68, 68, 0.14)', borderColor: '#EF4444' },
+              ]}
+              onPress={() => {
+                Alert.alert(
+                  'Delete Account',
+                  'Are you sure you want to permanently delete your account and all associated on-chain profile data? This action cannot be undone.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Delete Account',
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          await deleteAccount();
+                          ToastService.info('Account deleted successfully.');
+                        } catch {
+                          ToastService.error('Failed to delete account.');
+                        }
+                      },
+                    },
+                  ]
+                );
+              }}
+              activeOpacity={0.8}
+            >
+              <Trash2 size={18} color="#EF4444" />
+              <Text style={[styles.fullSignOutBtnText, { color: '#EF4444', fontWeight: '800' }]}>
+                Delete Account & Data
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
     </ScrollView>

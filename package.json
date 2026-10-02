@@ -23,6 +23,7 @@
     "crypto-browserify": "^3.12.1",
     "expo": "~57.0.25",
     "expo-device": "~57.0.2",
+    "expo-image-picker": "~57.0.20",
     "expo-local-authentication": "~57.0.3",
     "expo-notifications": "~57.0.21",
     "expo-status-bar": "~57.0.1",
@@ -36,6 +37,7 @@
     "react-native-nfc-manager": "^3.17.2",
     "react-native-svg": "15.15.4",
     "react-native-web": "^0.21.2",
+    "react-native-webview": "13.16.1",
     "stream-browserify": "^3.0.0"
   },
   "devDependencies": {

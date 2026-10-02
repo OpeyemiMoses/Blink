@@ -83,6 +83,48 @@ const dispatchEventPolyfill = (event: any) => {
   return true;
 };
 
+// 3. Polyfill window.localStorage for React Native native runtimes
+class MemoryStoragePolyfill {
+  private store: Map<string, string> = new Map();
+
+  getItem(key: string): string | null {
+    return this.store.has(key) ? this.store.get(key)! : null;
+  }
+
+  setItem(key: string, value: string): void {
+    this.store.set(key, String(value));
+  }
+
+  removeItem(key: string): void {
+    this.store.delete(key);
+  }
+
+  clear(): void {
+    this.store.clear();
+  }
+
+  get length(): number {
+    return this.store.size;
+  }
+
+  key(index: number): string | null {
+    const keys = Array.from(this.store.keys());
+    return keys[index] || null;
+  }
+}
+
+const memoryStorageInstance = new MemoryStoragePolyfill();
+
+if (typeof (globalThis as any).localStorage === 'undefined') {
+  (globalThis as any).localStorage = memoryStorageInstance;
+}
+if (typeof (global as any) !== 'undefined' && typeof (global as any).localStorage === 'undefined') {
+  (global as any).localStorage = memoryStorageInstance;
+}
+if (typeof (window as any) !== 'undefined' && typeof (window as any).localStorage === 'undefined') {
+  (window as any).localStorage = memoryStorageInstance;
+}
+
 const polyfillTargets = [
   globalThis,
   typeof global !== 'undefined' ? global : null,

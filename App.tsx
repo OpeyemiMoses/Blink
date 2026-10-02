@@ -11,6 +11,7 @@ import {
   useSignAndSendTransaction,
   useSignTransaction,
   defaultSolanaRpcsPlugin,
+  PrivyNativeBridge,
 } from './src/auth/privyAdapter';
 import bs58 from 'bs58';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
@@ -66,6 +67,8 @@ import { Toast } from './src/components/Toast';
 import { ToastService } from './src/services/toastService';
 import { PickUsernameModal } from './src/components/PickUsernameModal';
 import { PushNotificationService } from './src/services/pushNotificationService';
+import { PrivyAuthModal } from './src/components/PrivyAuthModal';
+import { PrivyWebAuthBridge } from './src/components/PrivyWebAuthBridge';
 
 const solanaConnectors = toSolanaWalletConnectors();
 
@@ -73,6 +76,15 @@ function BlinkMainApp() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
   const { colors, toggleTheme, isDark, theme } = useTheme();
+
+  // If in Privy Web Auth Bridge mode inside WebView, render dedicated auth UI
+  const isAuthModalMode = Platform.OS === 'web' && typeof window !== 'undefined' && (
+    window.location.search.includes('auth_modal=1') || window.location.pathname === '/auth-modal'
+  );
+
+  if (isAuthModalMode) {
+    return <PrivyWebAuthBridge />;
+  }
 
   // Real Privy authentication & account management
   const { login, logout, authenticated, user, ready } = usePrivy();
@@ -92,6 +104,29 @@ function BlinkMainApp() {
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(() => UserProfileService.getProfile());
+
+  // Native In-App Privy Auth Modal state
+  const [authModalVisible, setAuthModalVisible] = useState(false);
+  const [authModalOptions, setAuthModalOptions] = useState<any>(null);
+
+  useEffect(() => {
+    return PrivyNativeBridge.subscribeModal((open: boolean, opts: any) => {
+      setAuthModalVisible(open);
+      setAuthModalOptions(opts);
+    });
+  }, []);
+
+  // Listen for signout to reset guest mode
+  useEffect(() => {
+    const handleSignOut = () => {
+      setIsGuestMode(false);
+      setCurrentTab('markets');
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('blink_auth_signout', handleSignOut);
+      return () => window.removeEventListener('blink_auth_signout', handleSignOut);
+    }
+  }, []);
 
   // Mark onboarding complete & persist
   const finishOnboarding = () => {
@@ -437,9 +472,9 @@ function BlinkMainApp() {
     }
   }, [authenticated, activeAccount, currentTab]);
 
-  // Persist user account into database when authenticated
+  // Persist user account into database ONLY when authenticated via real Privy user
   useEffect(() => {
-    if (authenticated && activeAccount?.publicKey) {
+    if (authenticated && !isGuestMode && activeAccount?.publicKey && (activeAccount.isPrivy || user?.id)) {
       DatabaseService.saveUserAccount({
         id: activeAccount.publicKey,
         address: activeAccount.publicKey,
@@ -450,7 +485,7 @@ function BlinkMainApp() {
         avatarUrl: userProfile.avatarUrl,
       });
     }
-  }, [authenticated, activeAccount?.publicKey, activeAccount?.name, userProfile.avatarUrl]);
+  }, [authenticated, isGuestMode, activeAccount?.publicKey, activeAccount?.name, activeAccount?.isPrivy, user?.id, userProfile.avatarUrl]);
 
   // Cloud Account Restoration across devices & Google/Custom auto-derivation
   useEffect(() => {
@@ -1217,6 +1252,13 @@ function BlinkMainApp() {
           (user?.email?.address ? user.email.address.split('@')[0] : '')
         }
         initialAvatarUrl={userProfile.avatarUrl}
+      />
+
+      {/* In-App Native Privy Authentication Modal */}
+      <PrivyAuthModal
+        visible={authModalVisible}
+        onClose={() => PrivyNativeBridge.close()}
+        options={authModalOptions}
       />
 
       {/* Universal Floating Toast Feedback System */}

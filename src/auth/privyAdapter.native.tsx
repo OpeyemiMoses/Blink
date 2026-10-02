@@ -1,8 +1,226 @@
 import React, { useState, useEffect } from 'react';
 import { WalletProviderService, WalletAccount } from '../services/walletProviderService';
 import { SolanaMobileStackService } from '../services/solanaMobileStackService';
-import { SolanaService } from '../services/solanaService';
+import { UserProfileService } from '../services/userProfileService';
+import { getApiUrl } from '../services/apiConfig';
 import { Transaction } from '@solana/web3.js';
+
+const STORAGE_PRIVY_USER_KEY = 'blink_privy_user_v1';
+
+// Global Event / Modal Bridge for React Native Native runtimes
+type ModalListener = (isOpen: boolean, options: any) => void;
+type AuthListener = (user: any | null, authenticated: boolean) => void;
+
+class PrivyNativeBridgeClass {
+  private isModalOpen = false;
+  private modalOptions: any = null;
+  private currentUser: any = null;
+  private modalListeners = new Set<ModalListener>();
+  private authListeners = new Set<AuthListener>();
+
+  constructor() {
+    this.restoreSession();
+  }
+
+  private restoreSession() {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const stored = window.localStorage.getItem(STORAGE_PRIVY_USER_KEY);
+        if (stored) {
+          const user = JSON.parse(stored);
+          if (user && (user.id || user.wallet?.address)) {
+            this.currentUser = user;
+            const walletAddr =
+              user.wallet?.address ||
+              user.linkedAccounts?.find((a: any) => a.type === 'wallet' && (a.chainType === 'solana' || a.walletClientType === 'privy'))?.address ||
+              user.id;
+
+            if (walletAddr) {
+              WalletProviderService.setActiveAccount({
+                name: user.google?.name || user.email?.address || 'Privy Solana Wallet',
+                publicKey: walletAddr,
+                isPrivy: true,
+              });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[PrivyNativeBridge] Failed to restore session:', e);
+    }
+  }
+
+  isOpen(): boolean {
+    return this.isModalOpen;
+  }
+
+  getOptions(): any {
+    return this.modalOptions;
+  }
+
+  isAuthenticated(): boolean {
+    return !!this.currentUser;
+  }
+
+  getUser(): any | null {
+    return this.currentUser;
+  }
+
+  open(options?: any) {
+    this.isModalOpen = true;
+    this.modalOptions = options || {};
+    this.modalListeners.forEach((fn) => fn(true, this.modalOptions));
+  }
+
+  close() {
+    this.isModalOpen = false;
+    this.modalOptions = null;
+    this.modalListeners.forEach((fn) => fn(false, null));
+  }
+
+  handleAuthSuccess(user: any) {
+    this.currentUser = user;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(STORAGE_PRIVY_USER_KEY, JSON.stringify(user));
+      }
+    } catch {}
+
+    const walletAddr =
+      user.wallet?.address ||
+      user.linkedAccounts?.find((a: any) => a.type === 'wallet' && (a.chainType === 'solana' || a.walletClientType === 'privy'))?.address ||
+      user.id;
+
+    if (walletAddr) {
+      WalletProviderService.setActiveAccount({
+        name: user.google?.name || user.email?.address || 'Privy Solana Wallet',
+        publicKey: walletAddr,
+        isPrivy: true,
+      });
+    }
+
+    // Automatically sync identity fields to UserProfile
+    const email = user.email?.address || user.google?.email || null;
+    const googleName = user.google?.name || null;
+    const twitterHandle = user.twitter?.username ? `@${user.twitter.username.replace(/^@/, '')}` : null;
+    const discordHandle = user.discord?.username || null;
+    const githubHandle = user.github?.username ? `@${user.github.username.replace(/^@/, '')}` : null;
+
+    UserProfileService.updateProfile({
+      displayName: googleName || UserProfileService.getProfile().displayName,
+      linkedAccounts: {
+        ...UserProfileService.getProfile().linkedAccounts,
+        ...(email ? { email } : {}),
+        ...(user.google?.email ? { google: user.google.email } : {}),
+        ...(twitterHandle ? { twitter: twitterHandle } : {}),
+        ...(discordHandle ? { discord: discordHandle } : {}),
+        ...(githubHandle ? { github: githubHandle } : {}),
+      },
+    });
+
+    this.authListeners.forEach((fn) => fn(this.currentUser, true));
+    this.close();
+
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      window.dispatchEvent(new CustomEvent('blink_profile_updated'));
+      window.dispatchEvent(new CustomEvent('blink_auth_success', { detail: user }));
+    }
+  }
+
+  handleLinkSuccess(user: any) {
+    this.currentUser = user;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(STORAGE_PRIVY_USER_KEY, JSON.stringify(user));
+      }
+    } catch {}
+
+    const email = user.email?.address || user.google?.email || null;
+    const twitterHandle = user.twitter?.username ? `@${user.twitter.username.replace(/^@/, '')}` : null;
+    const discordHandle = user.discord?.username || null;
+    const githubHandle = user.github?.username ? `@${user.github.username.replace(/^@/, '')}` : null;
+
+    UserProfileService.updateProfile({
+      linkedAccounts: {
+        ...UserProfileService.getProfile().linkedAccounts,
+        ...(email ? { email } : {}),
+        ...(user.google?.email ? { google: user.google.email } : {}),
+        ...(twitterHandle ? { twitter: twitterHandle } : {}),
+        ...(discordHandle ? { discord: discordHandle } : {}),
+        ...(githubHandle ? { github: githubHandle } : {}),
+      },
+    });
+
+    this.authListeners.forEach((fn) => fn(this.currentUser, true));
+    this.close();
+
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      window.dispatchEvent(new CustomEvent('blink_profile_updated'));
+    }
+  }
+
+  async logout() {
+    this.currentUser = null;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(STORAGE_PRIVY_USER_KEY);
+      }
+    } catch {}
+
+    WalletProviderService.disconnect();
+
+    // Reset user profile to default guest
+    UserProfileService.updateProfile({
+      username: 'seeker_user',
+      displayName: 'Seeker Pioneer',
+      blinkId: '@seeker_user',
+      hasCustomizedProfile: false,
+      avatarUrl: UserProfileService.getRandomMascot(),
+      linkedAccounts: {
+        email: null,
+        google: null,
+        twitter: null,
+        discord: null,
+        telegram: null,
+        github: null,
+      },
+    });
+
+    this.authListeners.forEach((fn) => fn(null, false));
+
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      window.dispatchEvent(new CustomEvent('blink_auth_signout'));
+      window.dispatchEvent(new CustomEvent('blink_profile_updated'));
+    }
+  }
+
+  async deleteAccount(addressOrId?: string): Promise<boolean> {
+    const target = addressOrId || this.currentUser?.id || WalletProviderService.getActiveAccount()?.publicKey;
+    if (target) {
+      try {
+        await fetch(getApiUrl(`/api/users/${encodeURIComponent(target)}`), {
+          method: 'DELETE',
+        });
+      } catch (err) {
+        console.warn('[PrivyNativeBridge] Delete account API error:', err);
+      }
+    }
+    await this.logout();
+    return true;
+  }
+
+  subscribeModal(fn: ModalListener): () => void {
+    this.modalListeners.add(fn);
+    return () => this.modalListeners.delete(fn);
+  }
+
+  subscribeAuth(fn: AuthListener): () => void {
+    this.authListeners.add(fn);
+    return () => this.authListeners.delete(fn);
+  }
+}
+
+export const PrivyNativeBridge = new PrivyNativeBridgeClass();
 
 export const PrivyProvider: React.FC<{ children: React.ReactNode; [key: string]: any }> = ({ children }) => {
   return <>{children}</>;
@@ -12,52 +230,86 @@ export const toSolanaWalletConnectors = () => [];
 export const defaultSolanaRpcsPlugin = () => ({});
 
 export function usePrivy() {
-  const [account, setAccount] = useState<WalletAccount | null>(() => WalletProviderService.getActiveAccount());
+  const [user, setUser] = useState<any | null>(() => PrivyNativeBridge.getUser());
+  const [authenticated, setAuthenticated] = useState<boolean>(() => PrivyNativeBridge.isAuthenticated());
 
   useEffect(() => {
-    return WalletProviderService.subscribe((acc) => {
-      setAccount(acc);
+    return PrivyNativeBridge.subscribeAuth((newUser, isAuth) => {
+      setUser(newUser);
+      setAuthenticated(isAuth);
     });
   }, []);
 
   const login = async (options?: any) => {
-    try {
-      const mwaAcc = await SolanaMobileStackService.connectMWA();
-      if (mwaAcc) return;
-    } catch (e) {
-      console.warn('MWA connect fallback on native:', e);
-    }
-
-    const kp = SolanaService.getOrCreateKeypair();
-    WalletProviderService.setActiveAccount({
-      name: 'Seeker Seed Vault',
-      publicKey: kp.publicKey.toBase58(),
-      isPrivy: false,
-    });
+    PrivyNativeBridge.open({ mode: 'login', ...options });
   };
 
   const logout = async () => {
-    WalletProviderService.disconnect();
+    await PrivyNativeBridge.logout();
+  };
+
+  const linkEmail = () => PrivyNativeBridge.open({ mode: 'link', provider: 'email' });
+  const linkGoogle = () => PrivyNativeBridge.open({ mode: 'link', provider: 'google' });
+  const linkTwitter = () => PrivyNativeBridge.open({ mode: 'link', provider: 'twitter' });
+  const linkDiscord = () => PrivyNativeBridge.open({ mode: 'link', provider: 'discord' });
+  const linkGithub = () => PrivyNativeBridge.open({ mode: 'link', provider: 'github' });
+
+  const unlinkEmail = async (_val?: string) => {
+    const prof = UserProfileService.getProfile();
+    UserProfileService.updateProfile({ linkedAccounts: { ...prof.linkedAccounts, email: null } });
+  };
+
+  const unlinkGoogle = async (_val?: string) => {
+    const prof = UserProfileService.getProfile();
+    UserProfileService.updateProfile({ linkedAccounts: { ...prof.linkedAccounts, google: null } });
+  };
+
+  const unlinkTwitter = async (_val?: string) => {
+    const prof = UserProfileService.getProfile();
+    UserProfileService.updateProfile({ linkedAccounts: { ...prof.linkedAccounts, twitter: null } });
+  };
+
+  const unlinkDiscord = async (_val?: string) => {
+    const prof = UserProfileService.getProfile();
+    UserProfileService.updateProfile({ linkedAccounts: { ...prof.linkedAccounts, discord: null } });
+  };
+
+  const unlinkGithub = async (_val?: string) => {
+    const prof = UserProfileService.getProfile();
+    UserProfileService.updateProfile({ linkedAccounts: { ...prof.linkedAccounts, github: null } });
+  };
+
+  const deleteAccount = async () => {
+    await PrivyNativeBridge.deleteAccount();
   };
 
   return {
     ready: true,
-    authenticated: !!account,
-    user: account
-      ? {
-          id: account.publicKey,
-          linkedAccounts: [
-            {
-              type: 'wallet',
-              address: account.publicKey,
-              chainType: 'solana',
-              walletClientType: account.name || 'solana',
-            },
-          ],
-        }
-      : null,
+    authenticated,
+    user: user || (authenticated ? {
+      id: WalletProviderService.getActiveAccount()?.publicKey,
+      linkedAccounts: [
+        {
+          type: 'wallet',
+          address: WalletProviderService.getActiveAccount()?.publicKey,
+          chainType: 'solana',
+          walletClientType: 'privy',
+        },
+      ],
+    } : null),
     login,
     logout,
+    linkEmail,
+    linkGoogle,
+    linkTwitter,
+    linkDiscord,
+    linkGithub,
+    unlinkEmail,
+    unlinkGoogle,
+    unlinkTwitter,
+    unlinkDiscord,
+    unlinkGithub,
+    deleteAccount,
   };
 }
 
@@ -86,14 +338,7 @@ export function useWallets() {
 export function useCreateWallet() {
   return {
     createWallet: async () => {
-      const kp = SolanaService.getOrCreateKeypair();
-      const acc: WalletAccount = {
-        name: 'Seeker Seed Vault',
-        publicKey: kp.publicKey.toBase58(),
-        isPrivy: false,
-      };
-      WalletProviderService.setActiveAccount(acc);
-      return acc;
+      return WalletProviderService.getActiveAccount();
     },
   };
 }
@@ -126,20 +371,8 @@ export function useExportWallet() {
 
 export function useLoginWithOAuth(_opts?: any) {
   return {
-    initOAuth: async (_args?: any) => {
-      try {
-        const mwaAcc = await SolanaMobileStackService.connectMWA();
-        if (mwaAcc) return;
-      } catch (e) {
-        console.warn('OAuth fallback to MWA:', e);
-      }
-
-      const kp = SolanaService.getOrCreateKeypair();
-      WalletProviderService.setActiveAccount({
-        name: 'Seeker Seed Vault',
-        publicKey: kp.publicKey.toBase58(),
-        isPrivy: false,
-      });
+    initOAuth: async (args?: any) => {
+      PrivyNativeBridge.open({ mode: 'login', provider: args?.provider || 'google' });
     },
   };
 }

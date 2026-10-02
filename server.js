@@ -139,7 +139,7 @@ function sendJson(res, statusCode, data) {
   res.writeHead(statusCode, {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Accept',
   });
   res.end(JSON.stringify(data));
@@ -267,11 +267,29 @@ const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Accept',
     });
     res.end();
     return;
+  }
+
+  // Direct serving of auth-modal.html for In-App Native Privy WebView
+  if (pathname === '/auth-modal.html' || pathname === '/auth-modal') {
+    const candidatePaths = [
+      path.join(__dirname, 'public', 'auth-modal.html'),
+      path.join(__dirname, 'dist', 'auth-modal.html'),
+    ];
+    for (const p of candidatePaths) {
+      if (fs.existsSync(p)) {
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+        });
+        return fs.createReadStream(p).pipe(res);
+      }
+    }
   }
 
   // ─── API ROUTES ───────────────────────────────────────────────────────────
@@ -910,6 +928,60 @@ const server = http.createServer((req, res) => {
     if (found) {
       return sendJson(res, 200, { success: true, user: found });
     }
+    return sendJson(res, 404, { success: false, error: 'User not found' });
+  }
+
+  // DELETE User Account & purge from database
+  if (pathname.startsWith('/api/users/') && req.method === 'DELETE') {
+    const rawId = decodeURIComponent(pathname.replace('/api/users/', '').trim());
+    const idLower = rawId.toLowerCase();
+
+    // Find user record to delete
+    let target = usersDb[rawId] || usersDb[idLower];
+    if (!target) {
+      target = Object.values(usersDb).find(u => {
+        if (!u) return false;
+        const emails = extractUserEmails(u);
+        return (
+          (u.address && u.address.toLowerCase() === idLower) ||
+          (u.publicKey && u.publicKey.toLowerCase() === idLower) ||
+          (u.id && u.id.toLowerCase() === idLower) ||
+          emails.includes(idLower) ||
+          (u.username && u.username.toLowerCase() === idLower.replace(/^@/, ''))
+        );
+      });
+    }
+
+    if (target) {
+      const keysToDelete = new Set();
+      const targetAddress = (target.address || target.publicKey || '').toLowerCase();
+      const targetUsername = (target.username || '').toLowerCase().replace(/^@+/, '');
+      const targetEmails = extractUserEmails(target);
+
+      for (const [k, u] of Object.entries(usersDb)) {
+        if (!u) continue;
+        const uAddr = (u.address || u.publicKey || '').toLowerCase();
+        const uUser = (u.username || '').toLowerCase().replace(/^@+/, '');
+        const uBlink = (u.blinkId || '').toLowerCase().replace(/^@+/, '');
+        const uEmails = extractUserEmails(u);
+
+        const matchesAddress = targetAddress && uAddr === targetAddress;
+        const matchesUsername = targetUsername && (uUser === targetUsername || uBlink === targetUsername);
+        const matchesEmail = targetEmails.length > 0 && uEmails.some(e => targetEmails.includes(e));
+
+        if (u === target || matchesAddress || matchesUsername || matchesEmail || k.toLowerCase() === idLower) {
+          keysToDelete.add(k);
+        }
+      }
+
+      keysToDelete.forEach(k => delete usersDb[k]);
+      saveUsersDb();
+      return sendJson(res, 200, {
+        success: true,
+        message: `Account deleted successfully. Removed ${keysToDelete.size} records/aliases.`
+      });
+    }
+
     return sendJson(res, 404, { success: false, error: 'User not found' });
   }
 

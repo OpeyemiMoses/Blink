@@ -36,6 +36,8 @@ import { WalletProviderService } from '../services/walletProviderService';
 import { PrintableCardService } from '../services/printableCardService';
 import { ToastService } from '../services/toastService';
 import { PriceService } from '../services/priceService';
+import { ImagePickerService } from '../services/imagePickerService';
+import { SolanaService } from '../services/solanaService';
 import { useTheme } from '../theme/ThemeContext';
 import { BlinkBrandMark } from './BrandLogos';
 
@@ -79,36 +81,11 @@ export const CreateBlinkModal: React.FC<CreateBlinkModalProps> = ({
   const [successBlink, setSuccessBlink] = useState<PhysicalBlink | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
-  const handlePickBlinkImage = () => {
-    if (typeof document === 'undefined') return;
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = 'image/*';
-    fileInput.onchange = (event: any) => {
-      const file = event.target?.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const rawDataUrl = e.target?.result as string;
-        if (!rawDataUrl) return;
-        const img = new (window as any).Image();
-        img.onload = () => {
-          const MAX = 480;
-          const scale = Math.min(MAX / img.width, MAX / img.height, 1);
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.round(img.width * scale);
-          canvas.height = Math.round(img.height * scale);
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return;
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const compressed = canvas.toDataURL('image/jpeg', 0.82);
-          setBlinkImage(compressed);
-        };
-        img.src = rawDataUrl;
-      };
-      reader.readAsDataURL(file);
-    };
-    fileInput.click();
+  const handlePickBlinkImage = async () => {
+    const uri = await ImagePickerService.pickBlinkImage();
+    if (uri) {
+      setBlinkImage(uri);
+    }
   };
 
   useEffect(() => {
@@ -143,7 +120,7 @@ export const CreateBlinkModal: React.FC<CreateBlinkModalProps> = ({
       return;
     }
 
-    const cleanRecipient = recipient.trim();
+    const cleanRecipient = recipient.trim() || active.publicKey;
     if (!cleanRecipient || cleanRecipient.length < 32) {
       setError('Please provide a valid Solana Devnet recipient address.');
       return;
