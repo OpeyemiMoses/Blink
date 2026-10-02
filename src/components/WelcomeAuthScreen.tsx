@@ -53,44 +53,41 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
       if (msg.includes('popup') || msg.includes('origin') || msg.includes('domain') || msg.includes('block')) {
         setAuthNotice('Google popup was blocked or tunnel domain restricted. Opening sign-in modal...');
       }
-      login({ loginMethods: ['google', 'email', 'wallet'] });
+      login({ provider: 'google' });
     },
   });
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = () => {
     setAuthNotice(null);
-    try {
-      if (initOAuth) {
-        await initOAuth({ provider: 'google' });
-      } else {
-        login({ loginMethods: ['google', 'email', 'wallet'] });
-      }
-    } catch (err: any) {
-      console.warn('Google login exception:', err);
-      login({ loginMethods: ['google', 'email', 'wallet'] });
-    }
+    login({ provider: 'google' });
   };
 
   const handleEmailLogin = () => {
     setAuthNotice(null);
-    login({ loginMethods: ['email'] });
+    login({ mode: 'email' });
+  };
+
+  const handleSocialLogin = (provider: string) => {
+    setAuthNotice(null);
+    login({ provider });
   };
 
   const handleMwaConnect = async () => {
     try {
-      ToastService.info('Connecting to Mobile Wallet Adapter...');
-      const account = await SolanaMobileStackService.connectMWA();
-      if (account) {
-        ToastService.success(`Connected to ${account.name || 'Solana Wallet'}`);
-        onContinueGuest();
-      } else {
-        ToastService.info('No MWA wallet app detected. Opening wallet connector...');
-        login({ loginMethods: ['wallet', 'email', 'google'] });
+      const wallets = await SolanaMobileStackService.getInstalledWallets();
+      const detected = wallets.filter((w) => w.isInstalled);
+      if (detected.length > 0) {
+        ToastService.info(`Connecting to ${detected[0].name}...`);
+        const account = await SolanaMobileStackService.connectWalletApp(detected[0].id);
+        if (account) {
+          ToastService.success(`Connected to ${account.name || detected[0].name}`);
+          return;
+        }
       }
+      login({ mode: 'wallet' });
     } catch (err: any) {
       console.warn('MWA connect error:', err);
-      ToastService.info('Opening wallet connector...');
-      login({ loginMethods: ['wallet', 'email', 'google'] });
+      login({ mode: 'wallet' });
     }
   };
 
@@ -189,7 +186,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
 
           <TouchableOpacity
             style={[styles.socialPill, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
-            onPress={login}
+            onPress={() => handleSocialLogin('twitter')}
             activeOpacity={0.7}
           >
             <XLogo size={16} />
@@ -198,7 +195,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
 
           <TouchableOpacity
             style={[styles.socialPill, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
-            onPress={login}
+            onPress={() => handleSocialLogin('telegram')}
             activeOpacity={0.7}
           >
             <TelegramLogo size={18} />
@@ -207,7 +204,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
 
           <TouchableOpacity
             style={[styles.socialPill, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
-            onPress={login}
+            onPress={() => handleSocialLogin('discord')}
             activeOpacity={0.7}
           >
             <DiscordLogo size={18} />
@@ -216,7 +213,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
 
           <TouchableOpacity
             style={[styles.socialPill, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
-            onPress={login}
+            onPress={() => handleSocialLogin('github')}
             activeOpacity={0.7}
           >
             <GithubLogo size={18} />

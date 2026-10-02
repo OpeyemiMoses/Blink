@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Platform, Linking } from 'react-native';
 import { Transaction, PublicKey, Connection } from '@solana/web3.js';
 import * as LocalAuthentication from 'expo-local-authentication';
 import bs58 from 'bs58';
@@ -18,15 +18,50 @@ export interface BiometricSecurityStatus {
   securityType: 'fingerprint' | 'face' | 'pin' | 'none';
 }
 
+export interface InstalledWalletInfo {
+  id: 'phantom' | 'solflare' | 'backpack' | 'mwa';
+  name: string;
+  scheme: string;
+  isInstalled: boolean;
+}
+
 const SMS_APP_IDENTITY = {
-  name: 'TapBlink',
-  uri: 'https://seeker.blink.solana',
-  icon: 'icon.png',
+  name: 'Blink',
+  uri: 'https://blink-production-5c36.up.railway.app',
+  icon: 'favicon.ico',
 };
 
 export class SolanaMobileStackService {
   private static mwaAuthToken: string | null = null;
   private static cachedSecurityStatus: BiometricSecurityStatus | null = null;
+
+  /**
+   * Query device for installed Solana mobile wallets (Phantom, Solflare, Backpack).
+   */
+  static async getInstalledWallets(): Promise<InstalledWalletInfo[]> {
+    const list: InstalledWalletInfo[] = [
+      { id: 'phantom', name: 'Phantom', scheme: 'phantom://', isInstalled: false },
+      { id: 'solflare', name: 'Solflare', scheme: 'solflare://', isInstalled: false },
+      { id: 'backpack', name: 'Backpack', scheme: 'backpack://', isInstalled: false },
+    ];
+
+    if (Platform.OS === 'web') {
+      return list.map((w) => ({
+        ...w,
+        isInstalled: typeof window !== 'undefined' && Boolean((window as any).solana || (window as any).phantom?.solana),
+      }));
+    }
+
+    for (const w of list) {
+      try {
+        const canOpen = await Linking.canOpenURL(w.scheme);
+        w.isInstalled = Boolean(canOpen);
+      } catch {
+        w.isInstalled = false;
+      }
+    }
+    return list;
+  }
 
   /**
    * Check if device is running in an Android / Solana Mobile Stack environment.
@@ -127,6 +162,30 @@ export class SolanaMobileStackService {
       console.warn('MWA connect attempt:', err?.message || err);
     }
 
+    return null;
+  }
+
+  /**
+   * Connect to a specific installed wallet app (Phantom, Solflare, Backpack).
+   * Attempts MWA first, and if not responsive, launches wallet scheme.
+   */
+  static async connectWalletApp(walletId: 'phantom' | 'solflare' | 'backpack' | 'mwa'): Promise<WalletAccount | null> {
+    try {
+      const mwaResult = await this.connectMWA();
+      if (mwaResult) return mwaResult;
+    } catch (e) {
+      console.warn('MWA connect attempt:', e);
+    }
+
+    const scheme = walletId === 'solflare' ? 'solflare://' : walletId === 'backpack' ? 'backpack://' : 'phantom://';
+    try {
+      const canOpen = await Linking.canOpenURL(scheme);
+      if (canOpen) {
+        await Linking.openURL(scheme);
+      }
+    } catch (err) {
+      console.warn('Cannot open wallet scheme:', err);
+    }
     return null;
   }
 
