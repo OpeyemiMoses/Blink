@@ -16,6 +16,7 @@
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
       "package": "com.blink.solanamobile",
+      "versionCode": 2,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.INTERNET",
