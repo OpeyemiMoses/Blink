@@ -380,41 +380,9 @@ export const SendModal: React.FC<SendModalProps> = ({
       console.error('Send error:', err);
       const errMsg = err?.message || String(err);
 
-      // If the user explicitly rejected/cancelled, show error
-      const isUserRejection = /reject|cancel|denied|dismiss/i.test(errMsg);
-      if (isUserRejection) {
+      // If the user explicitly rejected/cancelled, show friendly message
+      if (/reject|cancel|denied|dismiss/i.test(errMsg)) {
         setError('Transaction was cancelled.');
-        return;
-      }
-
-      // Check if error message contains a Solana transaction signature or timeout/already-processed success
-      const sigMatch = errMsg.match(/[1-9A-HJ-NP-Za-km-z]{64,88}/) || errMsg.match(/[1-9A-HJ-NP-Za-km-z]{43,}/);
-      const isAlreadyProcessed = errMsg.includes('already been processed') || errMsg.includes('already processed');
-      const isTimeout = /timeout|not confirmed in|block height exceeded|expired/i.test(errMsg);
-
-      if ((sigMatch && sigMatch[0].length >= 43) || isAlreadyProcessed || isTimeout) {
-        const matchedSig = (sigMatch && sigMatch[0]) ? sigMatch[0] : (txSignature || `tx_${Date.now()}`);
-        setTxSignature(matchedSig);
-        const fallbackRcpt: TransactionReceipt = {
-          id: `rcpt_${matchedSig.slice(0, 10)}`,
-          signature: matchedSig,
-          blinkTitle: resolvedBlinkInfo?.name || 'Direct Transfer',
-          blinkId: resolvedBlinkInfo ? resolvedBlinkInfo.id : undefined,
-          actionType: resolvedBlinkInfo ? resolvedBlinkInfo.actionType : undefined,
-          amount: numAmount,
-          token: selectedToken,
-          payerAddress: senderPublicKey,
-          recipientAddress: targetRecipient,
-          timestamp: Date.now(),
-          status: 'confirmed',
-          method: 'send',
-        };
-        ReceiptService.saveReceipt(fallbackRcpt);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('blink_tx_updated', { detail: fallbackRcpt }));
-        }
-        ToastService.success(`Transfer of ${tokenDisplayStr} confirmed on-chain.`);
-        setTimeout(() => onSuccess(), 500);
         return;
       }
 
@@ -424,6 +392,7 @@ export const SendModal: React.FC<SendModalProps> = ({
         return;
       }
 
+      // Show the real error — never fake a confirmation
       setError(errMsg || 'Failed to send transaction. Please check your network and balance.');
     } finally {
       setLoading(false);

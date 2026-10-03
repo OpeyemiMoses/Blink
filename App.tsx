@@ -492,25 +492,24 @@ function BlinkMainApp() {
 
   // Derive active Solana account from Privy
   const existingLinkedWallet = user?.linkedAccounts?.find(
-    (acc: any) => acc.type === 'wallet' && (acc.chainType === 'solana' || acc.walletClientType === 'privy')
+    (acc: any) => acc.type === 'wallet' && acc.chainType === 'solana'
   ) as any;
 
+  // Find the first wallet from solanaWallets that has signing capability
   const activeSolanaWallet =
-    solanaWallets?.find((w: any) => w.chainType === 'solana') ||
+    solanaWallets?.find((w: any) => typeof w.signTransaction === 'function' || typeof w.signAndSendTransaction === 'function') ||
     solanaWallets?.[0] ||
-    (existingLinkedWallet ? { address: existingLinkedWallet.address, chainType: 'solana' } : null);
+    null;
 
   const solanaAddress =
     activeSolanaWallet?.address ||
     existingLinkedWallet?.address ||
-    user?.wallet?.address ||
     null;
 
+  // Only check Solana wallets — user.wallet is always an EVM wallet, not Solana
   const hasExistingWallet = Boolean(
-    solanaAddress ||
-    existingLinkedWallet ||
-    user?.wallet?.address ||
-    (solanaWallets && solanaWallets.length > 0)
+    (solanaWallets && solanaWallets.length > 0) ||
+    existingLinkedWallet
   );
 
   // Auto-provision embedded Solana wallet ONLY if brand new account with NO wallet existing
@@ -951,11 +950,10 @@ function BlinkMainApp() {
               }
             }
           } catch (signErr: any) {
-            console.warn('privySignTransaction error, checking fallback:', signErr);
+            console.warn('privySignTransaction error:', signErr);
             const errMsg = signErr?.message || String(signErr);
-            if (/reject|cancel|denied|dismiss/i.test(errMsg)) {
-              throw signErr;
-            }
+            // Always re-throw — let the caller handle real errors
+            throw signErr;
           }
         }
 
@@ -980,20 +978,13 @@ function BlinkMainApp() {
               throw privyErr;
             }
 
+            // If the error itself contains a real signature (87-88 chars), extract it
             if (privyErr?.signature) {
               const sig = typeof privyErr.signature === 'string' ? privyErr.signature : bs58.encode(privyErr.signature);
-              return sig;
+              if (sig && sig.length >= 80) return sig;
             }
 
-            const sigMatch = errMsg.match(/[1-9A-HJ-NP-Za-km-z]{64,88}/) || errMsg.match(/[1-9A-HJ-NP-Za-km-z]{43,}/);
-            if (sigMatch) {
-              return sigMatch[0];
-            }
-
-            if (errMsg.includes('already been processed') || errMsg.includes('already processed')) {
-              return 'tx_confirmed_' + Date.now();
-            }
-
+            // Re-throw all other errors — never fake a confirmation
             throw privyErr;
           }
         }
@@ -1602,7 +1593,7 @@ export default function App() {
         embeddedWallets: {
           showWalletUIs: false,
           solana: {
-            createOnLogin: 'users-without-wallets',
+            createOnLogin: 'all-users',
           },
         },
         externalWallets: {

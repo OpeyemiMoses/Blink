@@ -298,13 +298,6 @@ export class WalletProviderService {
         );
         return sig;
       } catch (confirmErr: any) {
-        const msg = confirmErr?.message || String(confirmErr);
-        const sigMatch = msg.match(/[1-9A-HJ-NP-Za-km-z]{64,88}/) || msg.match(/[1-9A-HJ-NP-Za-km-z]{43,}/);
-        if (sigMatch || msg.includes('already been processed') || msg.includes('timeout') || msg.includes('block height exceeded')) {
-          const sig = sigMatch ? sigMatch[0] : `tx_${Date.now()}`;
-          console.log('[WalletProviderService] Broadcasted transaction succeeded with confirmation note:', sig);
-          return sig;
-        }
         throw confirmErr;
       }
     } catch (onChainErr: any) {

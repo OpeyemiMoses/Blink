@@ -714,42 +714,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
         return;
       }
 
-      // Check if transaction signature exists in error or timeout occurred (tx already broadcasted/mined)
-      const sigMatch = errMsg.match(/[1-9A-HJ-NP-Za-km-z]{64,88}/) || errMsg.match(/[1-9A-HJ-NP-Za-km-z]{43,}/);
-      const isAlreadyProcessed = errMsg.includes('already been processed') || errMsg.includes('already processed');
-      const isTimeout = /timeout|not confirmed in|block height exceeded|expired/i.test(errMsg);
-
-      if (sigMatch || isAlreadyProcessed || isTimeout) {
-        const fallbackSig = sigMatch ? sigMatch[0] : (txSignature || `tx_${Date.now()}`);
-        setTxSignature(fallbackSig);
-        PhysicalBlinkRegistry.recordTap(currentBlink.id, true, checkoutAmount, currentBlink.token);
-        const fallbackRcpt: TransactionReceipt = {
-          id: `rcpt_${fallbackSig.slice(0, 10)}`,
-          signature: fallbackSig,
-          blinkTitle: currentBlink.name,
-          blinkId: currentBlink.id,
-          amount: checkoutAmount,
-          token: currentBlink.token,
-          payerAddress: activeAccount.publicKey,
-          recipientAddress: currentBlink.recipient,
-          timestamp: Date.now(),
-          status: 'confirmed',
-          method: 'pocket_direct',
-          actionType: currentBlink.actionType,
-          verifiedDomain: currentBlink.verifiedDomain,
-        };
-        ReceiptService.saveReceipt(fallbackRcpt);
-        const displayPaid = currentBlink.token === 'SOL'
-          ? `${checkoutAmount} SOL`
-          : (currentBlink.token === 'SKR' ? `${checkoutAmount} SKR` : `$${checkoutAmount.toFixed(2)} USDC`);
-        ToastService.success(`Payment of ${displayPaid} confirmed on-chain.`);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('blink_balance_refresh'));
-          window.dispatchEvent(new CustomEvent('blink_tx_updated', { detail: fallbackRcpt }));
-        }
-        return;
-      }
-
+      // Show real error — never fake a confirmation
       setError(errMsg || 'On-chain payment failed.');
       ToastService.error(errMsg || `On-chain transaction failed on Solana ${currentBlink.token === 'SKR' ? 'Mainnet' : 'Devnet'}.`);
     } finally {
