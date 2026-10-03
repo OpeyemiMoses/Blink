@@ -14,7 +14,7 @@ import {
 } from '@solana/spl-token';
 import bs58 from 'bs58';
 import { ExternalWalletService } from './externalWalletService';
-import { getApiUrl } from './apiConfig';
+import { getApiUrl, DEFAULT_CLOUD_API_URL } from './apiConfig';
 
 export const DEVNET_RPC = 'https://api.devnet.solana.com';
 export const MAINNET_RPC = 'https://api.mainnet-beta.solana.com';
@@ -385,6 +385,55 @@ export class SolanaService {
   }
 
   /**
+   * Resiliently fetch balances from local backend or cloud fallback.
+   * Sends Bypass-Tunnel-Reminder header and enforces 4-second timeout.
+   */
+  private static async fetchBackendBalance(pubkeyStr: string): Promise<{ sol: number; usdc: number; skr: number } | null> {
+    if (!pubkeyStr || typeof fetch === 'undefined') return null;
+    const cleanPubkey = pubkeyStr.trim();
+    const primaryUrl = getApiUrl(`/api/balance?address=${encodeURIComponent(cleanPubkey)}`);
+    const fallbackUrl = `${DEFAULT_CLOUD_API_URL}/api/balance?address=${encodeURIComponent(cleanPubkey)}`;
+    const endpoints = primaryUrl === fallbackUrl ? [primaryUrl] : [primaryUrl, fallbackUrl];
+
+    for (const url of endpoints) {
+      try {
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = controller ? setTimeout(() => controller.abort(), 4000) : null;
+        const res = await fetch(url, {
+          headers: {
+            'Accept': 'application/json',
+            'Bypass-Tunnel-Reminder': 'true',
+          },
+          signal: controller?.signal,
+        });
+        if (timer) clearTimeout(timer);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.success && typeof data.sol === 'number') {
+            const solVal = Number(data.sol.toFixed(4));
+            const usdcVal = typeof data.usdc === 'number' ? Number(data.usdc.toFixed(2)) : 0;
+            const skrVal = typeof data.skr === 'number' ? Number(data.skr.toFixed(2)) : 0;
+
+            this.solCache.set(cleanPubkey, { value: solVal, time: Date.now() });
+            this.usdcCache.set(cleanPubkey, { value: usdcVal, time: Date.now() });
+            this.skrCache.set(cleanPubkey, { value: skrVal, time: Date.now() });
+
+            if (typeof window !== 'undefined' && window.localStorage) {
+              window.localStorage.setItem(`blink_cached_sol_${cleanPubkey}`, String(solVal));
+              window.localStorage.setItem(`blink_cached_usdc_${cleanPubkey}`, String(usdcVal));
+              window.localStorage.setItem(`blink_cached_skr_${cleanPubkey}`, String(skrVal));
+            }
+            return { sol: solVal, usdc: usdcVal, skr: skrVal };
+          }
+        }
+      } catch (err) {
+        // try next endpoint
+      }
+    }
+    return null;
+  }
+
+  /**
    * Query real on-chain balance in SOL with deduplication and stale-while-revalidate fallback.
    */
   static async getBalance(pubkeyStr: string, forceFresh = false): Promise<number> {
@@ -398,30 +447,11 @@ export class SolanaService {
       }
     }
 
-    // 1. Primary: Backend /api/balance proxy (ultra-fast, bypasses mobile 429 & CORS)
-    try {
-      if (typeof fetch !== 'undefined') {
-        const res = await fetch(getApiUrl(`/api/balance?address=${encodeURIComponent(pubkeyStr.trim())}`));
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.success && typeof data.sol === 'number') {
-            const solVal = Number(data.sol.toFixed(4));
-            this.solCache.set(pubkeyStr, { value: solVal, time: Date.now() });
-            if (typeof data.usdc === 'number') {
-              this.usdcCache.set(pubkeyStr, { value: Number(data.usdc.toFixed(2)), time: Date.now() });
-            }
-            if (typeof data.skr === 'number') {
-              const skrVal = Number(data.skr.toFixed(2));
-              this.skrCache.set(pubkeyStr, { value: skrVal, time: Date.now() });
-              if (typeof window !== 'undefined' && window.localStorage) {
-                window.localStorage.setItem(`blink_cached_skr_${pubkeyStr}`, String(skrVal));
-              }
-            }
-            return solVal;
-          }
-        }
-      }
-    } catch {}
+    // 1. Primary: Resilient Backend /api/balance proxy with cloud failover
+    const backendData = await this.fetchBackendBalance(pubkeyStr);
+    if (backendData) {
+      return backendData.sol;
+    }
 
     // Deduplicate in-flight requests for the same address
     if (this.inFlightSol.has(pubkeyStr)) {
@@ -480,30 +510,11 @@ export class SolanaService {
       }
     }
 
-    // 1. Primary: Backend /api/balance proxy (ultra-fast, bypasses mobile 429 & CORS)
-    try {
-      if (typeof fetch !== 'undefined') {
-        const res = await fetch(getApiUrl(`/api/balance?address=${encodeURIComponent(pubkeyStr.trim())}`));
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.success && typeof data.usdc === 'number') {
-            const usdcVal = Number(data.usdc.toFixed(2));
-            this.usdcCache.set(pubkeyStr, { value: usdcVal, time: Date.now() });
-            if (typeof data.sol === 'number') {
-              this.solCache.set(pubkeyStr, { value: Number(data.sol.toFixed(4)), time: Date.now() });
-            }
-            if (typeof data.skr === 'number') {
-              const skrVal = Number(data.skr.toFixed(2));
-              this.skrCache.set(pubkeyStr, { value: skrVal, time: Date.now() });
-              if (typeof window !== 'undefined' && window.localStorage) {
-                window.localStorage.setItem(`blink_cached_skr_${pubkeyStr}`, String(skrVal));
-              }
-            }
-            return usdcVal;
-          }
-        }
-      }
-    } catch {}
+    // 1. Primary: Resilient Backend /api/balance proxy with cloud failover
+    const backendData = await this.fetchBackendBalance(pubkeyStr);
+    if (backendData) {
+      return backendData.usdc;
+    }
 
     if (this.inFlightUsdc.has(pubkeyStr)) {
       return this.inFlightUsdc.get(pubkeyStr)!;
@@ -584,29 +595,11 @@ export class SolanaService {
       }
     }
 
-    // 1. Primary: Backend /api/balance proxy (ultra-fast, bypasses mobile 429 & CORS)
-    try {
-      if (typeof fetch !== 'undefined') {
-        const res = await fetch(getApiUrl(`/api/balance?address=${encodeURIComponent(pubkeyStr.trim())}`));
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.success && typeof data.skr === 'number') {
-            const skrVal = Number(data.skr.toFixed(2));
-            this.skrCache.set(pubkeyStr, { value: skrVal, time: Date.now() });
-            if (typeof window !== 'undefined' && window.localStorage) {
-              window.localStorage.setItem(`blink_cached_skr_${pubkeyStr}`, String(skrVal));
-            }
-            if (typeof data.sol === 'number') {
-              this.solCache.set(pubkeyStr, { value: Number(data.sol.toFixed(4)), time: Date.now() });
-            }
-            if (typeof data.usdc === 'number') {
-              this.usdcCache.set(pubkeyStr, { value: Number(data.usdc.toFixed(2)), time: Date.now() });
-            }
-            return skrVal;
-          }
-        }
-      }
-    } catch {}
+    // 1. Primary: Resilient Backend /api/balance proxy with cloud failover
+    const backendData = await this.fetchBackendBalance(pubkeyStr);
+    if (backendData) {
+      return backendData.skr;
+    }
 
     if (this.inFlightSkr.has(pubkeyStr)) {
       return this.inFlightSkr.get(pubkeyStr)!;
@@ -951,12 +944,26 @@ export class SolanaService {
     // 1. Primary: Use backend /api/tx-history proxy (bypasses mobile RPC rate limits & CORS)
     try {
       if (typeof fetch !== 'undefined') {
-        const res = await fetch(getApiUrl(`/api/tx-history?address=${encodeURIComponent(pubkeyStr)}&limit=${limit}`));
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.success && Array.isArray(data.transactions)) {
-            return data.transactions;
-          }
+        const primaryUrl = getApiUrl(`/api/tx-history?address=${encodeURIComponent(pubkeyStr)}&limit=${limit}`);
+        const fallbackUrl = `${DEFAULT_CLOUD_API_URL}/api/tx-history?address=${encodeURIComponent(pubkeyStr)}&limit=${limit}`;
+        const endpoints = primaryUrl === fallbackUrl ? [primaryUrl] : [primaryUrl, fallbackUrl];
+
+        for (const ep of endpoints) {
+          try {
+            const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            const timer = controller ? setTimeout(() => controller.abort(), 4000) : null;
+            const res = await fetch(ep, {
+              headers: { 'Accept': 'application/json', 'Bypass-Tunnel-Reminder': 'true' },
+              signal: controller?.signal,
+            });
+            if (timer) clearTimeout(timer);
+            if (res.ok) {
+              const data = await res.json();
+              if (data && data.success && Array.isArray(data.transactions)) {
+                return data.transactions;
+              }
+            }
+          } catch {}
         }
       }
     } catch (apiErr) {

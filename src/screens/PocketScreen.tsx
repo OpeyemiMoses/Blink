@@ -178,13 +178,19 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
       ]);
 
       if (balRes.status === 'fulfilled' && typeof balRes.value === 'number' && !isNaN(balRes.value)) {
-        setBalance(balRes.value);
+        if (balRes.value > 0 || !balance) {
+          setBalance(balRes.value);
+        }
       }
       if (usdcRes.status === 'fulfilled' && typeof usdcRes.value === 'number' && !isNaN(usdcRes.value)) {
-        setUsdcBalance(usdcRes.value);
+        if (usdcRes.value > 0 || !usdcBalance) {
+          setUsdcBalance(usdcRes.value);
+        }
       }
       if (skrRes.status === 'fulfilled' && typeof skrRes.value === 'number' && !isNaN(skrRes.value)) {
-        setSkrBalance(skrRes.value);
+        if (skrRes.value > 0 || !skrBalance) {
+          setSkrBalance(skrRes.value);
+        }
       }
 
       const sigs: EnrichedTransactionInfo[] = sigsRes.status === 'fulfilled' && Array.isArray(sigsRes.value)

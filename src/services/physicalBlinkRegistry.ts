@@ -1,4 +1,4 @@
-import { getApiUrl } from './apiConfig';
+import { getApiUrl, DEFAULT_CLOUD_API_URL } from './apiConfig';
 
 export type ActionType = 'payment' | 'tip' | 'claim' | 'mint' | 'checkin' | 'donation' | 'voucher';
 export type BlinkVisibility = 'global' | 'physical';
@@ -45,10 +45,31 @@ export class PhysicalBlinkRegistry {
     if (typeof fetch === 'undefined') return [];
     try {
       this.isSyncing = true;
-      const res = await fetch(getApiUrl('/api/blinks'));
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.blinks)) {
+      const primaryUrl = getApiUrl('/api/blinks');
+      const fallbackUrl = `${DEFAULT_CLOUD_API_URL}/api/blinks`;
+      const endpoints = primaryUrl === fallbackUrl ? [primaryUrl] : [primaryUrl, fallbackUrl];
+
+      let data: any = null;
+      for (const ep of endpoints) {
+        try {
+          const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+          const timer = controller ? setTimeout(() => controller.abort(), 4000) : null;
+          const res = await fetch(ep, {
+            headers: { 'Accept': 'application/json', 'Bypass-Tunnel-Reminder': 'true' },
+            signal: controller?.signal,
+          });
+          if (timer) clearTimeout(timer);
+          if (res.ok) {
+            const parsed = await res.json();
+            if (parsed && parsed.success && Array.isArray(parsed.blinks)) {
+              data = parsed;
+              break;
+            }
+          }
+        } catch {}
+      }
+
+      if (data && Array.isArray(data.blinks)) {
           // Register tombstones from server
           if (Array.isArray(data.deletedIds)) {
             for (const dId of data.deletedIds) {
@@ -124,7 +145,6 @@ export class PhysicalBlinkRegistry {
           this.notifyChange();
           return this.globalCloudBlinks;
         }
-      }
     } catch (err) {
       console.warn('Could not sync blinks from cloud:', err);
     } finally {

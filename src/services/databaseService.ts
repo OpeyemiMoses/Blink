@@ -1,5 +1,5 @@
 import { PhysicalBlink, ActionType } from './physicalBlinkRegistry';
-import { getApiUrl } from './apiConfig';
+import { getApiUrl, DEFAULT_CLOUD_API_URL } from './apiConfig';
 
 export interface UserRecord {
   id: string;
@@ -105,15 +105,22 @@ export class DatabaseService {
     this.persistUsers();
     this.emitEvent('blink_user_saved', updatedUser);
 
-    // Sync to cloud backend in background so user carries over across all devices
+    // Sync to cloud backend in background with failover
     if (typeof fetch === 'function') {
-      fetch(getApiUrl('/api/users'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedUser),
-      }).catch((err) => {
-        console.warn('Background sync user error:', err);
-      });
+      const urls = [getApiUrl('/api/users'), `${DEFAULT_CLOUD_API_URL}/api/users`];
+      const uniqueUrls = Array.from(new Set(urls));
+      (async () => {
+        for (const u of uniqueUrls) {
+          try {
+            const r = await fetch(u, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Bypass-Tunnel-Reminder': 'true' },
+              body: JSON.stringify(updatedUser),
+            });
+            if (r.ok) break;
+          } catch {}
+        }
+      })().catch(() => {});
     }
 
     return updatedUser;
@@ -124,25 +131,37 @@ export class DatabaseService {
    */
   static async syncUserFromCloud(identifier: string): Promise<UserRecord | null> {
     if (!identifier || typeof fetch !== 'function') return null;
-    try {
-      const res = await fetch(getApiUrl(`/api/users/${encodeURIComponent(identifier)}`));
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.user) {
-          const user = data.user as UserRecord;
-          this.init();
-          const safeKey = user.address || identifier;
-          this.users[safeKey] = {
-            ...this.users[safeKey],
-            ...user,
-          };
-          this.persistUsers();
-          this.emitEvent('blink_user_saved', this.users[safeKey]);
-          return this.users[safeKey];
+    const primaryUrl = getApiUrl(`/api/users/${encodeURIComponent(identifier)}`);
+    const fallbackUrl = `${DEFAULT_CLOUD_API_URL}/api/users/${encodeURIComponent(identifier)}`;
+    const endpoints = primaryUrl === fallbackUrl ? [primaryUrl] : [primaryUrl, fallbackUrl];
+
+    for (const ep of endpoints) {
+      try {
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = controller ? setTimeout(() => controller.abort(), 4000) : null;
+        const res = await fetch(ep, {
+          headers: { 'Accept': 'application/json', 'Bypass-Tunnel-Reminder': 'true' },
+          signal: controller?.signal,
+        });
+        if (timer) clearTimeout(timer);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.user) {
+            const user = data.user as UserRecord;
+            this.init();
+            const safeKey = user.address || identifier;
+            this.users[safeKey] = {
+              ...this.users[safeKey],
+              ...user,
+            };
+            this.persistUsers();
+            this.emitEvent('blink_user_saved', this.users[safeKey]);
+            return this.users[safeKey];
+          }
         }
+      } catch (err) {
+        // try next endpoint
       }
-    } catch (err) {
-      console.warn('Could not sync user from cloud:', err);
     }
     return null;
   }
