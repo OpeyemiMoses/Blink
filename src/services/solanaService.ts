@@ -291,6 +291,7 @@ export class SolanaService {
   private static inFlightSol: Map<string, Promise<number>> = new Map();
   private static inFlightUsdc: Map<string, Promise<number>> = new Map();
   private static inFlightSkr: Map<string, Promise<number>> = new Map();
+  private static inFlightBackendBalance: Map<string, Promise<{ sol: number; usdc: number; skr: number } | null>> = new Map();
   private static readonly CACHE_TTL_MS = 15000; // 15 seconds fresh cache
 
   /**
@@ -386,51 +387,94 @@ export class SolanaService {
 
   /**
    * Resiliently fetch balances from local backend or cloud fallback.
-   * Sends Bypass-Tunnel-Reminder header and enforces 4-second timeout.
+   * Sends Bypass-Tunnel-Reminder header and enforces 12-second timeout with in-flight deduplication.
    */
   private static async fetchBackendBalance(pubkeyStr: string): Promise<{ sol: number; usdc: number; skr: number } | null> {
     if (!pubkeyStr || typeof fetch === 'undefined') return null;
     const cleanPubkey = pubkeyStr.trim();
-    const primaryUrl = getApiUrl(`/api/balance?address=${encodeURIComponent(cleanPubkey)}`);
-    const fallbackUrl = `${DEFAULT_CLOUD_API_URL}/api/balance?address=${encodeURIComponent(cleanPubkey)}`;
-    const endpoints = primaryUrl === fallbackUrl ? [primaryUrl] : [primaryUrl, fallbackUrl];
 
-    for (const url of endpoints) {
-      try {
-        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        const timer = controller ? setTimeout(() => controller.abort(), 4000) : null;
-        const res = await fetch(url, {
-          headers: {
-            'Accept': 'application/json',
-            'Bypass-Tunnel-Reminder': 'true',
-          },
-          signal: controller?.signal,
-        });
-        if (timer) clearTimeout(timer);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.success && typeof data.sol === 'number') {
-            const solVal = Number(data.sol.toFixed(4));
-            const usdcVal = typeof data.usdc === 'number' ? Number(data.usdc.toFixed(2)) : 0;
-            const skrVal = typeof data.skr === 'number' ? Number(data.skr.toFixed(2)) : 0;
+    if (this.inFlightBackendBalance.has(cleanPubkey)) {
+      return this.inFlightBackendBalance.get(cleanPubkey)!;
+    }
 
-            this.solCache.set(cleanPubkey, { value: solVal, time: Date.now() });
-            this.usdcCache.set(cleanPubkey, { value: usdcVal, time: Date.now() });
-            this.skrCache.set(cleanPubkey, { value: skrVal, time: Date.now() });
+    const task = (async (): Promise<{ sol: number; usdc: number; skr: number } | null> => {
+      const primaryUrl = getApiUrl(`/api/balance?address=${encodeURIComponent(cleanPubkey)}`);
+      const fallbackUrl = `${DEFAULT_CLOUD_API_URL}/api/balance?address=${encodeURIComponent(cleanPubkey)}`;
+      const endpoints = primaryUrl === fallbackUrl ? [primaryUrl] : [primaryUrl, fallbackUrl];
 
-            if (typeof window !== 'undefined' && window.localStorage) {
-              window.localStorage.setItem(`blink_cached_sol_${cleanPubkey}`, String(solVal));
-              window.localStorage.setItem(`blink_cached_usdc_${cleanPubkey}`, String(usdcVal));
-              window.localStorage.setItem(`blink_cached_skr_${cleanPubkey}`, String(skrVal));
+      for (const url of endpoints) {
+        try {
+          const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+          const timer = controller ? setTimeout(() => controller.abort(), 12000) : null;
+          const res = await fetch(url, {
+            headers: {
+              'Accept': 'application/json',
+              'Bypass-Tunnel-Reminder': 'true',
+            },
+            signal: controller?.signal,
+          });
+          if (timer) clearTimeout(timer);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.success && typeof data.sol === 'number') {
+              const solVal = Number(data.sol.toFixed(4));
+              const usdcVal = typeof data.usdc === 'number' ? Number(data.usdc.toFixed(2)) : 0;
+              const skrVal = typeof data.skr === 'number' ? Number(data.skr.toFixed(2)) : 0;
+
+              this.solCache.set(cleanPubkey, { value: solVal, time: Date.now() });
+              this.usdcCache.set(cleanPubkey, { value: usdcVal, time: Date.now() });
+              this.skrCache.set(cleanPubkey, { value: skrVal, time: Date.now() });
+
+              if (typeof window !== 'undefined' && window.localStorage) {
+                window.localStorage.setItem(`blink_cached_sol_${cleanPubkey}`, String(solVal));
+                window.localStorage.setItem(`blink_cached_usdc_${cleanPubkey}`, String(usdcVal));
+                window.localStorage.setItem(`blink_cached_skr_${cleanPubkey}`, String(skrVal));
+              }
+              return { sol: solVal, usdc: usdcVal, skr: skrVal };
             }
-            return { sol: solVal, usdc: usdcVal, skr: skrVal };
           }
+        } catch (err) {
+          // try next endpoint
         }
-      } catch (err) {
-        // try next endpoint
+      }
+      return null;
+    })();
+
+    this.inFlightBackendBalance.set(cleanPubkey, task);
+    try {
+      return await task;
+    } finally {
+      this.inFlightBackendBalance.delete(cleanPubkey);
+    }
+  }
+
+  /**
+   * Resiliently fetch all balances (SOL, USDC, SKR) in one roundtrip.
+   */
+  static async getAllBalances(pubkeyStr: string, forceFresh = false): Promise<{ sol: number; usdc: number; skr: number }> {
+    if (!pubkeyStr) return { sol: 0, usdc: 0, skr: 0 };
+    const cleanPubkey = pubkeyStr.trim();
+
+    if (!forceFresh) {
+      const cachedSol = this.getCachedSol(cleanPubkey);
+      const cachedUsdc = this.getCachedUsdc(cleanPubkey);
+      const cachedSkr = this.getCachedSkr(cleanPubkey);
+      if (cachedSol !== null && cachedUsdc !== null && cachedSkr !== null) {
+        return { sol: cachedSol, usdc: cachedUsdc, skr: cachedSkr };
       }
     }
-    return null;
+
+    const backendData = await this.fetchBackendBalance(cleanPubkey);
+    if (backendData) {
+      return backendData;
+    }
+
+    const [sol, usdc, skr] = await Promise.all([
+      this.getBalance(cleanPubkey, forceFresh),
+      this.getUsdcBalance(cleanPubkey, forceFresh),
+      this.getSkrBalance(cleanPubkey, forceFresh),
+    ]);
+    return { sol, usdc, skr };
   }
 
   /**

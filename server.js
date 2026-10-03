@@ -85,6 +85,18 @@ let receiptsDb = {};
 const parsedTxCache = new Map();
 const addressSigsCache = new Map();
 const addressBalanceCache = new Map();
+const inFlightBalanceQueries = new Map();
+
+const { getAssociatedTokenAddressSync } = require('@solana/spl-token');
+
+const sharedDevnetConn = new Connection('https://api.devnet.solana.com', {
+  commitment: 'confirmed',
+  disableRetryOnRateLimit: true,
+});
+const sharedMainnetConn = new Connection('https://api.mainnet-beta.solana.com', {
+  commitment: 'confirmed',
+  disableRetryOnRateLimit: true,
+});
 
 function loadReceiptsDb() {
   try {
@@ -1379,45 +1391,51 @@ const server = http.createServer((req, res) => {
     const cacheKey = resolvedAddress.toLowerCase();
     const now = Date.now();
     const cachedBal = addressBalanceCache.get(cacheKey);
-    if (cachedBal && (now - cachedBal.time < 5000)) {
+    if (cachedBal && (now - cachedBal.time < 15000)) {
       return sendJson(res, 200, { success: true, ...cachedBal.data });
     }
 
     (async () => {
-      try {
+      if (inFlightBalanceQueries.has(cacheKey)) {
+        try {
+          const data = await inFlightBalanceQueries.get(cacheKey);
+          return sendJson(res, 200, { success: true, ...data });
+        } catch (err) {
+          if (cachedBal) return sendJson(res, 200, { success: true, ...cachedBal.data });
+          return sendJson(res, 500, { success: false, error: err?.message || String(err) });
+        }
+      }
+
+      const queryPromise = (async () => {
         let pubkey = null;
         try {
           pubkey = new PublicKey(resolvedAddress);
         } catch {}
 
         if (!pubkey) {
-          return sendJson(res, 400, { success: false, error: 'Invalid public key' });
+          throw new Error('Invalid public key');
         }
-
-        const devnetConn = new Connection('https://api.devnet.solana.com', {
-          commitment: 'confirmed',
-          disableRetryOnRateLimit: true,
-        });
 
         const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
         const FAUCET_MINT = new PublicKey('Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr');
+        const MAINNET_USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
         const SKR_MINT = new PublicKey('SKRbvo6Gf7GondiT3BbTfuRDPqLWei4j2Qy2NPGZhW3');
 
-        const mainnetConn = new Connection('https://api.mainnet-beta.solana.com', {
-          commitment: 'confirmed',
-          disableRetryOnRateLimit: true,
-        });
+        const getAtaBal = async (conn, mint, owner) => {
+          try {
+            const ata = getAssociatedTokenAddressSync(mint, owner);
+            const r = await conn.getTokenAccountBalance(ata);
+            return r?.value?.uiAmount || 0;
+          } catch { return 0; }
+        };
 
-        const MAINNET_USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
-
-        const [devnetLamports, mainnetLamports, circleRes, faucetRes, mainnetUsdcRes, skrMainnetRes, skrDevnetRes] = await Promise.allSettled([
-          devnetConn.getBalance(pubkey),
-          mainnetConn.getBalance(pubkey),
-          devnetConn.getParsedTokenAccountsByOwner(pubkey, { mint: USDC_MINT }),
-          devnetConn.getParsedTokenAccountsByOwner(pubkey, { mint: FAUCET_MINT }),
-          mainnetConn.getParsedTokenAccountsByOwner(pubkey, { mint: MAINNET_USDC_MINT }),
-          mainnetConn.getParsedTokenAccountsByOwner(pubkey, { mint: SKR_MINT }),
-          devnetConn.getParsedTokenAccountsByOwner(pubkey, { mint: SKR_MINT }),
+        const [devnetLamports, mainnetLamports, devnetUsdc, mainnetUsdc, faucetUsdc, skrMainnet] = await Promise.allSettled([
+          sharedDevnetConn.getBalance(pubkey),
+          sharedMainnetConn.getBalance(pubkey),
+          getAtaBal(sharedDevnetConn, USDC_MINT, pubkey),
+          getAtaBal(sharedMainnetConn, MAINNET_USDC_MINT, pubkey),
+          getAtaBal(sharedDevnetConn, FAUCET_MINT, pubkey),
+          getAtaBal(sharedMainnetConn, SKR_MINT, pubkey),
         ]);
 
         let devnetSol = (devnetLamports.status === 'fulfilled' && typeof devnetLamports.value === 'number')
@@ -1429,70 +1447,31 @@ const server = http.createServer((req, res) => {
 
         let sol = devnetSol > 0 ? devnetSol : (mainnetSol > 0 ? mainnetSol : (cachedBal?.data?.sol ?? 0));
 
-        let usdc = cachedBal?.data?.usdc ?? 0;
         let totalUsdc = 0;
-        let usdcFound = false;
+        if (devnetUsdc.status === 'fulfilled' && devnetUsdc.value > 0) totalUsdc += devnetUsdc.value;
+        if (mainnetUsdc.status === 'fulfilled' && mainnetUsdc.value > 0) totalUsdc += mainnetUsdc.value;
+        if (faucetUsdc.status === 'fulfilled' && faucetUsdc.value > 0) totalUsdc += faucetUsdc.value;
 
-        if (circleRes.status === 'fulfilled' && circleRes.value?.value?.length > 0) {
-          usdcFound = true;
-          circleRes.value.value.forEach(a => {
-            const amt = a.account.data?.parsed?.info?.tokenAmount?.uiAmount;
-            if (typeof amt === 'number') totalUsdc += amt;
-          });
-        }
+        let usdc = totalUsdc > 0 ? Number(totalUsdc.toFixed(2)) : (cachedBal?.data?.usdc ?? 0);
 
-        if (mainnetUsdcRes.status === 'fulfilled' && mainnetUsdcRes.value?.value?.length > 0) {
-          usdcFound = true;
-          mainnetUsdcRes.value.value.forEach(a => {
-            const amt = a.account.data?.parsed?.info?.tokenAmount?.uiAmount;
-            if (typeof amt === 'number') totalUsdc += amt;
-          });
-        }
+        let skr = (skrMainnet.status === 'fulfilled' && skrMainnet.value > 0)
+          ? Number(skrMainnet.value.toFixed(2))
+          : (cachedBal?.data?.skr ?? 0);
 
-        if (faucetRes.status === 'fulfilled' && faucetRes.value?.value?.length > 0) {
-          usdcFound = true;
-          faucetRes.value.value.forEach(a => {
-            const amt = a.account.data?.parsed?.info?.tokenAmount?.uiAmount;
-            if (typeof amt === 'number') totalUsdc += amt;
-          });
-        }
+        const resultData = { address: resolvedAddress, sol, usdc, skr };
+        addressBalanceCache.set(cacheKey, { data: resultData, time: Date.now() });
+        return resultData;
+      })();
 
-        if (usdcFound) {
-          usdc = Number(totalUsdc.toFixed(2));
-        }
-
-        let skr = cachedBal?.data?.skr ?? 0;
-        let totalSkr = 0;
-        let skrFound = false;
-
-        if (skrMainnetRes.status === 'fulfilled' && skrMainnetRes.value?.value?.length > 0) {
-          skrFound = true;
-          skrMainnetRes.value.value.forEach(a => {
-            const amt = a.account.data?.parsed?.info?.tokenAmount?.uiAmount;
-            if (typeof amt === 'number') totalSkr += amt;
-          });
-        }
-
-        if (!skrFound && skrDevnetRes.status === 'fulfilled' && skrDevnetRes.value?.value?.length > 0) {
-          skrFound = true;
-          skrDevnetRes.value.value.forEach(a => {
-            const amt = a.account.data?.parsed?.info?.tokenAmount?.uiAmount;
-            if (typeof amt === 'number') totalSkr += amt;
-          });
-        }
-
-        if (skrFound) {
-          skr = Number(totalSkr.toFixed(2));
-        }
-
-        const data = { address: resolvedAddress, sol, usdc, skr };
-        addressBalanceCache.set(cacheKey, { data, time: now });
+      inFlightBalanceQueries.set(cacheKey, queryPromise);
+      try {
+        const data = await queryPromise;
         return sendJson(res, 200, { success: true, ...data });
       } catch (err) {
-        if (cachedBal) {
-          return sendJson(res, 200, { success: true, ...cachedBal.data });
-        }
+        if (cachedBal) return sendJson(res, 200, { success: true, ...cachedBal.data });
         return sendJson(res, 500, { success: false, error: err?.message || String(err) });
+      } finally {
+        inFlightBalanceQueries.delete(cacheKey);
       }
     })();
     return;

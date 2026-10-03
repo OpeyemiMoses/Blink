@@ -169,27 +169,22 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
     if (showLoading) setLoading(true);
     try {
       // 1. Fetch balances, enriched transactions, and cloud receipts in parallel with fault tolerance
-      const [balRes, usdcRes, skrRes, sigsRes, cloudReceiptsRes] = await Promise.allSettled([
-        SolanaService.getBalance(activePublicKey, showLoading),
-        SolanaService.getUsdcBalance(activePublicKey, showLoading),
-        SolanaService.getSkrBalance(activePublicKey, showLoading),
+      const [allBalRes, sigsRes, cloudReceiptsRes] = await Promise.allSettled([
+        SolanaService.getAllBalances(activePublicKey, showLoading),
         SolanaService.getEnrichedRecentTransactions(activePublicKey, 50),
         ReceiptService.fetchCloudReceiptsForAddress(activePublicKey),
       ]);
 
-      if (balRes.status === 'fulfilled' && typeof balRes.value === 'number' && !isNaN(balRes.value)) {
-        if (balRes.value > 0 || !balance) {
-          setBalance(balRes.value);
+      if (allBalRes.status === 'fulfilled' && allBalRes.value) {
+        const { sol, usdc, skr } = allBalRes.value;
+        if (typeof sol === 'number' && !isNaN(sol)) {
+          setBalance(sol);
         }
-      }
-      if (usdcRes.status === 'fulfilled' && typeof usdcRes.value === 'number' && !isNaN(usdcRes.value)) {
-        if (usdcRes.value > 0 || !usdcBalance) {
-          setUsdcBalance(usdcRes.value);
+        if (typeof usdc === 'number' && !isNaN(usdc)) {
+          setUsdcBalance(usdc);
         }
-      }
-      if (skrRes.status === 'fulfilled' && typeof skrRes.value === 'number' && !isNaN(skrRes.value)) {
-        if (skrRes.value > 0 || !skrBalance) {
-          setSkrBalance(skrRes.value);
+        if (typeof skr === 'number' && !isNaN(skr)) {
+          setSkrBalance(skr);
         }
       }
 
@@ -328,10 +323,10 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
 
     loadOnChainData(true);
 
-    // Live auto-polling every 3.5 seconds to automatically catch incoming transfers
+    // Live auto-polling every 15 seconds to automatically catch incoming transfers
     const interval = setInterval(() => {
       loadOnChainData(false);
-    }, 3500);
+    }, 15000);
 
     // Instant listener for when user sends, receives, or executes any transaction
     const handleTxUpdate = () => {

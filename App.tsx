@@ -1045,10 +1045,7 @@ function BlinkMainApp() {
     const updateBalance = async () => {
       if (activeAccount?.publicKey) {
         try {
-          const [sol, usdc] = await Promise.all([
-            SolanaService.getBalance(activeAccount.publicKey),
-            SolanaService.getUsdcBalance(activeAccount.publicKey),
-          ]);
+          const { sol, usdc } = await SolanaService.getAllBalances(activeAccount.publicKey);
           if (!isCancelled) {
             let changed = false;
             if (typeof sol === 'number' && !isNaN(sol)) {
