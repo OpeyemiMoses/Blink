@@ -130,12 +130,13 @@ export class WalletProviderService {
 
     if (!provider) {
       if (this.isMobile() && typeof window !== 'undefined') {
-        const currentUrl = encodeURIComponent(window.location.href);
         if (walletName === 'Phantom') {
-          window.location.href = `https://phantom.app/ul/browse/${currentUrl}?ref=${currentUrl}`;
+          const { SolanaMobileStackService } = await import('./solanaMobileStackService');
+          await SolanaMobileStackService.connectPhantomMobile();
           throw new Error('Opening Phantom Mobile App...');
         } else if (walletName === 'Solflare') {
-          window.location.href = `https://solflare.com/ul/v1/browse/${currentUrl}?ref=${currentUrl}`;
+          const { SolanaMobileStackService } = await import('./solanaMobileStackService');
+          await SolanaMobileStackService.connectSolflareMobile();
           throw new Error('Opening Solflare Mobile App...');
         }
       }

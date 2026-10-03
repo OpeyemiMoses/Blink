@@ -41,8 +41,8 @@ export class ExternalWalletService {
     const provider = (window as any).phantom?.solana || (window as any).solana;
     if (!provider || !provider.isPhantom) {
       if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
-        const currentUrl = encodeURIComponent(window.location.href);
-        window.location.href = `https://phantom.app/ul/browse/${currentUrl}?ref=${currentUrl}`;
+        const { SolanaMobileStackService } = await import('./solanaMobileStackService');
+        await SolanaMobileStackService.connectPhantomMobile();
         throw new Error('Opening in Phantom Mobile App...');
       }
       throw new Error('Phantom extension not detected in this browser. Install Phantom or import your private key below.');

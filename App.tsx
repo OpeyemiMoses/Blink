@@ -1593,7 +1593,7 @@ export default function App() {
               logo: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
               showWalletLoginFirst: false,
             },
-            loginMethods: ['sms', 'email', 'wallet'],
+            loginMethods: ['sms', 'email'],
         embeddedWallets: {
           showWalletUIs: false,
           solana: {

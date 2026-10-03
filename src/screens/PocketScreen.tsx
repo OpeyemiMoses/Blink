@@ -402,7 +402,19 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
             activeOpacity={0.8}
           >
             <PrivyIcon size={16} />
-            <Text style={styles.connectWalletBtnText}>Sign In with Privy</Text>
+            <Text style={styles.connectWalletBtnText}>Sign In with SMS / Email</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.phantomConnectBtn, { borderColor: colors.border }]}
+            onPress={async () => {
+              const { SolanaMobileStackService } = await import('../services/solanaMobileStackService');
+              await SolanaMobileStackService.connectPhantomMobile();
+            }}
+            activeOpacity={0.8}
+          >
+            <PhantomIcon size={16} />
+            <Text style={[styles.phantomConnectBtnText, { color: colors.textPrimary }]}>Connect Phantom App</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -1055,6 +1067,21 @@ const styles = StyleSheet.create({
   },
   connectWalletBtnText: {
     color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  phantomConnectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginTop: 10,
+  },
+  phantomConnectBtnText: {
     fontSize: 12,
     fontWeight: '700',
   },

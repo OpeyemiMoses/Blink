@@ -268,7 +268,7 @@ export class SolanaMobileStackService {
       const redirectLink = encodeURIComponent('blink://onConnect');
       const cluster = SolanaService.getNetwork() === 'devnet' ? 'devnet' : 'mainnet-beta';
 
-      const phantomUrl = `phantom://ul/v1/connect?app_url=${appUrl}&dapp_encryption_public_key=${dappPubkeyBase58}&redirect_link=${redirectLink}&cluster=${cluster}`;
+      const phantomUrl = `https://phantom.app/ul/v1/connect?app_url=${appUrl}&dapp_encryption_public_key=${dappPubkeyBase58}&redirect_link=${redirectLink}&cluster=${cluster}`;
 
       console.log('[SolanaMobileStack] Launching Phantom connect URL:', phantomUrl);
 
@@ -287,9 +287,8 @@ export class SolanaMobileStackService {
           await Linking.openURL(phantomUrl);
           launched = true;
         } catch {
-          const universalUrl = `https://phantom.app/ul/v1/connect?app_url=${appUrl}&dapp_encryption_public_key=${dappPubkeyBase58}&redirect_link=${redirectLink}&cluster=${cluster}`;
           if (typeof window !== 'undefined') {
-            window.location.href = universalUrl;
+            window.location.href = phantomUrl;
           }
         }
       }
@@ -315,7 +314,7 @@ export class SolanaMobileStackService {
       const redirectLink = encodeURIComponent('blink://onConnect');
       const cluster = SolanaService.getNetwork() === 'devnet' ? 'devnet' : 'mainnet-beta';
 
-      const solflareUrl = `solflare://ul/v1/connect?app_url=${appUrl}&dapp_encryption_public_key=${dappPubkeyBase58}&redirect_link=${redirectLink}&cluster=${cluster}`;
+      const solflareUrl = `https://solflare.com/ul/v1/connect?app_url=${appUrl}&dapp_encryption_public_key=${dappPubkeyBase58}&redirect_link=${redirectLink}&cluster=${cluster}`;
 
       console.log('[SolanaMobileStack] Launching Solflare connect URL:', solflareUrl);
 
@@ -333,9 +332,8 @@ export class SolanaMobileStackService {
         try {
           await Linking.openURL(solflareUrl);
         } catch {
-          const universalUrl = `https://solflare.com/ul/v1/connect?app_url=${appUrl}&dapp_encryption_public_key=${dappPubkeyBase58}&redirect_link=${redirectLink}&cluster=${cluster}`;
           if (typeof window !== 'undefined') {
-            window.location.href = universalUrl;
+            window.location.href = solflareUrl;
           }
         }
       }

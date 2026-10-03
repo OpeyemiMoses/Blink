@@ -19,6 +19,7 @@ import {
 import { usePrivy } from '../auth/privyAdapter';
 import { useTheme } from '../theme/ThemeContext';
 import { BlinkBrandMark } from './BrandLogos';
+import { PhantomIcon } from './WalletIcons';
 
 interface WelcomeAuthScreenProps {
   onContinueGuest: () => void;
@@ -87,14 +88,28 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
           Sign in or create your account using SMS, Email, or your Solana wallet. Non-custodial embedded Solana keys are provisioned instantly.
         </Text>
 
-        {/* Primary Action Button: Opens Privy Modal with SMS, Email & Wallet options */}
+        {/* Primary Action Button: Opens Privy Modal with SMS & Email */}
         <TouchableOpacity
           style={styles.primaryBtn}
           onPress={() => login()}
           activeOpacity={0.85}
         >
-          <Text style={styles.primaryBtnText}>Get Started with Blink</Text>
+          <Mail size={16} color="#FFFFFF" />
+          <Text style={styles.primaryBtnText}>Sign In with SMS / Email</Text>
           <ArrowRight size={16} color="#FFFFFF" />
+        </TouchableOpacity>
+
+        {/* Connect External Phantom Mobile App */}
+        <TouchableOpacity
+          style={[styles.phantomBtn, { borderColor: colors.border }]}
+          onPress={async () => {
+            const { SolanaMobileStackService } = await import('../services/solanaMobileStackService');
+            await SolanaMobileStackService.connectPhantomMobile();
+          }}
+          activeOpacity={0.85}
+        >
+          <PhantomIcon size={18} />
+          <Text style={[styles.phantomBtnText, { color: colors.textPrimary }]}>Connect Phantom App</Text>
         </TouchableOpacity>
 
         {/* Security & Benefits list */}
@@ -287,6 +302,21 @@ const styles = StyleSheet.create({
   primaryBtnText: {
     color: '#FFFFFF',
     fontSize: 14,
+    fontWeight: '700',
+  },
+  phantomBtn: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  phantomBtnText: {
+    fontSize: 13,
     fontWeight: '700',
   },
   benefitRow: {
