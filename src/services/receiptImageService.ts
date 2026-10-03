@@ -270,19 +270,19 @@ export class ReceiptImageService {
   }
 
   /**
-   * Triggers browser download of the receipt image.
+   * Saves receipt PNG directly to mobile gallery or triggers browser download
    */
   static async downloadReceipt(receipt: TransactionReceipt, viewerAddress?: string | null): Promise<boolean> {
     try {
       const dataUrl = await this.generateReceiptDataUrl(receipt, viewerAddress);
-      const link = document.createElement('a');
       const safeId = receipt.signature ? receipt.signature.slice(0, 10) : Date.now().toString();
-      link.download = `blink-receipt-${safeId}.png`;
-      link.href = dataUrl;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      return true;
+      const filename = `blink-receipt-${safeId}.png`;
+      const { FileSaverService } = await import('./fileSaverService');
+      return await FileSaverService.saveImage({
+        dataUrl,
+        filename,
+        title: 'Blink Transaction Receipt',
+      });
     } catch (err) {
       console.error('Failed to download receipt image:', err);
       return false;

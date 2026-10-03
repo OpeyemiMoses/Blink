@@ -1,6 +1,15 @@
 package com.blink.solanamobile;
 
+import android.content.ContentResolver;
+import android.content.ContentValues;
+import android.content.Intent;
+import android.media.MediaScannerConnection;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.MediaStore;
+import android.util.Base64;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import androidx.annotation.NonNull;
@@ -15,9 +24,104 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
 import java.util.concurrent.Executor;
 
 public class MainActivity extends BridgeActivity {
+
+    @CapacitorPlugin(name = "NativeFileSaver")
+    public static class NativeFileSaverPlugin extends Plugin {
+        @PluginMethod
+        public void saveImage(PluginCall call) {
+            String dataUrl = call.getString("dataUrl");
+            String filename = call.getString("filename", "blink_image_" + System.currentTimeMillis() + ".png");
+            String title = call.getString("title", "Blink Image");
+            boolean share = Boolean.TRUE.equals(call.getBoolean("share", false));
+
+            if (dataUrl == null || dataUrl.isEmpty()) {
+                call.reject("dataUrl is required");
+                return;
+            }
+
+            getActivity().runOnUiThread(() -> {
+                try {
+                    String base64Data = dataUrl;
+                    if (base64Data.contains(",")) {
+                        base64Data = base64Data.substring(base64Data.indexOf(",") + 1);
+                    }
+                    byte[] imageBytes = Base64.decode(base64Data, Base64.DEFAULT);
+
+                    ContentResolver resolver = getContext().getContentResolver();
+                    Uri imageUri = null;
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        ContentValues values = new ContentValues();
+                        values.put(MediaStore.Images.Media.DISPLAY_NAME, filename);
+                        values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+                        values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Blink");
+                        values.put(MediaStore.Images.Media.IS_PENDING, 1);
+
+                        imageUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+                        if (imageUri != null) {
+                            try (OutputStream out = resolver.openOutputStream(imageUri)) {
+                                if (out != null) {
+                                    out.write(imageBytes);
+                                    out.flush();
+                                }
+                            }
+                            values.clear();
+                            values.put(MediaStore.Images.Media.IS_PENDING, 0);
+                            resolver.update(imageUri, values, null, null);
+                        }
+                    } else {
+                        File picturesDir = new File(
+                            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                            "Blink"
+                        );
+                        if (!picturesDir.exists()) {
+                            picturesDir.mkdirs();
+                        }
+                        File imageFile = new File(picturesDir, filename);
+                        try (FileOutputStream out = new FileOutputStream(imageFile)) {
+                            out.write(imageBytes);
+                            out.flush();
+                        }
+                        MediaScannerConnection.scanFile(
+                            getContext(),
+                            new String[]{imageFile.getAbsolutePath()},
+                            new String[]{"image/png"},
+                            null
+                        );
+                        imageUri = Uri.fromFile(imageFile);
+                    }
+
+                    if (imageUri == null) {
+                        call.reject("Failed to create image file");
+                        return;
+                    }
+
+                    if (share) {
+                        Intent shareIntent = new Intent(Intent.ACTION_SEND);
+                        shareIntent.setType("image/png");
+                        shareIntent.putExtra(Intent.EXTRA_STREAM, imageUri);
+                        shareIntent.putExtra(Intent.EXTRA_SUBJECT, title);
+                        shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        getActivity().startActivity(Intent.createChooser(shareIntent, "Share " + title));
+                    }
+
+                    JSObject ret = new JSObject();
+                    ret.put("success", true);
+                    ret.put("filename", filename);
+                    ret.put("uri", imageUri.toString());
+                    call.resolve(ret);
+                } catch (Exception e) {
+                    call.reject("Failed to save image: " + e.getMessage());
+                }
+            });
+        }
+    }
 
     @CapacitorPlugin(name = "NativeBiometric")
     public static class NativeBiometricPlugin extends Plugin {
@@ -99,6 +203,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(NativeBiometricPlugin.class);
+        registerPlugin(NativeFileSaverPlugin.class);
         super.onCreate(savedInstanceState);
         configureWebView();
     }

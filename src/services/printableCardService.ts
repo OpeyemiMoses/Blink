@@ -229,18 +229,18 @@ export class PrintableCardService {
   }
 
   /**
-   * Triggers a browser download of the printable card image
+   * Saves printable card PNG directly to mobile gallery or triggers browser download
    */
   static async downloadCard(blink: PhysicalBlink): Promise<boolean> {
     try {
       const dataUrl = await this.generateCardDataUrl(blink);
-      const link = document.createElement('a');
-      link.download = `blink-${blink.id}-printable-card.png`;
-      link.href = dataUrl;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      return true;
+      const filename = `blink-${blink.id}-printable-card.png`;
+      const { FileSaverService } = await import('./fileSaverService');
+      return await FileSaverService.saveImage({
+        dataUrl,
+        filename,
+        title: `${blink.name} Printable Stand`,
+      });
     } catch (err) {
       console.error('Failed to download printable card image:', err);
       return false;

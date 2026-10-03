@@ -846,6 +846,37 @@ function BlinkMainApp() {
             if (!done) setShowOnboarding(true);
           } catch {}
         }
+      } else if (userEmail) {
+        if (!currentProf.hasCustomizedProfile || currentProf.username === 'seeker_user' || currentProf.username.startsWith('user_')) {
+          const emailPrefix = userEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+          const cleanUser = emailPrefix.length >= 2 ? emailPrefix : 'mybitcoind';
+          const updated = UserProfileService.updateProfile({
+            displayName: cleanUser,
+            username: cleanUser,
+            avatarUrl: currentProf.avatarUrl || UserProfileService.getRandomMascot(),
+            hasCustomizedProfile: true,
+            linkedAccounts: {
+              ...userProfile.linkedAccounts,
+              email: userEmail,
+            },
+          });
+          setUserProfile(updated);
+          if (effectiveAddress) {
+            DatabaseService.saveUserAccount({
+              id: effectiveAddress,
+              address: effectiveAddress,
+              publicKey: effectiveAddress,
+              displayName: updated.displayName,
+              username: updated.username,
+              name: updated.displayName,
+              avatarUrl: updated.avatarUrl,
+              email: userEmail,
+              createdAt: Date.now(),
+            });
+            BlinkIdService.registerBlinkId(`@${updated.username}`, effectiveAddress, updated.displayName, updated.avatarUrl, userEmail);
+          }
+          ToastService.success(`Welcome @${updated.username}! Signed in via Email.`);
+        }
       } else {
         if (!currentProf.hasCustomizedProfile && currentProf.username === 'seeker_user') {
           // Show onboarding for first-time non-Google users too

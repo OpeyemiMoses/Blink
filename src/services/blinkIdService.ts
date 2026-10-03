@@ -35,17 +35,40 @@ export class BlinkIdService {
 
   /**
    * Format or derive a canonical Blink ID from username or wallet address.
+   * Unique Blink ID is strictly a user handle (e.g. @mybitcoind), NEVER a wallet address.
    */
   static formatBlinkId(username?: string, address?: string): string {
     if (username && username.trim().length > 0 && username.trim().toLowerCase() !== 'seeker_user') {
       const clean = username.trim().replace(/^@+/, '').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
-      return `@${clean}`;
+      // If username was mistakenly passed as a raw Solana base58 address (32-44 base58 chars), do NOT make it a blink ID handle!
+      if (!/^[1-9A-HJ-NP-za-km-z]{32,44}$/.test(clean)) {
+        return `@${clean}`;
+      }
     }
-    if (address && address.trim().length >= 8) {
-      const cleanAddr = address.trim();
-      return `@user_${cleanAddr.slice(0, 4).toLowerCase()}${cleanAddr.slice(-4).toLowerCase()}`;
+
+    // Check if address maps to a registered handle in local registry
+    if (address && this.localRegistry[address.trim().toLowerCase()]) {
+      const found = this.localRegistry[address.trim().toLowerCase()];
+      if (found.blinkId && !found.blinkId.startsWith('@user_')) {
+        return found.blinkId.startsWith('@') ? found.blinkId : `@${found.blinkId}`;
+      }
     }
-    return '@user';
+
+    // Check stored user profile in localStorage
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const stored = window.localStorage.getItem('blink_user_profile_v1');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const u = parsed.username || (parsed.linkedAccounts?.email ? parsed.linkedAccounts.email.split('@')[0] : null);
+          if (u && u !== 'seeker_user' && !/^[1-9A-HJ-NP-za-km-z]{32,44}$/.test(u)) {
+            return `@${u.replace(/^@+/, '').toLowerCase()}`;
+          }
+        }
+      } catch {}
+    }
+
+    return '@mybitcoind';
   }
 
   /**

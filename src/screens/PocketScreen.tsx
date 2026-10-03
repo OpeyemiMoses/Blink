@@ -128,8 +128,15 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
   const userProfile = UserProfileService.getProfile();
   const connectedLabel = userProfile.displayName || userProfile.username || activeAccount?.name || 'Solana Wallet';
   const userBlinkId = useMemo(() => {
-    return BlinkIdService.formatBlinkId(userProfile.username || userProfile.displayName, activePublicKey || undefined);
-  }, [userProfile.username, userProfile.displayName, activePublicKey]);
+    if (userProfile.blinkId && !userProfile.blinkId.startsWith('@user_') && userProfile.blinkId !== '@seeker_user') {
+      return userProfile.blinkId.startsWith('@') ? userProfile.blinkId : `@${userProfile.blinkId}`;
+    }
+    const cleanUser = (userProfile.username || '').trim().replace(/^@+/, '');
+    if (cleanUser && cleanUser !== 'seeker_user' && !/^[1-9A-HJ-NP-za-km-z]{32,44}$/.test(cleanUser)) {
+      return `@${cleanUser}`;
+    }
+    return BlinkIdService.formatBlinkId(cleanUser || userProfile.displayName, activePublicKey || undefined);
+  }, [userProfile.username, userProfile.blinkId, userProfile.displayName, activePublicKey]);
 
   useEffect(() => {
     const unsub = PriceService.subscribe((p) => setSolPrice(p.sol));

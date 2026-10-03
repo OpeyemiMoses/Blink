@@ -720,6 +720,8 @@ const server = http.createServer((req, res) => {
           return sendJson(res, 400, { success: false, error: 'Missing blinkId or address' });
         }
 
+        const cleanHandle = rawBlinkId.toLowerCase().replace(/^@+/, '');
+        const canonicalId = `@${cleanHandle}`;
         const userEmail = (data.email || '').trim().toLowerCase();
 
         // Verify that this Blink ID is not already taken by another address

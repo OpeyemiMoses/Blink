@@ -463,12 +463,15 @@ export class SolanaMobileStackService {
         });
         ToastService.success(`Welcome back @${cloudUser.username}! Connected with ${walletName}`);
       } else {
-        const defaultHandle = `user_${solanaPubkey.slice(0, 4).toLowerCase()}${solanaPubkey.slice(-4).toLowerCase()}`;
+        const existingProf = UserProfileService.getProfile();
+        const defaultHandle = existingProf.username && existingProf.username !== 'seeker_user' && !/^[1-9A-HJ-NP-za-km-z]{32,44}$/.test(existingProf.username)
+          ? existingProf.username
+          : 'mybitcoind';
         const newProf = UserProfileService.updateProfile({
-          displayName: `${walletName.replace(' Mobile', '')} User`,
+          displayName: existingProf.displayName || 'mybitcoind',
           username: defaultHandle,
-          avatarUrl: UserProfileService.getRandomMascot(),
-          hasCustomizedProfile: false,
+          avatarUrl: existingProf.avatarUrl || UserProfileService.getRandomMascot(),
+          hasCustomizedProfile: true,
         });
         DatabaseService.saveUserAccount({
           id: solanaPubkey,
