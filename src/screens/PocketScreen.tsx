@@ -25,12 +25,16 @@ import {
   Tag,
   CheckCircle2,
   Activity,
+  Shield,
+  Fingerprint,
+  Smartphone,
 } from 'lucide-react-native';
 import { SolanaService, EnrichedTransactionInfo } from '../services/solanaService';
 import { UserProfileService } from '../services/userProfileService';
 import { PriceService } from '../services/priceService';
 import { BlinkIdService } from '../services/blinkIdService';
 import { WalletAccount } from '../services/walletProviderService';
+import { SolanaMobileStackService } from '../services/solanaMobileStackService';
 import { LinkedAction, SolanaActionMetadata } from '../types';
 import { PhantomIcon, SolflareIcon, BackpackIcon, CoinbaseIcon } from '../components/WalletIcons';
 import { SolanaCoinLogo, UsdcCoinLogo, SkrCoinLogo, BlinkBrandMark } from '../components/BrandLogos';
@@ -388,21 +392,62 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
           </View>
         </View>
       ) : (
-        /* Disconnected State Hero Card */
+        /* Disconnected State Hero Card - Prominent Solana Mobile Stack (SMS) Seed Vault */
         <View style={[styles.disconnectedCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
           <BlinkBrandMark size={52} />
-          <Text style={[styles.disconnectedTitle, { color: colors.textPrimary }]}>Sign In to Blink</Text>
+          <Text style={[styles.disconnectedTitle, { color: colors.textPrimary }]}>Connect Wallet to Blink</Text>
           <Text style={[styles.disconnectedSub, { color: colors.textSecondary }]}>
-            Sign in with Privy using Google, Apple, Email, or your Solana wallet. Non-custodial embedded Solana keys are provisioned instantly.
+            Connect your Seeker Seed Vault for zero-app-switching biometric signing, or sign in via MWA or Privy.
           </Text>
+
+          {/* Primary Hero Action: Seeker Seed Vault (SMS) */}
           <TouchableOpacity
-            style={styles.connectWalletBtn}
-            onPress={() => login()}
-            activeOpacity={0.8}
+            style={styles.seedVaultHeroBtn}
+            onPress={async () => {
+              await SolanaMobileStackService.connectSeedVault();
+            }}
+            activeOpacity={0.85}
           >
-            <PrivyIcon size={16} />
-            <Text style={styles.connectWalletBtnText}>Sign In with Privy</Text>
+            <View style={styles.seedVaultHeroLeft}>
+              <View style={styles.seedVaultIconCircle}>
+                <Fingerprint size={20} color="#000000" strokeWidth={2.5} />
+              </View>
+              <View>
+                <Text style={styles.seedVaultHeroBtnText}>Connect Seeker Seed Vault</Text>
+                <Text style={styles.seedVaultHeroSubText}>Hardware Enclave • In-App Biometrics</Text>
+              </View>
+            </View>
+            <ShieldCheck size={18} color="#000000" />
           </TouchableOpacity>
+
+          <View style={styles.authDividerRow}>
+            <View style={[styles.authDividerLine, { backgroundColor: colors.border }]} />
+            <Text style={[styles.authDividerText, { color: colors.textMuted }]}>OR OTHER PROVIDERS</Text>
+            <View style={[styles.authDividerLine, { backgroundColor: colors.border }]} />
+          </View>
+
+          {/* Secondary Actions: External MWA & Privy */}
+          <View style={styles.secondaryAuthRow}>
+            <TouchableOpacity
+              style={[styles.secondaryAuthBtn, { borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.03)' }]}
+              onPress={async () => {
+                await SolanaMobileStackService.connectMWA();
+              }}
+              activeOpacity={0.8}
+            >
+              <Smartphone size={15} color={colors.accent} />
+              <Text style={[styles.secondaryAuthBtnText, { color: colors.textPrimary }]}>External MWA</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.secondaryAuthBtn, { borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.03)' }]}
+              onPress={() => login()}
+              activeOpacity={0.8}
+            >
+              <PrivyIcon size={15} />
+              <Text style={[styles.secondaryAuthBtnText, { color: colors.textPrimary }]}>Privy Embedded</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -410,11 +455,19 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
       {activeAccount && (
         <View style={[styles.accountCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
           <View style={[styles.accountCardLeft, { flex: 1 }]}>
-            {activeAccount.name === 'Phantom' && <PhantomIcon size={22} />}
-            {activeAccount.name === 'Solflare' && <SolflareIcon size={22} />}
-            {activeAccount.name === 'Backpack' && <BackpackIcon size={22} />}
-            {activeAccount.name === 'Coinbase Wallet' && <CoinbaseIcon size={22} />}
-            {!['Phantom', 'Solflare', 'Backpack', 'Coinbase Wallet'].includes(activeAccount.name) && (
+            {activeAccount.isSeedVault ? (
+              <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(20, 241, 149, 0.18)', alignItems: 'center', justifyContent: 'center' }}>
+                <Fingerprint size={16} color="#14F195" />
+              </View>
+            ) : activeAccount.name === 'Phantom' ? (
+              <PhantomIcon size={22} />
+            ) : activeAccount.name === 'Solflare' ? (
+              <SolflareIcon size={22} />
+            ) : activeAccount.name === 'Backpack' ? (
+              <BackpackIcon size={22} />
+            ) : activeAccount.name === 'Coinbase Wallet' ? (
+              <CoinbaseIcon size={22} />
+            ) : (
               <Wallet size={22} color={colors.accent} />
             )}
             <View style={{ marginLeft: 10, flex: 1 }}>
@@ -511,6 +564,30 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
               <RefreshCw size={13} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
+        </View>
+      )}
+
+      {/* Solana Mobile Stack Enclave Status Card (Seeker Seed Vault) */}
+      {activeAccount && activeAccount.isSeedVault && (
+        <View style={[styles.smsEnclaveCard, { backgroundColor: 'rgba(20, 241, 149, 0.06)', borderColor: 'rgba(20, 241, 149, 0.25)' }]}>
+          <View style={styles.smsEnclaveHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={styles.smsEnclaveIconBox}>
+                <Fingerprint size={16} color="#14F195" />
+              </View>
+              <View>
+                <Text style={styles.smsEnclaveTitle}>SOLANA MOBILE STACK (SMS)</Text>
+                <Text style={styles.smsEnclaveSub}>Seeker Hardware Security Enclave</Text>
+              </View>
+            </View>
+            <View style={styles.hardwareBadge}>
+              <CheckCircle2 size={11} color="#14F195" />
+              <Text style={styles.hardwareBadgeText}>HARDWARE VERIFIED</Text>
+            </View>
+          </View>
+          <Text style={styles.smsEnclaveDesc}>
+            Seed Vault hardware keystore active. Transactions are signed inside the device enclave via physical biometrics — no app switching required.
+          </Text>
         </View>
       )}
 
@@ -1056,6 +1133,136 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
+  },
+  seedVaultHeroBtn: {
+    backgroundColor: '#14F195',
+    width: '100%',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    shadowColor: '#14F195',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  seedVaultHeroLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  seedVaultIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(0, 0, 0, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  seedVaultHeroBtnText: {
+    color: '#000000',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  seedVaultHeroSubText: {
+    color: 'rgba(0, 0, 0, 0.7)',
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  authDividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginVertical: 14,
+    gap: 10,
+  },
+  authDividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  authDividerText: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  secondaryAuthRow: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+  },
+  secondaryAuthBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  secondaryAuthBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  smsEnclaveCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 12,
+  },
+  smsEnclaveHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  smsEnclaveIconBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: 'rgba(20, 241, 149, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  smsEnclaveTitle: {
+    color: '#14F195',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  smsEnclaveSub: {
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  hardwareBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(20, 241, 149, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(20, 241, 149, 0.3)',
+  },
+  hardwareBadgeText: {
+    color: '#14F195',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  smsEnclaveDesc: {
+    color: '#94A3B8',
+    fontSize: 11,
+    lineHeight: 16,
   },
   accountCard: {
     flexDirection: 'row',

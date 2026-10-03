@@ -720,7 +720,9 @@ export const SendModal: React.FC<SendModalProps> = ({
                 <View style={styles.feeInfoRow}>
                   <Text style={styles.feeLabel}>Signing Provider</Text>
                   <Text style={styles.feeValue}>
-                    {activeAccount?.name || 'Seeker Seed Vault'}
+                    {activeAccount?.isSeedVault
+                      ? '🛡️ Seeker Seed Vault (Biometrics)'
+                      : (activeAccount?.name || 'Seeker Seed Vault (Biometrics)')}
                   </Text>
                 </View>
 
@@ -742,7 +744,7 @@ export const SendModal: React.FC<SendModalProps> = ({
                   {loading ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       <ActivityIndicator color="#FFFFFF" size="small" />
-                      <Text style={styles.sendBtnText}>Authenticating...</Text>
+                      <Text style={styles.sendBtnText}>Authenticating Fingerprint...</Text>
                     </View>
                   ) : (
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
@@ -752,9 +754,9 @@ export const SendModal: React.FC<SendModalProps> = ({
                           ? 'Cannot Send to Yourself'
                           : (amount && parseFloat(amount) > 0
                             ? selectedToken === 'SOL'
-                              ? `Pay ${amount} SOL`
-                              : (selectedToken === 'SKR' ? `Pay ${amount} SKR` : `Pay $${parseFloat(amount).toFixed(2)} USDC`)
-                            : `Pay ${selectedToken}`)}
+                              ? `Pay ${amount} SOL via Fingerprint`
+                              : (selectedToken === 'SKR' ? `Pay ${amount} SKR via Fingerprint` : `Pay $${parseFloat(amount).toFixed(2)} USDC via Fingerprint`)
+                            : `Pay via Fingerprint`)}
                       </Text>
                       {!isInputSelf && <ArrowRight size={15} color="#FFFFFF" />}
                     </View>

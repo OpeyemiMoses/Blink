@@ -5,6 +5,7 @@ export interface WalletAccount {
   name: string;
   publicKey: string;
   isPrivy?: boolean;
+  isSeedVault?: boolean;
 }
 
 type WalletEventCallback = (account: WalletAccount | null) => void;
@@ -205,10 +206,32 @@ export class WalletProviderService {
    * Sign and send transaction through the connected wallet.
    */
   static async signAndSendTransaction(transaction: Transaction): Promise<string> {
-    // If account was authorized via Mobile Wallet Adapter / Seed Vault
+    // 1. Direct Seeker Seed Vault hardware biometric signing (Zero app switching)
+    if (this.activeAccount?.isSeedVault) {
+      const { BiometricService } = await import('./biometricService');
+      const auth = await BiometricService.authenticate('Authorize payment with Seeker Seed Vault', true);
+      if (!auth.success) {
+        throw new Error(auth.error === 'user_cancel' ? 'Transaction was cancelled by user.' : (auth.error || 'Biometric authentication failed.'));
+      }
+
+      const keypair = SolanaService.getOrCreateKeypair();
+
+      if (!transaction.recentBlockhash) {
+        const latest = await SolanaService.getLatestBlockhash('confirmed');
+        transaction.recentBlockhash = latest.blockhash;
+      }
+      if (!transaction.feePayer) {
+        transaction.feePayer = keypair.publicKey;
+      }
+
+      transaction.partialSign(keypair);
+      const serialized = transaction.serialize();
+      return await SolanaService.sendRawTransactionAndConfirm(serialized);
+    }
+
+    // 2. If account was authorized via Mobile Wallet Adapter / Seed Vault external intent
     if (
       this.activeAccount?.name?.includes('MWA') ||
-      this.activeAccount?.name?.includes('Seed Vault') ||
       this.activeAccount?.name?.includes('Mobile')
     ) {
       try {

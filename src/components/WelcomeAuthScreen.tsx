@@ -15,10 +15,12 @@ import {
   Fingerprint,
   Mail,
   CheckCircle2,
+  ShieldCheck,
 } from 'lucide-react-native';
 import { usePrivy } from '../auth/privyAdapter';
 import { useTheme } from '../theme/ThemeContext';
 import { BlinkBrandMark } from './BrandLogos';
+import { SolanaMobileStackService } from '../services/solanaMobileStackService';
 
 interface WelcomeAuthScreenProps {
   onContinueGuest: () => void;
@@ -70,45 +72,83 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
         </Text>
       </View>
 
-      {/* Primary Authentication Card: Email via Privy */}
+      {/* Primary Authentication Card: Solana Mobile Stack & Privy */}
       <View style={[styles.authCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
         <View style={styles.authCardHeader}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Mail size={20} color={colors.accent} />
-            <Text style={[styles.authCardTitle, { color: colors.textPrimary }]}>SIGN IN OR CREATE ACCOUNT</Text>
+            <Fingerprint size={20} color="#14F195" />
+            <Text style={[styles.authCardTitle, { color: colors.textPrimary }]}>SIGN IN OR CONNECT WALLET</Text>
           </View>
           <View style={styles.nonCustodialBadge}>
-            <Shield size={11} color="#10B981" />
-            <Text style={styles.nonCustodialText}>Non-Custodial</Text>
+            <ShieldCheck size={11} color="#14F195" />
+            <Text style={[styles.nonCustodialText, { color: '#14F195' }]}>Enclave Secured</Text>
           </View>
         </View>
 
         <Text style={[styles.authCardExplainer, { color: colors.textSecondary }]}>
-          Sign in or create your account using your email. Privy provisions an embedded, non-custodial Solana keypair in seconds.
+          Connect with Seeker Seed Vault for zero-app-switching biometric signing, or sign in via Email or MWA.
         </Text>
 
-        {/* Primary Action Button: Opens Privy Email Login */}
+        {/* Primary Action Button: Seeker Seed Vault with Biometrics */}
         <TouchableOpacity
-          style={styles.primaryBtn}
-          onPress={() => login()}
+          style={styles.seedVaultBtn}
+          onPress={async () => {
+            await SolanaMobileStackService.connectSeedVault();
+          }}
           activeOpacity={0.85}
         >
-          <Mail size={18} color="#FFFFFF" />
-          <Text style={styles.primaryBtnText}>Continue with Email</Text>
-          <ArrowRight size={16} color="#FFFFFF" />
+          <View style={styles.seedVaultBtnLeft}>
+            <View style={styles.seedVaultIconCircle}>
+              <Fingerprint size={18} color="#000000" strokeWidth={2.5} />
+            </View>
+            <View>
+              <Text style={styles.seedVaultBtnTitle}>Connect Seeker Seed Vault</Text>
+              <Text style={styles.seedVaultBtnSub}>Hardware Keystore • In-App Biometrics</Text>
+            </View>
+          </View>
+          <ShieldCheck size={18} color="#000000" />
         </TouchableOpacity>
+
+        {/* Auth Divider */}
+        <View style={styles.authDividerRow}>
+          <View style={[styles.authDividerLine, { backgroundColor: colors.border }]} />
+          <Text style={[styles.authDividerText, { color: colors.textMuted }]}>OR OTHER PROVIDERS</Text>
+          <View style={[styles.authDividerLine, { backgroundColor: colors.border }]} />
+        </View>
+
+        {/* Secondary Options: Email (Privy) & External MWA */}
+        <View style={styles.secondaryAuthRow}>
+          <TouchableOpacity
+            style={styles.secondaryPrivyBtn}
+            onPress={() => login()}
+            activeOpacity={0.85}
+          >
+            <Mail size={15} color="#FFFFFF" />
+            <Text style={styles.secondaryPrivyBtnText}>Email (Privy)</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.secondaryMwaBtn, { borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.03)' }]}
+            onPress={async () => {
+              await SolanaMobileStackService.connectMWA();
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.secondaryMwaBtnText, { color: colors.textPrimary }]}>External MWA</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Security & Benefits list */}
         <View style={styles.benefitRow}>
-          <CheckCircle2 size={13} color="#10B981" />
+          <CheckCircle2 size={13} color="#14F195" />
           <Text style={[styles.benefitText, { color: colors.textMuted }]}>
-            Secure OTP verification sent to your inbox
+            Seeker Seed Vault: Sign transactions directly via device fingerprint
           </Text>
         </View>
         <View style={styles.benefitRow}>
-          <CheckCircle2 size={13} color="#10B981" />
+          <CheckCircle2 size={13} color="#14F195" />
           <Text style={[styles.benefitText, { color: colors.textMuted }]}>
-            Non-custodial Solana embedded wallet managed by Privy
+            Zero app switching — 100% real on-chain Solana Devnet transactions
           </Text>
         </View>
       </View>
@@ -273,6 +313,96 @@ const styles = StyleSheet.create({
   authCardExplainer: {
     fontSize: 11,
     lineHeight: 16,
+  },
+  seedVaultBtn: {
+    backgroundColor: '#14F195',
+    borderRadius: 14,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    shadowColor: '#14F195',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  seedVaultBtnLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  seedVaultIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(0, 0, 0, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  seedVaultBtnTitle: {
+    color: '#000000',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  seedVaultBtnSub: {
+    color: 'rgba(0, 0, 0, 0.7)',
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  authDividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginVertical: 4,
+    gap: 10,
+  },
+  authDividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  authDividerText: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  secondaryAuthRow: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+  },
+  secondaryPrivyBtn: {
+    flex: 1,
+    backgroundColor: '#5B67F6',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  secondaryPrivyBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  secondaryMwaBtn: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryMwaBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   primaryBtn: {
     backgroundColor: '#5B67F6',
