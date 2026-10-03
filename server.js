@@ -1408,18 +1408,26 @@ const server = http.createServer((req, res) => {
           disableRetryOnRateLimit: true,
         });
 
-        const [solLamports, circleRes, faucetRes, skrMainnetRes, skrDevnetRes] = await Promise.allSettled([
+        const MAINNET_USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+
+        const [devnetLamports, mainnetLamports, circleRes, faucetRes, mainnetUsdcRes, skrMainnetRes, skrDevnetRes] = await Promise.allSettled([
           devnetConn.getBalance(pubkey),
+          mainnetConn.getBalance(pubkey),
           devnetConn.getParsedTokenAccountsByOwner(pubkey, { mint: USDC_MINT }),
           devnetConn.getParsedTokenAccountsByOwner(pubkey, { mint: FAUCET_MINT }),
+          mainnetConn.getParsedTokenAccountsByOwner(pubkey, { mint: MAINNET_USDC_MINT }),
           mainnetConn.getParsedTokenAccountsByOwner(pubkey, { mint: SKR_MINT }),
           devnetConn.getParsedTokenAccountsByOwner(pubkey, { mint: SKR_MINT }),
         ]);
 
-        let sol = cachedBal?.data?.sol ?? 0;
-        if (solLamports.status === 'fulfilled' && typeof solLamports.value === 'number') {
-          sol = Number((solLamports.value / LAMPORTS_PER_SOL).toFixed(4));
-        }
+        let devnetSol = (devnetLamports.status === 'fulfilled' && typeof devnetLamports.value === 'number')
+          ? Number((devnetLamports.value / LAMPORTS_PER_SOL).toFixed(4))
+          : 0;
+        let mainnetSol = (mainnetLamports.status === 'fulfilled' && typeof mainnetLamports.value === 'number')
+          ? Number((mainnetLamports.value / LAMPORTS_PER_SOL).toFixed(4))
+          : 0;
+
+        let sol = devnetSol > 0 ? devnetSol : (mainnetSol > 0 ? mainnetSol : (cachedBal?.data?.sol ?? 0));
 
         let usdc = cachedBal?.data?.usdc ?? 0;
         let totalUsdc = 0;
@@ -1428,6 +1436,14 @@ const server = http.createServer((req, res) => {
         if (circleRes.status === 'fulfilled' && circleRes.value?.value?.length > 0) {
           usdcFound = true;
           circleRes.value.value.forEach(a => {
+            const amt = a.account.data?.parsed?.info?.tokenAmount?.uiAmount;
+            if (typeof amt === 'number') totalUsdc += amt;
+          });
+        }
+
+        if (mainnetUsdcRes.status === 'fulfilled' && mainnetUsdcRes.value?.value?.length > 0) {
+          usdcFound = true;
+          mainnetUsdcRes.value.value.forEach(a => {
             const amt = a.account.data?.parsed?.info?.tokenAmount?.uiAmount;
             if (typeof amt === 'number') totalUsdc += amt;
           });

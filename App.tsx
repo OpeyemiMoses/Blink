@@ -190,7 +190,11 @@ function BlinkMainApp() {
           urlStr.includes('phantom_encryption_public_key') ||
           urlStr.includes('solflare_encryption_public_key')
         ) {
-          SolanaMobileStackService.handleConnectCallback(urlStr);
+          const acc = await SolanaMobileStackService.handleConnectCallback(urlStr);
+          if (acc) {
+            setNativeWalletAccount(acc);
+            setIsGuestMode(false);
+          }
           return;
         }
 

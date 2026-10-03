@@ -478,7 +478,11 @@ export class SolanaMobileStackService {
       }
 
       WalletProviderService.setActiveAccount(account);
-      await this.syncOrRegisterWalletAccount(account);
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('blink_wallet_connected', { detail: account }));
+        window.dispatchEvent(new CustomEvent('blink_balance_refresh'));
+      }
+      this.syncOrRegisterWalletAccount(account).catch(() => {});
 
       return account;
     } catch (err: any) {
