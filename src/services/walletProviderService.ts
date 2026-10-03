@@ -1,4 +1,4 @@
-import { PublicKey, Transaction, LAMPORTS_PER_SOL, sendAndConfirmTransaction } from '@solana/web3.js';
+import { PublicKey, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { SolanaService } from './solanaService';
 
 export interface WalletAccount {
@@ -290,12 +290,9 @@ export class WalletProviderService {
       }
 
       try {
-        const sig = await sendAndConfirmTransaction(
-          connection,
-          transaction,
-          [localKeypair],
-          { commitment: 'confirmed' }
-        );
+        transaction.sign(localKeypair);
+        const rawTx = transaction.serialize();
+        const sig = await SolanaService.sendRawTransactionAndConfirm(rawTx);
         return sig;
       } catch (confirmErr: any) {
         throw confirmErr;

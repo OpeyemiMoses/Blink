@@ -59,7 +59,14 @@ export class SolanaService {
     const net = (network === 'mainnet' || network === 'mainnet-beta') ? 'mainnet-beta' : 'devnet';
     this.activeNetwork = net;
     const rpc = this.getRpcUrl(net);
-    this.connection = new Connection(rpc, { commitment: 'confirmed', disableRetryOnRateLimit: true });
+    const wsEndpoint = net === 'mainnet-beta'
+      ? 'wss://api.mainnet-beta.solana.com/'
+      : 'wss://api.devnet.solana.com/';
+    this.connection = new Connection(rpc, {
+      commitment: 'confirmed',
+      disableRetryOnRateLimit: true,
+      wsEndpoint,
+    });
     if (typeof window !== 'undefined' && window.localStorage) {
       try {
         window.localStorage.setItem(STORAGE_NETWORK_KEY, net);
@@ -82,9 +89,72 @@ export class SolanaService {
   static getConnection(): Connection {
     const rpcUrl = this.getRpcUrl();
     if (!this.connection || (this.connection as any)._rpcEndpoint !== rpcUrl) {
-      this.connection = new Connection(rpcUrl, { commitment: 'confirmed', disableRetryOnRateLimit: true });
+      // Always use the public Devnet WebSocket for subscriptions/confirmations.
+      // The HTTP proxy (localhost:3000/api/solana-rpc) cannot be upgraded to WS,
+      // so we always point wsEndpoint directly at Devnet to avoid "WebSocket failed" errors.
+      this.connection = new Connection(rpcUrl, {
+        commitment: 'confirmed',
+        disableRetryOnRateLimit: true,
+        wsEndpoint: 'wss://api.devnet.solana.com/',
+      });
     }
     return this.connection;
+  }
+
+  /**
+   * Send a serialized signed transaction via the HTTP proxy and poll for confirmation.
+   * Avoids WebSocket dependency entirely.
+   */
+  static async sendRawTransactionAndConfirm(signedTx: Uint8Array): Promise<string> {
+    const encoded = Buffer.from(signedTx).toString('base64');
+    // Send via HTTP proxy
+    const sendRes = await fetch(getApiUrl('/api/solana-rpc'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1,
+        method: 'sendTransaction',
+        params: [encoded, { encoding: 'base64', skipPreflight: false, preflightCommitment: 'confirmed' }],
+      }),
+    });
+    const sendJson = await sendRes.json();
+    if (sendJson.error) throw new Error(`sendTransaction RPC error: ${JSON.stringify(sendJson.error)}`);
+    const signature: string = sendJson.result;
+
+    // Poll for confirmation via HTTP (no WebSocket)
+    const latestBh = await this.getLatestBlockhash('confirmed');
+    const deadline = latestBh.lastValidBlockHeight;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      await new Promise(r => setTimeout(r, 2000));
+      const statusRes = await fetch(getApiUrl('/api/solana-rpc'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0', id: 1,
+          method: 'getSignatureStatuses',
+          params: [[signature], { searchTransactionHistory: false }],
+        }),
+      });
+      const statusJson = await statusRes.json();
+      const status = statusJson?.result?.value?.[0];
+      if (status) {
+        if (status.err) throw new Error(`Transaction failed on-chain: ${JSON.stringify(status.err)}`);
+        if (status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized') {
+          return signature;
+        }
+      }
+      // Check if block height exceeded
+      const blockRes = await fetch(getApiUrl('/api/solana-rpc'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getBlockHeight', params: [] }),
+      });
+      const blockJson = await blockRes.json();
+      if (blockJson?.result > deadline) {
+        throw new Error('Transaction expired (block height exceeded). Please try again.');
+      }
+    }
+    throw new Error('Transaction confirmation timed out. It may still confirm — check your balance.');
   }
 
   /**
