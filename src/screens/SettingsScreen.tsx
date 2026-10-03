@@ -49,6 +49,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [bioEnabled, setBioEnabled] = useState<boolean>(() => BiometricService.isBiometricsEnabled());
   const [isAuthenticatingBio, setIsAuthenticatingBio] = useState<boolean>(false);
 
+  const isUserLoggedIn = authenticated || Boolean(activeAccount?.publicKey);
+  const isPrivyWallet = Boolean(
+    activeAccount?.isPrivy === true ||
+    (authenticated && !activeAccount?.name?.toLowerCase().includes('phantom') && !activeAccount?.name?.toLowerCase().includes('solflare'))
+  );
+
   const handleToggleBiometrics = async (targetState: boolean) => {
     if (bioEnabled === targetState || isAuthenticatingBio) return;
     setIsAuthenticatingBio(true);
@@ -193,8 +199,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </View>
       </View>
 
-      {/* Wallet Key Backup Section */}
-      {activeAccount && (
+      {/* Wallet Key Backup Section - ONLY for Privy embedded wallets, never external */}
+      {isPrivyWallet && (
         <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
           <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>SECURITY & KEYS</Text>
           <TouchableOpacity
@@ -220,7 +226,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       )}
 
       {/* If unauthenticated / guest, show clean Guest Session card with option to sign in. NO delete button! */}
-      {!authenticated ? (
+      {!isUserLoggedIn ? (
         <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
           <Text style={[styles.sectionLabel, { color: colors.accent }]}>GUEST SESSION</Text>
           <View style={[styles.guestCard, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}>
@@ -238,9 +244,51 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </View>
         </View>
       ) : (
-        /* Account Danger Zone (Delete Account at the bottom for authenticated users only) */
+        /* Account Session & Danger Zone */
         <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
-          <Text style={[styles.sectionLabel, { color: '#EF4444' }]}>ACCOUNT DANGER ZONE</Text>
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>ACCOUNT SESSION</Text>
+          <TouchableOpacity
+            style={[
+              styles.exportCard,
+              {
+                backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                borderColor: 'rgba(239, 68, 68, 0.3)',
+                marginBottom: 12,
+              },
+            ]}
+            onPress={async () => {
+              try {
+                if (authenticated) {
+                  await logout();
+                }
+              } catch (e) {
+                console.warn('Privy logout error:', e);
+              }
+              const { WalletProviderService } = await import('../services/walletProviderService');
+              WalletProviderService.disconnect();
+              UserProfileService.resetProfile();
+              if (typeof window !== 'undefined' && window.dispatchEvent) {
+                window.dispatchEvent(new CustomEvent('blink_auth_signout'));
+              }
+              ToastService.info('Signed out of account');
+              if (onReturnToAuth) {
+                onReturnToAuth();
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+              <LogOut size={20} color="#EF4444" />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.exportTitle, { color: '#EF4444' }]}>Sign Out of Account</Text>
+                <Text style={[styles.exportSub, { color: colors.textSecondary }]}>
+                  Disconnect wallet and end this session on device
+                </Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+
+          <Text style={[styles.sectionLabel, { color: '#EF4444', marginTop: 8 }]}>ACCOUNT DANGER ZONE</Text>
 
           {showDeleteConfirm ? (
             <View style={styles.deleteConfirmCard}>

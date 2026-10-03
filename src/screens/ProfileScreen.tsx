@@ -39,6 +39,7 @@ import {
   Sun,
   Fingerprint,
   Flame,
+  Wallet,
 } from 'lucide-react-native';
 import { BiometricService } from '../services/biometricService';
 import { usePrivy, useExportWallet } from '../auth/privyAdapter';
@@ -238,8 +239,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   // Automatically sync profile with cloud database on screen mount or wallet change
   useEffect(() => {
-    const key = activeAccount?.publicKey || user?.id || user?.email?.address;
-    const fallbackEmail = user?.email?.address || user?.google?.email || profile.linkedAccounts.email || profile.linkedAccounts.google || undefined;
+    const key = activeAccount?.publicKey || (authenticated ? (user?.id || user?.email?.address) : null);
+    const fallbackEmail = authenticated ? (user?.email?.address || user?.google?.email || undefined) : undefined;
     if (key) {
       UserProfileService.syncCloudProfile(key, fallbackEmail).then(synced => {
         if (synced) {
@@ -251,11 +252,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         }
       });
     }
-  }, [activeAccount?.publicKey, user?.id, user?.email?.address, user?.google?.email]);
+  }, [activeAccount?.publicKey, authenticated, user?.id, user?.email?.address, user?.google?.email]);
 
-  // Sync Privy verified user data with profile without race conditions or overwriting
+  // Sync Privy verified user data with profile only when authenticated via Privy
   useEffect(() => {
-    if (user) {
+    if (authenticated && user) {
       const githubLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'github_oauth' || a.type === 'github');
       const googleLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'google_oauth' || a.type === 'google');
       const twitterLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'twitter_oauth' || a.type === 'twitter');
@@ -393,39 +394,67 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   const handleStartBind = async (provider: keyof LinkedAccounts) => {
     try {
-      if (provider === 'email' && typeof linkEmail === 'function') {
+      if (authenticated && provider === 'email' && typeof linkEmail === 'function') {
         await linkEmail();
         return;
       }
     } catch (err: any) {
       console.log('Privy link trigger error:', err);
     }
+    setActiveBindingProvider(provider);
+    setBindingInput('');
   };
 
-  const handleConfirmBind = (provider: keyof LinkedAccounts) => {
-    const val = bindingInput.trim();
+  const handleConfirmBind = async (provider: keyof LinkedAccounts) => {
+    const val = bindingInput.trim().toLowerCase();
     if (!val) {
-      showToast(`Please enter your ${provider} address.`);
+      ToastService.error(`Please enter your ${provider} address.`);
       return;
+    }
+
+    if (provider === 'email') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(val)) {
+        ToastService.error('Please enter a valid email address.');
+        return;
+      }
+
+      // Check if this email is already registered/linked to another account in cloud database
+      try {
+        const { getApiUrl } = await import('../services/apiConfig');
+        const checkUrl = getApiUrl(`/api/users/check-email?email=${encodeURIComponent(val)}&address=${encodeURIComponent(activeAccount?.publicKey || '')}`);
+        const res = await fetch(checkUrl);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.available === false) {
+            ToastService.error(data.reason || 'This email is already linked to another Blink account.');
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Check email error:', e);
+      }
     }
 
     const updated = UserProfileService.bindAccount(provider, val);
     setProfile(updated);
     setActiveBindingProvider(null);
     setBindingInput('');
-    showToast(`Linked ${provider} successfully!`);
 
-    // If linking an email, check if this email previously owned a customized handle
-    if (provider === 'email') {
-      UserProfileService.syncCloudProfile(activeAccount?.publicKey, val).then(synced => {
-        if (synced && synced.username && !synced.username.startsWith('user_') && synced.username !== updated.username) {
-          setProfile(synced);
-          setUsername(synced.username);
-          setDisplayName(synced.displayName);
-          ToastService.success(`Recognized previous email! Restored handle @${synced.username}`);
-        }
+    if (activeAccount?.publicKey) {
+      DatabaseService.saveUserAccount({
+        id: activeAccount.publicKey,
+        address: activeAccount.publicKey,
+        publicKey: activeAccount.publicKey,
+        displayName: updated.displayName,
+        username: updated.username,
+        avatarUrl: updated.avatarUrl,
+        email: provider === 'email' ? val : (updated.linkedAccounts.email || undefined),
+        linkedAccounts: updated.linkedAccounts,
       });
     }
+
+    ToastService.success(`Linked ${provider} successfully!`);
   };
 
   const handleUnbind = async (provider: keyof LinkedAccounts) => {
@@ -474,6 +503,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   };
 
   const solanaAddress = activeAccount?.publicKey || null;
+  const isUserLoggedIn = authenticated || Boolean(activeAccount?.publicKey) || Boolean(solanaAddress);
+  const isPrivyWallet = Boolean(
+    activeAccount?.isPrivy === true ||
+    (authenticated && !activeAccount?.name?.toLowerCase().includes('phantom') && !activeAccount?.name?.toLowerCase().includes('solflare'))
+  );
+  const walletDisplayName = activeAccount?.name || (isPrivyWallet ? 'Privy Embedded' : 'Solana External');
 
   return (
     <View style={{ flex: 1, position: 'relative' }}>
@@ -488,7 +523,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </Text>
         </View>
 
-        {!authenticated && (
+        {!isUserLoggedIn && (
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             {onReturnToAuth && (
               <TouchableOpacity
@@ -770,12 +805,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </View>
       )}
 
-      {/* Privy Non-Custodial Embedded Solana Wallet Card */}
+      {/* Solana Wallet Card */}
       <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
         <View style={styles.cardTitleRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <PrivyIcon size={20} />
-            <Text style={[styles.sectionHeaderTitle, { color: colors.textPrimary }]}>PRIVY EMBEDDED SOLANA WALLET</Text>
+            {isPrivyWallet ? (
+              <PrivyIcon size={20} />
+            ) : (
+              <Wallet size={20} color={colors.accent} />
+            )}
+            <Text style={[styles.sectionHeaderTitle, { color: colors.textPrimary }]}>
+              {isPrivyWallet ? 'PRIVY EMBEDDED SOLANA WALLET' : `${walletDisplayName.toUpperCase()} SOLANA WALLET`}
+            </Text>
           </View>
           <View style={styles.verifiedBadge}>
             <Shield size={12} color="#10B981" />
@@ -784,7 +825,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </View>
 
         <Text style={[styles.sectionExplainer, { color: colors.textSecondary }]}>
-          Your Privy embedded Wallet.
+          {isPrivyWallet ? 'Your Privy embedded Wallet.' : `Your connected ${walletDisplayName} wallet.`}
         </Text>
 
         {solanaAddress ? (
@@ -808,24 +849,27 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[
-                  styles.addressActionBtn,
-                  {
-                    backgroundColor: 'rgba(245, 158, 11, 0.12)',
-                    borderColor: 'rgba(245, 158, 11, 0.35)',
-                    borderWidth: 1,
-                  },
-                ]}
-                onPress={handleExportKey}
-                disabled={isExporting}
-                activeOpacity={0.7}
-              >
-                <Key size={14} color="#F59E0B" />
-                <Text style={[styles.addressActionText, { color: '#F59E0B', fontWeight: '700' }]}>
-                  {isExporting ? 'Opening...' : 'Export Key'}
-                </Text>
-              </TouchableOpacity>
+              {/* ONLY show Export Key for Privy embedded wallets, NEVER for Phantom or external wallets */}
+              {isPrivyWallet && (
+                <TouchableOpacity
+                  style={[
+                    styles.addressActionBtn,
+                    {
+                      backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                      borderColor: 'rgba(245, 158, 11, 0.35)',
+                      borderWidth: 1,
+                    },
+                  ]}
+                  onPress={handleExportKey}
+                  disabled={isExporting}
+                  activeOpacity={0.7}
+                >
+                  <Key size={14} color="#F59E0B" />
+                  <Text style={[styles.addressActionText, { color: '#F59E0B', fontWeight: '700' }]}>
+                    {isExporting ? 'Opening...' : 'Export Key'}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity
                 style={[styles.addressActionBtn, { backgroundColor: colors.bgCardAlt }]}
@@ -847,27 +891,28 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         ) : (
           <View style={styles.connectWalletPrompt}>
             <Text style={[styles.connectWalletPromptText, { color: colors.textSecondary }]}>
-              Sign in with Privy to auto-provision an embedded Solana keypair.
+              Connect a Solana wallet or sign in with Privy to manage your identity.
             </Text>
-            <TouchableOpacity
-              style={styles.promptSignInBtn}
-              onPress={() => login()}
-              activeOpacity={0.8}
-            >
-              <PrivyIcon size={16} />
-              <Text style={styles.promptSignInBtnText}>Sign In with Privy</Text>
-            </TouchableOpacity>
+            {onOpenWalletConnect && (
+              <TouchableOpacity
+                style={styles.promptSignInBtn}
+                onPress={onOpenWalletConnect}
+                activeOpacity={0.8}
+              >
+                <Wallet size={16} color="#FFFFFF" />
+                <Text style={styles.promptSignInBtnText}>Connect Wallet</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </View>
 
-      {/* Privy 6 Linked Social Identities Section */}
-      {/* Privy Linked Account Section (Email Only) */}
+      {/* Linked Account Section (Email Only) */}
       <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
         <View style={styles.cardTitleRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <PrivyIcon size={20} />
-            <Text style={[styles.sectionHeaderTitle, { color: colors.textPrimary }]}>LINKED ACCOUNT (PRIVY)</Text>
+            <Mail size={18} color={colors.accent} />
+            <Text style={[styles.sectionHeaderTitle, { color: colors.textPrimary }]}>LINKED EMAIL ACCOUNT</Text>
           </View>
         </View>
 
@@ -885,12 +930,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <View>
                 <Text style={[styles.providerName, { color: colors.textPrimary }]}>Email Address</Text>
                 <Text style={[styles.providerStatus, { color: colors.textMuted }]}>
-                  {profile.linkedAccounts.email || user?.email?.address || 'Not connected'}
+                  {profile.linkedAccounts.email || (authenticated ? user?.email?.address : null) || 'Not connected'}
                 </Text>
               </View>
             </View>
 
-            {profile.linkedAccounts.email || user?.email?.address ? (
+            {(profile.linkedAccounts.email || (authenticated && user?.email?.address)) ? (
               <TouchableOpacity
                 onPress={() => handleUnbind('email')}
                 style={styles.unbindBtn}
@@ -912,7 +957,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </View>
 
         {/* Dedicated Full-Width Sign Out Button */}
-        {authenticated && (
+        {isUserLoggedIn && (
           <View style={{ gap: 10, marginTop: 4 }}>
             <TouchableOpacity
               style={[
@@ -920,8 +965,23 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 { backgroundColor: 'rgba(239, 68, 68, 0.08)', borderColor: 'rgba(239, 68, 68, 0.3)' },
               ]}
               onPress={async () => {
-                await logout();
+                try {
+                  if (authenticated) {
+                    await logout();
+                  }
+                } catch (e) {
+                  console.warn('Privy logout error:', e);
+                }
+                const { WalletProviderService } = await import('../services/walletProviderService');
+                WalletProviderService.disconnect();
+                UserProfileService.resetProfile();
+                if (typeof window !== 'undefined' && window.dispatchEvent) {
+                  window.dispatchEvent(new CustomEvent('blink_auth_signout'));
+                }
                 ToastService.info('Signed out of account');
+                if (onReturnToAuth) {
+                  onReturnToAuth();
+                }
               }}
               activeOpacity={0.8}
             >
@@ -1167,6 +1227,96 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               </Text>
             </View>
           )}
+        </View>
+      </View>
+    )}
+
+    {/* Link Provider Modal */}
+    {activeBindingProvider && (
+      <View style={styles.modalOverlay}>
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setActiveBindingProvider(null)}
+        />
+        <View
+          style={[
+            styles.streakModalCard,
+            { backgroundColor: colors.bgCard, borderColor: colors.border },
+          ]}
+        >
+          <View style={styles.cardTitleRow}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Mail size={18} color={colors.accent} />
+              <Text style={[styles.sectionHeaderTitle, { color: colors.textPrimary }]}>
+                LINK {activeBindingProvider.toUpperCase()} ADDRESS
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setActiveBindingProvider(null)}
+              style={styles.modalCloseBtn}
+              activeOpacity={0.7}
+            >
+              <XIcon size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={[styles.sectionExplainer, { color: colors.textSecondary, marginTop: 4 }]}>
+            Enter the {activeBindingProvider} you want to link with your Blink profile. It must not be linked to any other account.
+          </Text>
+
+          <TextInput
+            style={{
+              backgroundColor: colors.bgInput,
+              borderColor: colors.border,
+              borderWidth: 1,
+              borderRadius: 10,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              color: colors.textPrimary,
+              fontSize: 14,
+              marginTop: 12,
+            }}
+            placeholder={`Enter your ${activeBindingProvider}...`}
+            placeholderTextColor={colors.textMuted}
+            value={bindingInput}
+            onChangeText={setBindingInput}
+            keyboardType={activeBindingProvider === 'email' ? 'email-address' : 'default'}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                paddingVertical: 10,
+                borderRadius: 10,
+                alignItems: 'center',
+                backgroundColor: colors.bgCardAlt,
+                borderColor: colors.border,
+                borderWidth: 1,
+              }}
+              onPress={() => setActiveBindingProvider(null)}
+              activeOpacity={0.7}
+            >
+              <Text style={{ color: colors.textSecondary, fontWeight: '700' }}>Cancel</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                paddingVertical: 10,
+                borderRadius: 10,
+                alignItems: 'center',
+                backgroundColor: colors.accent,
+              }}
+              onPress={() => handleConfirmBind(activeBindingProvider)}
+              activeOpacity={0.8}
+            >
+              <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Confirm Link</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     )}

@@ -68,7 +68,8 @@ export class BlinkIdService {
       } catch {}
     }
 
-    return '@mybitcoind';
+    const shortAddr = address ? `${address.slice(0, 4)}_${address.slice(-4)}`.toLowerCase() : 'user';
+    return `@sol_${shortAddr}`;
   }
 
   /**

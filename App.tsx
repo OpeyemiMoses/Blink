@@ -754,16 +754,15 @@ function BlinkMainApp() {
     const lookupKey = effectiveAddress || user?.email?.address || user?.id;
     if (!lookupKey) return;
 
-    const googleAccount =
-      user?.google ||
-      (user?.linkedAccounts?.find((acc: any) => acc.type === 'google_oauth') as any);
+    const googleAccount = authenticated
+      ? (user?.google || (user?.linkedAccounts?.find((acc: any) => acc.type === 'google_oauth') as any))
+      : null;
 
-    const googleEmail =
-      user?.google?.email ||
-      googleAccount?.email ||
-      (user?.email?.address && user.email.address.toLowerCase().endsWith('@gmail.com') ? user.email.address : null);
+    const googleEmail = authenticated
+      ? (user?.google?.email || googleAccount?.email || (user?.email?.address && user.email.address.toLowerCase().endsWith('@gmail.com') ? user.email.address : null))
+      : null;
 
-    const userEmail = googleEmail || user?.email?.address || null;
+    const userEmail = authenticated ? (googleEmail || user?.email?.address || null) : null;
 
     // Check cloud database first to restore profile on this device
     DatabaseService.syncUserFromCloud(lookupKey).then(async (cloudUser) => {
@@ -776,7 +775,8 @@ function BlinkMainApp() {
       ) {
         try {
           const emailUser = await DatabaseService.syncUserFromCloud(userEmail);
-          if (emailUser && emailUser.username && !emailUser.username.startsWith('user_')) {
+          const emailUserAddr = (emailUser?.address || emailUser?.publicKey || '').toLowerCase();
+          if (emailUser && emailUser.username && !emailUser.username.startsWith('user_') && (!emailUserAddr || emailUserAddr === lookupKey.toLowerCase())) {
             resolvedCloudUser = emailUser;
           }
         } catch (e) {}
@@ -852,7 +852,7 @@ function BlinkMainApp() {
       } else if (userEmail) {
         if (!currentProf.hasCustomizedProfile || currentProf.username === 'seeker_user' || currentProf.username.startsWith('user_')) {
           const emailPrefix = userEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
-          const cleanUser = emailPrefix.length >= 2 ? emailPrefix : 'mybitcoind';
+          const cleanUser = emailPrefix.length >= 2 ? emailPrefix : `user_${Math.random().toString(36).substring(2, 7)}`;
           const updated = UserProfileService.updateProfile({
             displayName: cleanUser,
             username: cleanUser,

@@ -454,24 +454,48 @@ export class SolanaMobileStackService {
       let cloudUser = await DatabaseService.syncUserFromCloud(solanaPubkey).catch(() => null);
       if (cloudUser && cloudUser.username && cloudUser.username !== 'seeker_user') {
         const updated = UserProfileService.updateProfile({
-          displayName: cloudUser.displayName,
+          address: solanaPubkey,
+          publicKey: solanaPubkey,
+          displayName: cloudUser.displayName || `${walletName} User`,
           username: cloudUser.username,
           avatarUrl: cloudUser.avatarUrl || UserProfileService.getRandomMascot(),
           bio: cloudUser.bio || '',
           hasCustomizedProfile: true,
+          linkedAccounts: cloudUser.linkedAccounts || {
+            email: cloudUser.email || null,
+            google: null,
+            twitter: null,
+            discord: null,
+            telegram: null,
+            github: null,
+          },
         });
         ToastService.success(`Welcome back @${cloudUser.username}! Connected with ${walletName}`);
       } else {
-        const existingProf = UserProfileService.getProfile();
-        const defaultHandle = existingProf.username && existingProf.username !== 'seeker_user' && !/^[1-9A-HJ-NP-za-km-z]{32,44}$/.test(existingProf.username)
-          ? existingProf.username
-          : 'mybitcoind';
+        // Clean fresh account for this newly connected Solana wallet
+        const shortAddr = `${solanaPubkey.slice(0, 4)}_${solanaPubkey.slice(-4)}`.toLowerCase();
+        const prefix = walletName.toLowerCase().includes('phantom') ? 'phantom' : 'sol';
+        const defaultHandle = `${prefix}_${shortAddr}`;
+        const defaultName = `${walletName.replace(/mobile|wallet/gi, '').trim() || 'Solana'} User`;
+
         const newProf = UserProfileService.updateProfile({
-          displayName: existingProf.displayName || 'mybitcoind',
+          address: solanaPubkey,
+          publicKey: solanaPubkey,
+          displayName: defaultName,
           username: defaultHandle,
-          avatarUrl: existingProf.avatarUrl || UserProfileService.getRandomMascot(),
-          hasCustomizedProfile: true,
+          avatarUrl: UserProfileService.getRandomMascot(),
+          bio: 'Building and tapping physical Solana Blinks in the wild.',
+          hasCustomizedProfile: false,
+          linkedAccounts: {
+            email: null,
+            google: null,
+            twitter: null,
+            discord: null,
+            telegram: null,
+            github: null,
+          },
         });
+
         DatabaseService.saveUserAccount({
           id: solanaPubkey,
           address: solanaPubkey,

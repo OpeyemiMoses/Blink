@@ -4,12 +4,15 @@ import { getApiUrl } from './apiConfig';
 export interface UserRecord {
   id: string;
   address: string;
+  publicKey?: string;
   displayName: string;
   username: string;
   avatarUrl: string;
   bio?: string;
   email?: string | null;
   provider?: string;
+  blinkId?: string;
+  linkedAccounts?: any;
   createdAt: number;
   lastLoginAt: number;
 }
@@ -78,11 +81,12 @@ export class DatabaseService {
     const shortId = safeAddress.length >= 8 ? safeAddress.slice(0, 8) : safeAddress;
     const shortEnd = safeAddress.length >= 4 ? safeAddress.slice(-4) : safeAddress;
     const derivedFromEmail = userData.email ? userData.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() : null;
+    const fallbackHandle = `sol_${safeAddress.slice(0, 4)}_${safeAddress.slice(-4)}`.toLowerCase();
     const finalUsername = (userData.username && userData.username !== 'seeker_user' && !/^[1-9A-HJ-NP-za-km-z]{32,44}$/.test(userData.username))
       ? userData.username
       : (existing?.username && existing.username !== 'seeker_user' && !/^[1-9A-HJ-NP-za-km-z]{32,44}$/.test(existing.username))
       ? existing.username
-      : (derivedFromEmail || 'mybitcoind');
+      : (derivedFromEmail || fallbackHandle);
 
     const updatedUser: UserRecord = {
       id: existing?.id || (userData as any)?.id || `usr_${shortId}`,

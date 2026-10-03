@@ -50,15 +50,15 @@ export const getRandomMascot = (): string => {
 };
 
 const INITIAL_PROFILE: UserProfile = {
-  username: 'mybitcoind',
-  displayName: 'mybitcoind',
-  blinkId: '@mybitcoind',
+  username: '',
+  displayName: 'Solana User',
+  blinkId: '',
   avatarUrl: DEFAULT_AVATARS[0],
   bio: 'Building and tapping physical Solana Blinks in the wild.',
-  hasCustomizedProfile: true,
+  hasCustomizedProfile: false,
   linkedAccounts: {
-    email: 'mybitcoind@gmail.com',
-    google: 'mybitcoind@gmail.com',
+    email: null,
+    google: null,
     twitter: null,
     discord: null,
     telegram: null,
@@ -209,13 +209,17 @@ export class UserProfileService {
           this.profile = {
             ...INITIAL_PROFILE,
             ...parsed,
-            username: parsed.username || INITIAL_PROFILE.username,
-            displayName: parsed.displayName || INITIAL_PROFILE.displayName,
+            username: parsed.username || '',
+            displayName: parsed.displayName || 'Solana User',
             hasCustomizedProfile: isCustom,
             avatarUrl: chosenAvatar,
             linkedAccounts: {
-              ...INITIAL_PROFILE.linkedAccounts,
-              ...(parsed.linkedAccounts || {}),
+              email: parsed.linkedAccounts?.email || null,
+              google: parsed.linkedAccounts?.google || null,
+              twitter: parsed.linkedAccounts?.twitter || null,
+              discord: parsed.linkedAccounts?.discord || null,
+              telegram: parsed.linkedAccounts?.telegram || null,
+              github: parsed.linkedAccounts?.github || null,
             },
           };
 
@@ -239,16 +243,16 @@ export class UserProfileService {
     const hasCustomized = updates.hasCustomizedProfile ?? (
       updates.avatarUrl || updates.displayName || updates.username ? true : current.hasCustomizedProfile
     );
-    let rawUser = (updates.username || current.username || 'mybitcoind').trim().replace(/^@+/, '');
+    let rawUser = (updates.username !== undefined ? updates.username : current.username).trim().replace(/^@+/, '');
     if (rawUser === 'seeker_user' || /^[1-9A-HJ-NP-za-km-z]{32,44}$/.test(rawUser)) {
       rawUser = (current.username && current.username !== 'seeker_user' && !/^[1-9A-HJ-NP-za-km-z]{32,44}$/.test(current.username))
         ? current.username
-        : 'mybitcoind';
+        : '';
     }
     const effectiveUsername = rawUser;
     const canonicalBlinkId = updates.blinkId && !updates.blinkId.startsWith('@user_')
       ? (updates.blinkId.startsWith('@') ? updates.blinkId : `@${updates.blinkId}`)
-      : `@${effectiveUsername.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase()}`;
+      : (effectiveUsername ? `@${effectiveUsername.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase()}` : '');
 
     this.profile = {
       ...current,
@@ -326,7 +330,9 @@ export class UserProfileService {
           const emailRes = await fetch(getApiUrl(`/api/users/${encodeURIComponent(fallbackEmail)}`));
           if (emailRes.ok) {
             const emailData = await emailRes.json();
-            if (emailData?.user?.username && !emailData.user.username.startsWith('user_')) {
+            const emailAddr = (emailData?.user?.address || emailData?.user?.publicKey || '').toLowerCase();
+            // Strictly only use if it belongs to this address or has no conflicting address
+            if (emailData?.user?.username && !emailData.user.username.startsWith('user_') && (!emailAddr || emailAddr === addressOrEmail.toLowerCase())) {
               data = emailData;
             }
           }

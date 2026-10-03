@@ -652,6 +652,39 @@ const server = http.createServer((req, res) => {
     });
   }
 
+  // ─── EMAIL CHECK REST API ──────────────────────────────────────────────
+  if (pathname === '/api/users/check-email' && req.method === 'GET') {
+    const queryEmail = (parsedUrl.query.email || '').toString().trim().toLowerCase();
+    const queryAddress = (parsedUrl.query.address || '').toString().trim().toLowerCase();
+
+    if (!queryEmail) {
+      return sendJson(res, 400, { success: false, error: 'Email parameter required' });
+    }
+
+    const matches = Object.values(usersDb).filter(u => {
+      if (!u) return false;
+      const emails = extractUserEmails(u);
+      return emails.includes(queryEmail);
+    });
+
+    if (matches.length > 0) {
+      const isCurrentOwner = matches.every(m => {
+        const mAddr = (m.address || m.publicKey || m.id || '').toLowerCase();
+        return queryAddress && mAddr === queryAddress;
+      });
+
+      if (!isCurrentOwner) {
+        return sendJson(res, 200, {
+          success: true,
+          available: false,
+          reason: `Email ${queryEmail} is already linked to another Blink account. An email cannot be linked to multiple accounts.`,
+        });
+      }
+    }
+
+    return sendJson(res, 200, { success: true, available: true });
+  }
+
   // ─── UNIQUE BLINK ID REGISTRY REST API ──────────────────────────────────
   if (pathname === '/api/blink-ids' && req.method === 'GET') {
     const list = Object.values(usersDb)
@@ -1028,6 +1061,25 @@ const server = http.createServer((req, res) => {
         const existing = usersDb[key] || usersDb[key.toLowerCase()] || {};
         const safeAddress = data.address || data.publicKey || existing.address || key;
         const userEmail = (data.email || data.linkedAccounts?.email || data.linkedAccounts?.google || '').trim().toLowerCase();
+
+        // Reject if email is already claimed by another user
+        if (userEmail) {
+          const conflictingUsers = Object.values(usersDb).filter(u => {
+            if (!u) return false;
+            const uAddr = (u.address || u.publicKey || u.id || '').toLowerCase();
+            if (uAddr && uAddr !== safeAddress.toLowerCase()) {
+              const emails = extractUserEmails(u);
+              return emails.includes(userEmail);
+            }
+            return false;
+          });
+          if (conflictingUsers.length > 0) {
+            return sendJson(res, 409, {
+              success: false,
+              error: `Email ${userEmail} is already linked to another Blink account. An email cannot be linked to multiple accounts.`,
+            });
+          }
+        }
 
         let desiredUsername = (data.username || existing.username || 'user').trim().replace(/^@+/, '');
         let autoAssigned = false;
