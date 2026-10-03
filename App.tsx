@@ -39,6 +39,7 @@ import { SeedVaultModal } from './src/components/SeedVaultModal';
 import { ReceiptModal } from './src/components/ReceiptModal';
 import { NotificationService } from './src/services/notificationService';
 import { SaleWatcherService } from './src/services/saleWatcherService';
+import { getApiUrl } from './src/services/apiConfig';
 
 // Sleep/wake & unhandled rejection safety guards to prevent idle blank screens
 if (typeof window !== 'undefined') {
@@ -895,7 +896,7 @@ function BlinkMainApp() {
                 // Fallback to server RPC proxy if direct client broadcast is rate-limited
                 try {
                   const base64Tx = Buffer.from(rawBytes).toString('base64');
-                  const proxyRes = await fetch('/api/solana-rpc', {
+                  const proxyRes = await fetch(getApiUrl('/api/solana-rpc'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -953,9 +954,13 @@ function BlinkMainApp() {
               return sig;
             }
 
-            const sigMatch = errMsg.match(/[1-9A-HJ-NP-Za-km-z]{44,}/);
+            const sigMatch = errMsg.match(/[1-9A-HJ-NP-Za-km-z]{64,88}/) || errMsg.match(/[1-9A-HJ-NP-Za-km-z]{43,}/);
             if (sigMatch) {
               return sigMatch[0];
+            }
+
+            if (errMsg.includes('already been processed') || errMsg.includes('already processed')) {
+              return 'tx_confirmed_' + Date.now();
             }
 
             throw privyErr;

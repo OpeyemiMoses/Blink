@@ -370,6 +370,9 @@ const server = http.createServer((req, res) => {
           visibility = globalTypes.includes(data.actionType) ? 'global' : 'physical';
         }
 
+        const existingIdx = blinksDb.findIndex(b => b.id.toLowerCase() === cleanId);
+        const existing = existingIdx >= 0 ? blinksDb[existingIdx] : null;
+
         const newBlink = {
           id: cleanId,
           name: String(data.name).trim(),
@@ -380,16 +383,15 @@ const server = http.createServer((req, res) => {
           recipient: String(data.recipient).trim(),
           creatorAddress: data.creatorAddress ? String(data.creatorAddress).trim() : String(data.recipient).trim(),
           description: String(data.description || '').trim(),
+          imageUrl: data.imageUrl || data.icon || (existing ? existing.imageUrl : undefined),
           verifiedDomain: data.verifiedDomain ? String(data.verifiedDomain).trim() : undefined,
           visibility,
-          createdAt: data.createdAt || Date.now(),
+          createdAt: data.createdAt || (existing ? existing.createdAt : Date.now()),
           updatedAt: Date.now(),
-          stats: data.stats || { taps: 0, completed: 0, volumeUsdc: 0 },
+          stats: data.stats || (existing ? existing.stats : { taps: 0, completed: 0, volumeUsdc: 0 }),
         };
 
-        const existingIdx = blinksDb.findIndex(b => b.id.toLowerCase() === cleanId);
         if (existingIdx >= 0) {
-          const existing = blinksDb[existingIdx];
           const incomingRequester = (data.creatorAddress || data.recipient || data.requesterAddress || '').trim().toLowerCase();
           const existingCreator = (existing.creatorAddress || existing.recipient || '').trim().toLowerCase();
           if (existingCreator && (!incomingRequester || existingCreator !== incomingRequester)) {

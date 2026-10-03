@@ -240,62 +240,7 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
       );
 
       try {
-        if (!isInitialLoadRef.current) {
-          // ONLY notify for BRAND NEW real-time incoming transactions that arrive DURING active polling
-          const existingNotifs = NotificationService.getNotifications();
-          const notifSigSet = new Set(existingNotifs.map((n) => n.signature).filter(Boolean));
-          const nowSec = Math.floor(Date.now() / 1000);
-
-          for (const item of combined) {
-            const isFreshTx = item.blockTime ? (nowSec - item.blockTime < 600) : true;
-            const shouldEvaluate = !isInitialLoadRef.current
-              ? !knownSignaturesRef.current.has(item.signature)
-              : (isFreshTx && !knownSignaturesRef.current.has(item.signature));
-
-            if (item.signature && shouldEvaluate && !notifSigSet.has(item.signature)) {
-              if (item.direction === 'receive' && !item.err) {
-                const cachedRcpt = ReceiptService.getReceiptBySignature(item.signature);
-                const amt = cachedRcpt?.amount || (item.token === 'SOL' ? (item.amountSol || 0) : (item.amountUsdc || 0));
-                const tok = (cachedRcpt?.token || (item.token as 'SOL' | 'USDC' | 'SKR')) || 'SOL';
-                const payer = cachedRcpt?.payerAddress || item.counterparty || 'Solana Wallet';
-
-                let isRealBlinkSale = false;
-                let blinkTitle = '';
-
-                // STRICT check: a transaction is only a Blink Sale if the stored receipt
-                // explicitly carries a blinkId. Memo heuristics and amount-matching are
-                // too imprecise and tag normal P2P transfers as sales.
-                if (cachedRcpt?.blinkId) {
-                  isRealBlinkSale = true;
-                  const foundBlink = PhysicalBlinkRegistry.getBlinkById(cachedRcpt.blinkId);
-                  blinkTitle = foundBlink?.name || cachedRcpt.blinkTitle || 'Blink Sale';
-                }
-
-                if (amt > 0) {
-                  if (isRealBlinkSale) {
-                    NotificationService.notifyBlinkPaid(
-                      blinkTitle || 'Blink Sale',
-                      amt,
-                      tok,
-                      payer,
-                      item.signature,
-                      cachedRcpt?.blinkId
-                    );
-                  } else {
-                    NotificationService.notifyPaymentReceived(
-                      amt,
-                      tok,
-                      payer,
-                      item.signature
-                    );
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        // Seed all known signatures into the reference set
+        // Seed all on-chain signatures into knownSignaturesRef so history is tracked cleanly
         combined.forEach((item) => {
           if (item.signature) {
             knownSignaturesRef.current.add(item.signature);

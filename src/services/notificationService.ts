@@ -168,6 +168,20 @@ class NotificationServiceManager {
     }
   }
 
+  public deleteNotification(id: string): void {
+    const item = this.notifications.find(n => n.id === id);
+    if (item) {
+      if (item.signature) {
+        this.clearedSignatures.add(item.signature);
+        this.clearedSignatures.add(`${item.signature}_${item.type}`);
+      }
+      this.clearedSignatures.add(item.id);
+      this.saveClearedToStorage();
+    }
+    this.notifications = this.notifications.filter(n => n.id !== id);
+    this.saveToStorage();
+  }
+
   public clearAll(): void {
     this.clearedAtTimestamp = Date.now();
     for (const n of this.notifications) {
@@ -184,7 +198,7 @@ class NotificationServiceManager {
     this.saveToStorage();
   }
 
-  public addNotification(notification: Omit<AppNotification, 'id' | 'timestamp' | 'read'>): AppNotification {
+  public addNotification(notification: Omit<AppNotification, 'id' | 'timestamp' | 'read'> & { timestamp?: number }): AppNotification {
     // Ignore invalid 0-amount or empty notifications
     if (
       (notification.type === 'payment_received' || notification.type === 'payment_sent' || notification.type === 'blink_paid') &&
@@ -203,8 +217,8 @@ class NotificationServiceManager {
       }
     }
 
-    // Never re-add notifications if cleared timestamp is newer than the transaction
-    if (this.clearedAtTimestamp > 0 && Date.now() < this.clearedAtTimestamp + 1000) {
+    // Never re-add notifications if timestamp is older than clearedAtTimestamp
+    if (notification.timestamp && this.clearedAtTimestamp > 0 && notification.timestamp <= this.clearedAtTimestamp) {
       return { id: '', type: notification.type, title: '', message: '', timestamp: Date.now(), read: true };
     }
 

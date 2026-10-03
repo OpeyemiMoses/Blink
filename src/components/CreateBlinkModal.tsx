@@ -622,12 +622,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 10,
     paddingHorizontal: 11,
-    paddingVertical: 7,
-    fontSize: 11,
+    paddingVertical: 6,
+    fontSize: 10.5,
   },
   monoInput: {
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 10,
+    fontSize: 9.5,
   },
   textArea: {
     height: 52,
@@ -641,7 +641,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   prefixText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     marginRight: 3,
   },

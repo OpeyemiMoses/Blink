@@ -68,7 +68,7 @@ export const ReceiveModal: React.FC<ReceiveModalProps> = ({
             <View style={styles.qrBox}>
               <UniversalQrCode
                 value={publicKey}
-                size={180}
+                size={230}
                 bgColor="#FFFFFF"
                 fgColor="#090A0F"
               />
@@ -214,8 +214,10 @@ const styles = StyleSheet.create({
   },
   qrBox: {
     backgroundColor: '#FFFFFF',
-    padding: 14,
+    padding: 8,
     borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   addressContainer: {
     marginTop: 14,

@@ -1425,10 +1425,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#222738',
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10.5,
   },
   usernameInputWrap: {
     flexDirection: 'row',
@@ -1441,15 +1441,15 @@ const styles = StyleSheet.create({
   },
   atSymbol: {
     color: '#5B67F6',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
     marginRight: 4,
   },
   usernameInput: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 8,
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10.5,
   },
   bioInput: {
     minHeight: 70,

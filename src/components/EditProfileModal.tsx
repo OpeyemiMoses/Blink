@@ -1000,9 +1000,9 @@ const styles = StyleSheet.create({
     borderColor: '#22293A',
     borderRadius: 10,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 10.5,
   },
   bioInput: {
     height: 70,
@@ -1019,7 +1019,7 @@ const styles = StyleSheet.create({
   },
   atSign: {
     color: '#5B67F6',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     marginRight: 4,
   },

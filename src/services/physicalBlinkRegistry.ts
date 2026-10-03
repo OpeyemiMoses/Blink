@@ -100,6 +100,7 @@ export class PhysicalBlinkRegistry {
                 current[existingIdx] = {
                   ...existing,
                   ...cb,
+                  imageUrl: cb.imageUrl || existing.imageUrl,
                   stats: {
                     taps: maxTaps,
                     completed: maxCompleted,

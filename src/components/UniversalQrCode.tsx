@@ -12,7 +12,7 @@ interface UniversalQrCodeProps {
 
 export const UniversalQrCode: React.FC<UniversalQrCodeProps> = ({
   value,
-  size = 180,
+  size = 220,
   bgColor = '#FFFFFF',
   fgColor = '#090A0F',
   style,
@@ -35,7 +35,6 @@ export const UniversalQrCode: React.FC<UniversalQrCodeProps> = ({
       QRCode.toString(value, {
         type: 'svg',
         margin: 1,
-        width: size,
         color: {
           dark: fgColor,
           light: bgColor,
@@ -44,8 +43,8 @@ export const UniversalQrCode: React.FC<UniversalQrCodeProps> = ({
         .then((svg) => {
           if (isMounted && svg) {
             const styledSvg = svg.replace(
-              /<svg\b([^>]*)>/i,
-              `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" $1 style="width:${size}px;height:${size}px;display:block;border-radius:8px;">`
+              /<svg\b/i,
+              '<svg width="100%" height="100%" style="width:100%;height:100%;display:block;border-radius:8px;" '
             );
             setSvgHtml(styledSvg);
           }

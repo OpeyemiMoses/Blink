@@ -177,6 +177,7 @@ export class DatabaseService {
       this.blinks[existingIndex] = {
         ...this.blinks[existingIndex],
         ...blink,
+        imageUrl: blink.imageUrl !== undefined ? blink.imageUrl : this.blinks[existingIndex].imageUrl,
         updatedAt: Date.now(),
       };
     } else {

@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 10.5,
     fontWeight: '600',
     outlineStyle: 'none' as any,
   },

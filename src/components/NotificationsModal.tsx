@@ -282,12 +282,25 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                           ) : (
                             <View />
                           )}
-                          {n.signature && (
-                            <View style={styles.receiptHintRow}>
-                              <Text style={[styles.receiptHintText, { color: colors.accent }]}>View Receipt</Text>
-                              <ExternalLink size={10} color={colors.accent} />
-                            </View>
-                          )}
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                            {n.signature && (
+                              <View style={styles.receiptHintRow}>
+                                <Text style={[styles.receiptHintText, { color: colors.accent }]}>View Receipt</Text>
+                                <ExternalLink size={10} color={colors.accent} />
+                              </View>
+                            )}
+                            <TouchableOpacity
+                              onPress={(e) => {
+                                (e as any)?.stopPropagation?.();
+                                NotificationService.deleteNotification(n.id);
+                                reloadNotifications();
+                              }}
+                              style={{ padding: 4 }}
+                              activeOpacity={0.6}
+                            >
+                              <Trash2 size={12} color={colors.textMuted} />
+                            </TouchableOpacity>
+                          </View>
                         </View>
                       </View>
 
