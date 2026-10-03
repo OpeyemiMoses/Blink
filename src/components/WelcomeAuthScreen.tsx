@@ -18,6 +18,7 @@ import {
   CheckCircle2,
 } from 'lucide-react-native';
 import { usePrivy, useLoginWithOAuth } from '../auth/privyAdapter';
+import { PrivyNativeBridge } from '../auth/privyAdapter';
 import { useTheme } from '../theme/ThemeContext';
 import { BlinkBrandMark, BlinkLogo } from './BrandLogos';
 import { PrivyIcon } from './PrivyIcon';
@@ -32,6 +33,31 @@ import {
 import { PhantomIcon, SolflareIcon } from './WalletIcons';
 import { SolanaMobileStackService, InstalledWalletInfo } from '../services/solanaMobileStackService';
 import { ToastService } from '../services/toastService';
+
+/**
+ * Detect if we're running inside a Capacitor Android WebView.
+ * Uses multiple signals for reliability:
+ * 1. Android WebView UA always contains "wv" (most reliable)
+ * 2. window.Capacitor object (injected by native bridge)
+ * 3. Platform + Capacitor combo
+ * This avoids relying on isNativePlatform() timing issues.
+ */
+const IS_ANDROID_WEBVIEW = (() => {
+  try {
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent || '';
+    // Capacitor WebView on Android always has 'wv' in user agent
+    if (/wv/i.test(ua) && /android/i.test(ua)) return true;
+    // Secondary check: Capacitor object present
+    if (typeof window !== 'undefined') {
+      const cap = (window as any).Capacitor;
+      if (cap?.isNativePlatform?.()) return true;
+      if (cap?.getPlatform?.() === 'android') return true;
+      if (cap?.platform === 'android') return true;
+    }
+    return false;
+  } catch { return false; }
+})();
 
 interface WelcomeAuthScreenProps {
   onContinueGuest: () => void;
@@ -66,31 +92,28 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
     };
   }, []);
 
-  const { initOAuth } = useLoginWithOAuth({
-    onError: (err: any) => {
-      console.warn('OAuth error:', err);
-      const msg = err?.message || '';
-      if (msg.includes('popup') || msg.includes('origin') || msg.includes('domain') || msg.includes('block')) {
-        setAuthNotice('Google popup was blocked or tunnel domain restricted. Opening sign-in modal...');
+  // ─── Unified login handler ────────────────────────────────────────────────
+  // In Capacitor APK: ALWAYS open the in-app PrivyAuthModal (no browser OAuth).
+  // On Railway web browser: use the real Privy SDK (real OAuth flows).
+  const openAuthModal = (opts?: { provider?: string; mode?: string }) => {
+    if (IS_ANDROID_WEBVIEW) {
+      // Native path: show in-app modal — email OTP + simulated social logins
+      PrivyNativeBridge.open({ mode: 'login', ...opts });
+    } else {
+      // Web path: real Privy OAuth
+      if (opts?.provider) {
+        login({ provider: opts.provider });
+      } else if (opts?.mode) {
+        login({ mode: opts.mode });
+      } else {
+        login();
       }
-      login({ provider: 'google' });
-    },
-  });
-
-  const handleGoogleLogin = () => {
-    setAuthNotice(null);
-    login({ provider: 'google' });
+    }
   };
 
-  const handleEmailLogin = () => {
-    setAuthNotice(null);
-    login({ mode: 'email' });
-  };
-
-  const handleSocialLogin = (provider: string) => {
-    setAuthNotice(null);
-    login({ provider });
-  };
+  const handleGoogleLogin = () => { setAuthNotice(null); openAuthModal({ provider: 'google' }); };
+  const handleEmailLogin = () => { setAuthNotice(null); openAuthModal({ mode: 'email' }); };
+  const handleSocialLogin = (provider: string) => { setAuthNotice(null); openAuthModal({ provider }); };
 
   const handleConnectInstalledWallet = async (walletId: 'phantom' | 'solflare' | 'backpack' | 'mwa') => {
     try {
@@ -113,15 +136,25 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
         await SolanaMobileStackService.connectWalletApp(detected[0].id);
         return;
       }
+      // Try Seeker Seed Vault / MWA
       const mwaResult = await SolanaMobileStackService.connectMWA();
       if (mwaResult) {
         ToastService.success(`Connected to ${mwaResult.name}`);
         return;
       }
-      ToastService.info('No external Solana wallet app responded. You can sign in with Privy below or install Phantom.');
+      // Final fallback: open in-app modal with wallet options
+      if (IS_ANDROID_WEBVIEW) {
+        PrivyNativeBridge.open({ mode: 'login', section: 'wallets' });
+      } else {
+        ToastService.info('No Solana wallet app found. Install Phantom or use Privy login.');
+      }
     } catch (err: any) {
       console.warn('MWA connect error:', err);
-      ToastService.info('No external Solana wallet responded. Please use Privy login.');
+      if (IS_ANDROID_WEBVIEW) {
+        PrivyNativeBridge.open({ mode: 'login', section: 'wallets' });
+      } else {
+        ToastService.info('No external Solana wallet responded. Please use Privy login.');
+      }
     }
   };
 
@@ -183,7 +216,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
         {/* Primary 1-Click Privy Action */}
         <TouchableOpacity
           style={styles.primaryPrivyBtn}
-          onPress={login}
+          onPress={() => openAuthModal()}
           activeOpacity={0.85}
         >
           <PrivyIcon size={20} />

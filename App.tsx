@@ -101,6 +101,20 @@ function BlinkMainApp() {
 
   // Splash Screen, Guest mode & Onboarding state
   const [showSplash, setShowSplash] = useState(true);
+  // Extra gate: don't show WelcomeAuthScreen until Privy SDK has confirmed auth state.
+  // This prevents the 1-frame flash of WelcomeAuthScreen on app restart when the user
+  // is actually logged in (real Privy needs ~200-400ms to rehydrate its JWT session).
+  const [isAuthReady, setIsAuthReady] = useState(() => {
+    // If we already have a restored native session from localStorage, skip the wait
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const nativeUser = window.localStorage.getItem('blink_privy_user_v1');
+        const nativeWallet = window.localStorage.getItem('blink_connected_native_wallet');
+        if (nativeUser || nativeWallet) return true;
+      } catch {}
+    }
+    return false;
+  });
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(() => UserProfileService.getProfile());
@@ -984,9 +998,27 @@ function BlinkMainApp() {
     setRefreshTrigger((prev) => prev + 1);
   };
 
+  // Mark auth as ready once Privy SDK confirms state (prevents WelcomeAuthScreen flash)
+  useEffect(() => {
+    if (ready) {
+      // Small delay ensures React has propagated the authenticated state to all children
+      const t = setTimeout(() => setIsAuthReady(true), 200);
+      return () => clearTimeout(t);
+    }
+  }, [ready]);
+
   // 1. Loading splash screen with disassociating pixels & Lego mascots (1.2s duration)
   if (showSplash) {
     return <LaunchSplashScreen onFinish={() => setShowSplash(false)} durationMs={1200} />;
+  }
+
+  // 1b. Brief post-splash auth settling — keep splash-like background while Privy rehydrates
+  if (!isAuthReady && !isUserLoggedIn) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#07080B', alignItems: 'center', justifyContent: 'center' }}>
+        <StatusBar style="light" />
+      </SafeAreaView>
+    );
   }
 
   let mainScreenContent: React.ReactNode = null;

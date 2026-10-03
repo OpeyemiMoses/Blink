@@ -162,11 +162,53 @@ export class SolanaMobileStackService {
   }
 
   /**
-   * Authorize with Mobile Wallet Adapter (MWA) on Android / Seeker device.
+   * Authorize with Mobile Wallet Adapter (MWA) / Seeker Seed Vault.
+   * In Capacitor WebViews, the React Native MWA transact() is unavailable.
+   * Instead, we use the solana-wallet:// intent via AppLauncher to open the
+   * Seed Vault / any MWA-compatible wallet natively, then rely on deep link
+   * callback via blink://onConnect to receive the authorized public key.
    */
   static async connectMWA(): Promise<WalletAccount | null> {
+    // Try Capacitor AppLauncher first (works in both web and native contexts)
     try {
-      // Dynamically import MWA web3js
+      const seedVaultScheme = 'solana-wallet://';
+
+      if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable?.('AppLauncher')) {
+        // Check if Seed Vault / MWA wallet is installed
+        let canOpen = false;
+        try {
+          const res = await AppLauncher.canOpenUrl({ url: seedVaultScheme });
+          canOpen = Boolean(res?.value);
+        } catch { canOpen = false; }
+
+        if (canOpen) {
+          // Build the connect URL with our dapp keypair for encrypted handshake
+          const dappKeyPair = nacl.box.keyPair();
+          const secretHex = Buffer.from(dappKeyPair.secretKey).toString('hex');
+          if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.setItem('mwa_dapp_secret_key', secretHex);
+          }
+          const dappPubkeyBase58 = encodeBs58(dappKeyPair.publicKey);
+          const appUrl = encodeURIComponent('https://blink-production-5c36.up.railway.app');
+          const redirectLink = encodeURIComponent('blink://onConnect');
+          const cluster = SolanaService.getNetwork() === 'devnet' ? 'devnet' : 'mainnet-beta';
+
+          const mwaUrl = `solana-wallet://v1/connect?app_url=${appUrl}&dapp_encryption_public_key=${dappPubkeyBase58}&redirect_link=${redirectLink}&cluster=${cluster}`;
+
+          await AppLauncher.openUrl({ url: mwaUrl });
+          // Returns null here — account arrives via deep link callback (blink://onConnect)
+          return null;
+        }
+
+        ToastService.info('Seed Vault / MWA wallet not installed on this device.');
+        return null;
+      }
+    } catch (err: any) {
+      console.warn('Capacitor AppLauncher MWA attempt:', err?.message || err);
+    }
+
+    // Fallback: try React Native MWA transact() (works on Expo / bare RN, not Capacitor)
+    try {
       const { transact } = await import('@solana-mobile/mobile-wallet-adapter-protocol-web3js');
       if (typeof transact !== 'function') {
         throw new Error('MWA transact not available on this platform');
@@ -203,7 +245,7 @@ export class SolanaMobileStackService {
         return authorizedAccount;
       }
     } catch (err: any) {
-      console.warn('MWA connect attempt:', err?.message || err);
+      console.warn('MWA transact fallback attempt:', err?.message || err);
     }
 
     return null;
@@ -336,7 +378,8 @@ export class SolanaMobileStackService {
       const storedSecretHex =
         typeof window !== 'undefined' && window.localStorage
           ? window.localStorage.getItem('phantom_dapp_secret_key') ||
-            window.localStorage.getItem('solflare_dapp_secret_key')
+            window.localStorage.getItem('solflare_dapp_secret_key') ||
+            window.localStorage.getItem('mwa_dapp_secret_key')
           : null;
 
       if (!storedSecretHex) {
@@ -455,26 +498,60 @@ export class SolanaMobileStackService {
    */
   static async connectWalletApp(walletId: 'phantom' | 'solflare' | 'backpack' | 'mwa'): Promise<WalletAccount | null> {
     if (walletId === 'phantom') {
-      await this.connectPhantomMobile();
-      return null;
+      // Check if Phantom is actually installed before trying to open it
+      let phantomInstalled = false;
+      try {
+        if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable?.('AppLauncher')) {
+          const res = await AppLauncher.canOpenUrl({ url: 'phantom://' });
+          phantomInstalled = Boolean(res?.value);
+        }
+      } catch { phantomInstalled = false; }
+
+      if (phantomInstalled) {
+        await this.connectPhantomMobile();
+        return null;
+      } else {
+        ToastService.info('Phantom is not installed on this device. Install it from the Play Store.');
+        return null;
+      }
     }
     if (walletId === 'solflare') {
-      await this.connectSolflareMobile();
-      return null;
+      let solflareInstalled = false;
+      try {
+        if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable?.('AppLauncher')) {
+          const res = await AppLauncher.canOpenUrl({ url: 'solflare://' });
+          solflareInstalled = Boolean(res?.value);
+        }
+      } catch { solflareInstalled = false; }
+
+      if (solflareInstalled) {
+        await this.connectSolflareMobile();
+        return null;
+      } else {
+        ToastService.info('Solflare is not installed on this device. Install it from the Play Store.');
+        return null;
+      }
     }
     if (walletId === 'mwa') {
       return await this.connectMWA();
     }
 
-    const scheme = walletId === 'backpack' ? 'backpack://' : 'phantom://';
+    // Backpack
+    const scheme = 'backpack://';
     try {
       if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable?.('AppLauncher')) {
-        await AppLauncher.openUrl({ url: scheme });
+        const res = await AppLauncher.canOpenUrl({ url: scheme });
+        if (res?.value) {
+          await AppLauncher.openUrl({ url: scheme });
+        } else {
+          ToastService.info('Backpack is not installed on this device.');
+        }
       } else {
         await Linking.openURL(scheme);
       }
     } catch (err) {
       console.warn('Cannot open wallet scheme:', err);
+      ToastService.info('Could not open Backpack wallet.');
     }
     return null;
   }
