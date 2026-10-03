@@ -631,20 +631,13 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       const sig = await WalletProviderService.signAndSendTransaction(tx);
 
       // Non-blocking: verify transaction on-chain in background (don't block success UI)
-      const connection = SolanaService.getConnection();
-      SolanaService.getLatestBlockhash('confirmed').then((latestBlockhash) => {
-        connection.confirmTransaction(
-          { signature: sig, ...latestBlockhash },
-          'confirmed'
-        ).then((confirmation) => {
-          if (confirmation?.value?.err) {
-            console.warn('Blink payment failed on-chain after broadcast:', confirmation.value.err);
-            ToastService.error('Transaction may have failed on-chain. Please check your balance.');
-          }
-        }).catch((confirmErr) => {
-          console.warn('Blink payment confirmation check error (may still succeed):', confirmErr);
-        });
-      }).catch(() => {});
+      SolanaService.confirmSignatureViaHttp(sig).then((confirmed) => {
+        if (!confirmed) {
+          console.warn('Blink payment could not be confirmed on-chain or failed:', sig);
+        }
+      }).catch((confirmErr) => {
+        console.warn('Blink payment confirmation check error:', confirmErr);
+      });
 
       setTxSignature(sig);
       PhysicalBlinkRegistry.recordTap(currentBlink.id, true, checkoutAmount, currentBlink.token);

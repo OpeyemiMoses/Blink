@@ -161,10 +161,9 @@ export class BlinkEngine {
       signature = await WalletProviderService.signAndSendTransaction(tx);
     }
 
-    // Wait for on-chain confirmation
+    // Wait for on-chain confirmation via HTTP polling
     try {
-      const conn = SolanaService.getConnection();
-      await conn.confirmTransaction(signature, 'confirmed');
+      await SolanaService.confirmSignatureViaHttp(signature, 15);
     } catch {}
 
     const amountMatch = selectedAction.label.match(/([\d.]+)\s*(USDC|SOL)/i);

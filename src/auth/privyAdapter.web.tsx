@@ -83,8 +83,31 @@ export function useCreateWallet() {
   return useCreateWalletWeb();
 }
 
+import { createSolanaRpc, createSolanaRpcSubscriptions } from '@solana/kit';
+
 export function useSignAndSendTransaction() {
-  return useSignAndSendTransactionWeb();
+  const hook = useSignAndSendTransactionWeb();
+  return {
+    signAndSendTransaction: async (...args: any[]) => {
+      // Automatically inject optimisticBroadcast: true and skipSimulation: true
+      // This bypasses Privy's broken devnet WebSocket endpoint ('wss://solana-devnet.rpc.privy.systems')
+      // which returns HTTP 500 and throws 'Solana error #8190004: WebSocket failed to connect'
+      const modifiedArgs = args.map(arg => {
+        if (typeof arg === 'object' && arg !== null) {
+          return {
+            ...arg,
+            options: {
+              ...arg.options,
+              optimisticBroadcast: true,
+              skipSimulation: true,
+            },
+          };
+        }
+        return arg;
+      });
+      return hook.signAndSendTransaction(...(modifiedArgs as [any]));
+    },
+  };
 }
 
 export function useSignTransaction() {
@@ -100,7 +123,21 @@ export function toSolanaWalletConnectors() {
 }
 
 export function defaultSolanaRpcsPlugin(...args: any[]) {
-  return (defaultSolanaRpcsPluginWeb as any)(...args);
+  return {
+    id: Symbol.for('default-solana-rpcs-plugin'),
+    getDefaultRpcs: () => ({
+      'solana:mainnet': {
+        rpc: createSolanaRpc('https://api.mainnet-beta.solana.com'),
+        rpcSubscriptions: createSolanaRpcSubscriptions('wss://api.mainnet-beta.solana.com/'),
+        blockExplorerUrl: 'https://explorer.solana.com?cluster=mainnet',
+      },
+      'solana:devnet': {
+        rpc: createSolanaRpc('https://api.devnet.solana.com'),
+        rpcSubscriptions: createSolanaRpcSubscriptions('wss://api.devnet.solana.com/'),
+        blockExplorerUrl: 'https://explorer.solana.com?cluster=devnet',
+      },
+    }),
+  };
 }
 
 // Dummy bridge retained for backwards compatibility

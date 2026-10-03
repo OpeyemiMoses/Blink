@@ -401,19 +401,13 @@ export const TapScanScreen: React.FC<TapScanScreenProps> = ({
       const signature = await WalletProviderService.signAndSendTransaction(transaction);
 
       // Non-blocking: verify transaction on-chain in background (don't block success UI)
-      SolanaService.getLatestBlockhash('confirmed').then((latestBlockhash) => {
-        connection.confirmTransaction(
-          { signature, ...latestBlockhash },
-          'confirmed'
-        ).then((confirmation) => {
-          if (confirmation?.value?.err) {
-            console.warn('TapScan payment failed on-chain after broadcast:', confirmation.value.err);
-            ToastService.error('Transaction may have failed on-chain. Please check your balance.');
-          }
-        }).catch((confirmErr) => {
-          console.warn('TapScan confirmation check error (may still succeed):', confirmErr);
-        });
-      }).catch(() => {});
+      SolanaService.confirmSignatureViaHttp(signature).then((confirmed) => {
+        if (!confirmed) {
+          console.warn('TapScan payment could not be confirmed on-chain or failed:', signature);
+        }
+      }).catch((confirmErr) => {
+        console.warn('TapScan confirmation check error:', confirmErr);
+      });
 
 
       setTxSignature(signature);

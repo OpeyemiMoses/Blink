@@ -269,8 +269,7 @@ export class WalletProviderService {
         const bal = await connection.getBalance(localKeypair.publicKey);
         if (bal < 0.005 * LAMPORTS_PER_SOL) {
           const airdropSig = await connection.requestAirdrop(localKeypair.publicKey, 1 * LAMPORTS_PER_SOL);
-          const latestBh = await connection.getLatestBlockhash('confirmed');
-          await connection.confirmTransaction({ signature: airdropSig, ...latestBh }, 'confirmed');
+          await SolanaService.confirmSignatureViaHttp(airdropSig, 15);
         }
       } catch (airdropErr) {
         console.warn('Devnet airdrop check warning:', airdropErr);
@@ -283,8 +282,10 @@ export class WalletProviderService {
 
       if (transaction.instructions.length > 0) {
         for (const ix of transaction.instructions) {
-          if (ix.keys.length > 0 && ix.keys[0].isSigner && !ix.keys[0].pubkey.equals(localKeypair.publicKey)) {
-            ix.keys[0].pubkey = localKeypair.publicKey;
+          for (const key of ix.keys) {
+            if (key.isSigner && !key.pubkey.equals(localKeypair.publicKey)) {
+              key.pubkey = localKeypair.publicKey;
+            }
           }
         }
       }

@@ -7,6 +7,11 @@ import {
   Transaction,
   TransactionInstruction,
 } from '@solana/web3.js';
+import {
+  createTransferInstruction,
+  createAssociatedTokenAccountInstruction,
+  getAssociatedTokenAddressSync,
+} from '@solana/spl-token';
 import bs58 from 'bs58';
 import { ExternalWalletService } from './externalWalletService';
 import { getApiUrl } from './apiConfig';
@@ -155,6 +160,40 @@ export class SolanaService {
       }
     }
     throw new Error('Transaction confirmation timed out. It may still confirm — check your balance.');
+  }
+
+  /**
+   * Poll for transaction confirmation via HTTP (no WebSocket).
+   * Safe to call from background without triggering WS connection errors.
+   */
+  static async confirmSignatureViaHttp(signature: string, maxAttempts = 30): Promise<boolean> {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        const statusRes = await fetch(getApiUrl('/api/solana-rpc'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'getSignatureStatuses',
+            params: [[signature], { searchTransactionHistory: true }],
+          }),
+        });
+        const statusJson = await statusRes.json();
+        const status = statusJson?.result?.value?.[0];
+        if (status) {
+          if (status.err) {
+            console.warn('Transaction failed on-chain:', status.err);
+            return false;
+          }
+          if (status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized') {
+            return true;
+          }
+        }
+      } catch {}
+    }
+    return false;
   }
 
   /**
@@ -683,6 +722,26 @@ export class SolanaService {
   }
 
   /**
+   * Resolve which USDC mint the sender holds tokens on.
+   * Devnet has two common mints: official USDC_DEVNET_MINT (4zMMC...) and secondary faucet mint (Gh9Zw...).
+   */
+  static async resolveUsdcMint(senderPubkey: PublicKey): Promise<PublicKey> {
+    try {
+      const primaryAta = getAssociatedTokenAddressSync(USDC_DEVNET_MINT, senderPubkey);
+      const acc1 = await this.getConnection().getAccountInfo(primaryAta);
+      if (acc1) return USDC_DEVNET_MINT;
+
+      const secondaryMint = new PublicKey('Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr');
+      const secondaryAta = getAssociatedTokenAddressSync(secondaryMint, senderPubkey);
+      const acc2 = await this.getConnection().getAccountInfo(secondaryAta);
+      if (acc2) return secondaryMint;
+    } catch (e) {
+      console.warn('resolveUsdcMint error:', e);
+    }
+    return USDC_DEVNET_MINT;
+  }
+
+  /**
    * Build complete on-chain USDC transfer transaction on Solana network.
    * Auto-creates recipient ATA if not already existing.
    */
@@ -691,23 +750,24 @@ export class SolanaService {
     recipientPubkey: PublicKey,
     amountUsdc: number
   ): Promise<Transaction> {
-    const senderAta = this.getAssociatedTokenAddress(senderPubkey, USDC_DEVNET_MINT);
-    const recipientAta = this.getAssociatedTokenAddress(recipientPubkey, USDC_DEVNET_MINT);
+    const mint = await this.resolveUsdcMint(senderPubkey);
+    const senderAta = getAssociatedTokenAddressSync(mint, senderPubkey);
+    const recipientAta = getAssociatedTokenAddressSync(mint, recipientPubkey);
 
     const transaction = new Transaction();
 
-    // Check if recipient ATA exists on Solana network
+    // Check if recipient ATA exists on Solana network; create if not
     const recipientAtaInfo = await this.getConnection().getAccountInfo(recipientAta);
     if (!recipientAtaInfo) {
       transaction.add(
-        this.createAssociatedTokenAccountInstruction(senderPubkey, recipientAta, recipientPubkey, USDC_DEVNET_MINT)
+        createAssociatedTokenAccountInstruction(senderPubkey, recipientAta, recipientPubkey, mint)
       );
     }
 
     // 1 USDC = 1,000,000 atomic units (6 decimals)
     const amountUnits = BigInt(Math.max(1, Math.round(amountUsdc * 1_000_000)));
     transaction.add(
-      this.createSplTokenTransferInstruction(senderAta, recipientAta, senderPubkey, amountUnits)
+      createTransferInstruction(senderAta, recipientAta, senderPubkey, amountUnits)
     );
 
     const latestBlockhash = await this.getLatestBlockhash('confirmed');
@@ -726,23 +786,24 @@ export class SolanaService {
     recipientPubkey: PublicKey,
     amountSkr: number
   ): Promise<Transaction> {
-    const senderAta = this.getAssociatedTokenAddress(senderPubkey, SKR_DEVNET_MINT);
-    const recipientAta = this.getAssociatedTokenAddress(recipientPubkey, SKR_DEVNET_MINT);
+    const mint = SKR_DEVNET_MINT;
+    const senderAta = getAssociatedTokenAddressSync(mint, senderPubkey);
+    const recipientAta = getAssociatedTokenAddressSync(mint, recipientPubkey);
 
     const transaction = new Transaction();
 
-    // Check if recipient ATA exists on Solana network
+    // Check if recipient ATA exists on Solana network; create if not
     const recipientAtaInfo = await this.getConnection().getAccountInfo(recipientAta);
     if (!recipientAtaInfo) {
       transaction.add(
-        this.createAssociatedTokenAccountInstruction(senderPubkey, recipientAta, recipientPubkey, SKR_DEVNET_MINT)
+        createAssociatedTokenAccountInstruction(senderPubkey, recipientAta, recipientPubkey, mint)
       );
     }
 
     // 1 SKR = 1,000,000 atomic units (6 decimals)
     const amountUnits = BigInt(Math.max(1, Math.round(amountSkr * 1_000_000)));
     transaction.add(
-      this.createSplTokenTransferInstruction(senderAta, recipientAta, senderPubkey, amountUnits)
+      createTransferInstruction(senderAta, recipientAta, senderPubkey, amountUnits)
     );
 
     const latestBlockhash = await this.getLatestBlockhash('confirmed');
@@ -763,11 +824,7 @@ export class SolanaService {
     try {
       const conn = this.getConnection();
       const signature = await conn.requestAirdrop(pubkey, 1 * LAMPORTS_PER_SOL);
-      const latestBlockhash = await this.getLatestBlockhash('confirmed');
-      await conn.confirmTransaction({
-        signature,
-        ...latestBlockhash
-      }, 'confirmed');
+      await this.confirmSignatureViaHttp(signature, 20);
       return signature;
     } catch (err: any) {
       const msg = err?.message || String(err);

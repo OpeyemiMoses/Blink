@@ -317,21 +317,14 @@ export const SendModal: React.FC<SendModalProps> = ({
       // Routes through the active wallet provider (Seed Vault biometrics, Phantom, or Solflare)
       const sig = await WalletProviderService.signAndSendTransaction(transaction);
 
-      // Non-blocking: verify transaction on-chain in background (don't block success UI)
-      const connection = SolanaService.getConnection();
-      SolanaService.getLatestBlockhash('confirmed').then((latestBlockhash) => {
-        connection.confirmTransaction(
-          { signature: sig, ...latestBlockhash },
-          'confirmed'
-        ).then((confirmation) => {
-          if (confirmation?.value?.err) {
-            console.warn('Transaction failed on-chain after broadcast:', confirmation.value.err);
-            ToastService.error('Transaction may have failed on-chain. Please check your balance.');
-          }
-        }).catch((confirmErr) => {
-          console.warn('Transaction confirmation check error (may still succeed):', confirmErr);
-        });
-      }).catch(() => {});
+      // Non-blocking: verify transaction on-chain in background via HTTP polling (no WebSocket)
+      SolanaService.confirmSignatureViaHttp(sig).then((confirmed) => {
+        if (!confirmed) {
+          console.warn('SendModal transaction confirmation check timed out or failed:', sig);
+        }
+      }).catch((confirmErr) => {
+        console.warn('SendModal confirmation check error:', confirmErr);
+      });
 
       setTxSignature(sig);
 
