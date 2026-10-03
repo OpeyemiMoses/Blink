@@ -1,0 +1,1 @@
+__d(function(g,r,i,a,m,e,d){"use strict";Object.defineProperty(e,'__esModule',{value:!0}),Object.defineProperty(e,"AppLauncherWeb",{enumerable:!0,get:function(){return t}});var n=r(d[0]);class t extends n.WebPlugin{async canOpenUrl(n){return{value:!0}}async openUrl(n){return window.open(n.url,'_blank'),{completed:!0}}}},7942,[7927]);

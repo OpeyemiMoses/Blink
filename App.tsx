@@ -67,7 +67,6 @@ import { Toast } from './src/components/Toast';
 import { ToastService } from './src/services/toastService';
 import { PickUsernameModal } from './src/components/PickUsernameModal';
 import { PushNotificationService } from './src/services/pushNotificationService';
-import { PrivyAuthModal } from './src/components/PrivyAuthModal';
 import { PrivyWebAuthBridge } from './src/components/PrivyWebAuthBridge';
 
 const solanaConnectors = toSolanaWalletConnectors();
@@ -133,16 +132,6 @@ function BlinkMainApp() {
   // In-app detail modal state for physical / scanned / deep-linked Blink
   const [selectedDetailBlink, setSelectedDetailBlink] = useState<PhysicalBlink | null>(null);
 
-  // Native In-App Privy Auth Modal state
-  const [authModalVisible, setAuthModalVisible] = useState(false);
-  const [authModalOptions, setAuthModalOptions] = useState<any>(null);
-
-  useEffect(() => {
-    return PrivyNativeBridge.subscribeModal((open: boolean, opts: any) => {
-      setAuthModalVisible(open);
-      setAuthModalOptions(opts);
-    });
-  }, []);
 
   // Native Connected Mobile Wallet (Phantom / Solflare / MWA)
   const [nativeWalletAccount, setNativeWalletAccount] = useState<WalletAccount | null>(() => {
@@ -1386,12 +1375,6 @@ function BlinkMainApp() {
         initialAvatarUrl={userProfile.avatarUrl}
       />
 
-      {/* In-App Native Privy Authentication Modal */}
-      <PrivyAuthModal
-        visible={authModalVisible}
-        onClose={() => PrivyNativeBridge.close()}
-        options={authModalOptions}
-      />
 
       {/* Universal Floating Toast Feedback System */}
       <Toast />
