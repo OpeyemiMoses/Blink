@@ -54,11 +54,6 @@ import { PrivyIcon } from '../components/PrivyIcon';
 import { BlinkIdService } from '../services/blinkIdService';
 import {
   EmailLogo,
-  GoogleLogo,
-  GithubLogo,
-  XLogo,
-  DiscordLogo,
-  TelegramLogo,
 } from '../components/SocialLogos';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -84,17 +79,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     logout,
     authenticated,
     linkEmail,
-    linkGoogle,
-    linkGithub,
-    linkTwitter,
-    linkDiscord,
-    linkTelegram,
     unlinkEmail,
-    unlinkGoogle,
-    unlinkGithub,
-    unlinkTwitter,
-    unlinkDiscord,
-    unlinkTelegram,
     deleteAccount,
   } = usePrivy();
 
@@ -412,22 +397,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         await linkEmail();
         return;
       }
-      if (provider === 'google' && typeof linkGoogle === 'function') {
-        await linkGoogle();
-        return;
-      }
-      if (provider === 'github' && typeof linkGithub === 'function') {
-        await linkGithub();
-        return;
-      }
-      if (provider === 'twitter' && typeof linkTwitter === 'function') {
-        await linkTwitter();
-        return;
-      }
-      if (provider === 'discord' && typeof linkDiscord === 'function') {
-        await linkDiscord();
-        return;
-      }
     } catch (err: any) {
       console.log('Privy link trigger error:', err);
     }
@@ -436,7 +405,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const handleConfirmBind = (provider: keyof LinkedAccounts) => {
     const val = bindingInput.trim();
     if (!val) {
-      showToast(`Please enter your ${provider} handle.`);
+      showToast(`Please enter your ${provider} address.`);
       return;
     }
 
@@ -446,8 +415,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     setBindingInput('');
     showToast(`Linked ${provider} successfully!`);
 
-    // If linking an email or Google account, check if this email previously owned a customized handle
-    if (provider === 'email' || provider === 'google') {
+    // If linking an email, check if this email previously owned a customized handle
+    if (provider === 'email') {
       UserProfileService.syncCloudProfile(activeAccount?.publicKey, val).then(synced => {
         if (synced && synced.username && !synced.username.startsWith('user_') && synced.username !== updated.username) {
           setProfile(synced);
@@ -461,30 +430,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   const handleUnbind = async (provider: keyof LinkedAccounts) => {
     try {
-      const githubLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'github_oauth' || a.type === 'github');
-      const googleLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'google_oauth' || a.type === 'google');
-      const twitterLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'twitter_oauth' || a.type === 'twitter');
-      const discordLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'discord_oauth' || a.type === 'discord');
-      const telegramLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'telegram');
-
       if (provider === 'email' && typeof unlinkEmail === 'function') {
         const addr = user?.email?.address || profile.linkedAccounts.email;
         if (addr) await unlinkEmail(addr);
-      } else if (provider === 'google' && typeof unlinkGoogle === 'function') {
-        const sub = user?.google?.subject || googleLinked?.subject;
-        if (sub) await unlinkGoogle(sub);
-      } else if (provider === 'github' && typeof unlinkGithub === 'function') {
-        const sub = user?.github?.subject || githubLinked?.subject;
-        if (sub) await unlinkGithub(sub);
-      } else if (provider === 'twitter' && typeof unlinkTwitter === 'function') {
-        const sub = user?.twitter?.subject || twitterLinked?.subject;
-        if (sub) await unlinkTwitter(sub);
-      } else if (provider === 'discord' && typeof unlinkDiscord === 'function') {
-        const sub = user?.discord?.subject || discordLinked?.subject;
-        if (sub) await unlinkDiscord(sub);
-      } else if (provider === 'telegram' && typeof unlinkTelegram === 'function') {
-        const sub = user?.telegram?.telegramUserId || telegramLinked?.telegramUserId;
-        if (sub) await unlinkTelegram(sub);
       }
     } catch (err) {
       console.log('Privy unlink error:', err);
@@ -914,17 +862,17 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       </View>
 
       {/* Privy 6 Linked Social Identities Section */}
+      {/* Privy Linked Account Section (Email Only) */}
       <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
         <View style={styles.cardTitleRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <PrivyIcon size={20} />
-            <Text style={[styles.sectionHeaderTitle, { color: colors.textPrimary }]}>LINKED IDENTITIES (PRIVY)</Text>
+            <Text style={[styles.sectionHeaderTitle, { color: colors.textPrimary }]}>LINKED ACCOUNT (PRIVY)</Text>
           </View>
-          <Text style={styles.identitiesCountText}>6 Providers Enabled</Text>
         </View>
 
         <Text style={[styles.sectionExplainer, { color: colors.textSecondary }]}>
-          Bind your verified web2 and web3 accounts directly to your BLINK identity.
+          Your verified email address linked to your BLINK non-custodial identity.
         </Text>
 
         <View style={styles.identitiesList}>
@@ -937,12 +885,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <View>
                 <Text style={[styles.providerName, { color: colors.textPrimary }]}>Email Address</Text>
                 <Text style={[styles.providerStatus, { color: colors.textMuted }]}>
-                  {profile.linkedAccounts.email || 'Not connected'}
+                  {profile.linkedAccounts.email || user?.email?.address || 'Not connected'}
                 </Text>
               </View>
             </View>
 
-            {profile.linkedAccounts.email ? (
+            {profile.linkedAccounts.email || user?.email?.address ? (
               <TouchableOpacity
                 onPress={() => handleUnbind('email')}
                 style={styles.unbindBtn}
@@ -958,188 +906,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 activeOpacity={0.7}
               >
                 <Text style={[styles.bindBtnText, { color: colors.textPrimary }]}>Link Email</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Google */}
-          <View style={[styles.identityItem, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}>
-            <View style={styles.identityItemLeft}>
-              <View style={[styles.providerIconBox, { backgroundColor: 'transparent' }]}>
-                <GoogleLogo size={24} />
-              </View>
-              <View>
-                <Text style={[styles.providerName, { color: colors.textPrimary }]}>Google</Text>
-                <Text style={[styles.providerStatus, { color: colors.textMuted }]}>
-                  {profile.linkedAccounts.google || 'Not connected'}
-                </Text>
-              </View>
-            </View>
-
-            {profile.linkedAccounts.google ? (
-              <TouchableOpacity
-                onPress={() => handleUnbind('google')}
-                style={styles.unbindBtn}
-                activeOpacity={0.7}
-              >
-                <Trash2 size={13} color="#EF4444" />
-                <Text style={styles.unbindBtnText}>Unlink</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                onPress={() => handleStartBind('google')}
-                style={[styles.bindBtn, { backgroundColor: colors.bgInput, borderColor: colors.border }]}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.bindBtnText, { color: colors.textPrimary }]}>Link Google</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* GitHub */}
-          {(() => {
-            const githubLinked = (user as any)?.linkedAccounts?.find((a: any) => a.type === 'github_oauth' || a.type === 'github');
-            const githubVal = profile.linkedAccounts.github || user?.github?.username || githubLinked?.username || null;
-            return (
-              <View style={[styles.identityItem, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}>
-                <View style={styles.identityItemLeft}>
-                  <View style={[styles.providerIconBox, { backgroundColor: 'transparent' }]}>
-                    <GithubLogo size={24} />
-                  </View>
-                  <View>
-                    <Text style={[styles.providerName, { color: colors.textPrimary }]}>GitHub</Text>
-                    <Text style={[styles.providerStatus, { color: colors.textMuted }]}>
-                      {githubVal
-                        ? `@${githubVal.replace(/^@/, '')}`
-                        : 'Not connected'}
-                    </Text>
-                  </View>
-                </View>
-
-                {githubVal ? (
-                  <TouchableOpacity
-                    onPress={() => handleUnbind('github')}
-                    style={styles.unbindBtn}
-                    activeOpacity={0.7}
-                  >
-                    <Trash2 size={13} color="#EF4444" />
-                    <Text style={styles.unbindBtnText}>Unlink</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    onPress={() => handleStartBind('github')}
-                    style={[styles.bindBtn, { backgroundColor: colors.bgInput, borderColor: colors.border }]}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.bindBtnText, { color: colors.textPrimary }]}>Link GitHub</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            );
-          })()}
-
-          {/* X (Twitter) */}
-          <View style={[styles.identityItem, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}>
-            <View style={styles.identityItemLeft}>
-              <View style={[styles.providerIconBox, { backgroundColor: isDark ? '#000000' : '#111827' }]}>
-                <XLogo size={20} />
-              </View>
-              <View>
-                <Text style={[styles.providerName, { color: colors.textPrimary }]}>X (Twitter)</Text>
-                <Text style={[styles.providerStatus, { color: colors.textMuted }]}>
-                  {profile.linkedAccounts.twitter
-                    ? `@${profile.linkedAccounts.twitter.replace(/^@/, '')}`
-                    : 'Not connected'}
-                </Text>
-              </View>
-            </View>
-
-            {profile.linkedAccounts.twitter ? (
-              <TouchableOpacity
-                onPress={() => handleUnbind('twitter')}
-                style={styles.unbindBtn}
-                activeOpacity={0.7}
-              >
-                <Trash2 size={13} color="#EF4444" />
-                <Text style={styles.unbindBtnText}>Unlink</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                onPress={() => handleStartBind('twitter')}
-                style={[styles.bindBtn, { backgroundColor: colors.bgInput, borderColor: colors.border }]}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.bindBtnText, { color: colors.textPrimary }]}>Link X</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Discord */}
-          <View style={[styles.identityItem, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}>
-            <View style={styles.identityItemLeft}>
-              <View style={[styles.providerIconBox, { backgroundColor: 'transparent' }]}>
-                <DiscordLogo size={24} />
-              </View>
-              <View>
-                <Text style={[styles.providerName, { color: colors.textPrimary }]}>Discord</Text>
-                <Text style={[styles.providerStatus, { color: colors.textMuted }]}>
-                  {profile.linkedAccounts.discord || 'Not connected'}
-                </Text>
-              </View>
-            </View>
-
-            {profile.linkedAccounts.discord ? (
-              <TouchableOpacity
-                onPress={() => handleUnbind('discord')}
-                style={styles.unbindBtn}
-                activeOpacity={0.7}
-              >
-                <Trash2 size={13} color="#EF4444" />
-                <Text style={styles.unbindBtnText}>Unlink</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                onPress={() => handleStartBind('discord')}
-                style={[styles.bindBtn, { backgroundColor: colors.bgInput, borderColor: colors.border }]}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.bindBtnText, { color: colors.textPrimary }]}>Link Discord</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Telegram */}
-          <View style={[styles.identityItem, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}>
-            <View style={styles.identityItemLeft}>
-              <View style={[styles.providerIconBox, { backgroundColor: 'transparent' }]}>
-                <TelegramLogo size={24} />
-              </View>
-              <View>
-                <Text style={[styles.providerName, { color: colors.textPrimary }]}>Telegram</Text>
-                <Text style={[styles.providerStatus, { color: colors.textMuted }]}>
-                  {profile.linkedAccounts.telegram
-                    ? `@${profile.linkedAccounts.telegram.replace(/^@/, '')}`
-                    : 'Not connected'}
-                </Text>
-              </View>
-            </View>
-
-            {profile.linkedAccounts.telegram ? (
-              <TouchableOpacity
-                onPress={() => handleUnbind('telegram')}
-                style={styles.unbindBtn}
-                activeOpacity={0.7}
-              >
-                <Trash2 size={13} color="#EF4444" />
-                <Text style={styles.unbindBtnText}>Unlink</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                onPress={() => handleStartBind('telegram')}
-                style={[styles.bindBtn, { backgroundColor: colors.bgInput, borderColor: colors.border }]}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.bindBtnText, { color: colors.textPrimary }]}>Link Telegram</Text>
               </TouchableOpacity>
             )}
           </View>

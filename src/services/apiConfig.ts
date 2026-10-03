@@ -15,12 +15,16 @@ export function getApiBaseUrl(): string {
     return process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, '');
   }
 
-  // 2. If running in a web browser, use current origin
+  // 2. If running in a web browser on a remote origin (not localhost / capacitor)
   if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin.replace(/\/$/, '');
+    const origin = window.location.origin.replace(/\/$/, '');
+    const isLocalhost = origin.includes('localhost') || origin.includes('127.0.0.1') || origin.startsWith('capacitor:');
+    if (!isLocalhost) {
+      return origin;
+    }
   }
 
-  // 3. In Native Android/iOS builds, fall back to configured cloud backend
+  // 3. In Native Android/iOS builds or local Capacitor containers, fall back to configured cloud backend
   return DEFAULT_CLOUD_API_URL;
 }
 

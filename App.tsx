@@ -115,6 +115,17 @@ function BlinkMainApp() {
     }
     return false;
   });
+
+  useEffect(() => {
+    if (ready) {
+      setIsAuthReady(true);
+    }
+    const timer = setTimeout(() => {
+      setIsAuthReady(true);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [ready]);
+
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(() => UserProfileService.getProfile());
@@ -1415,7 +1426,7 @@ export default function App() {
               logo: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
               showWalletLoginFirst: false,
             },
-            loginMethods: ['email', 'google', 'twitter', 'discord', 'telegram', 'github', 'wallet'],
+            loginMethods: ['email'],
         embeddedWallets: {
           showWalletUIs: false,
           solana: {

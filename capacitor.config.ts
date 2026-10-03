@@ -4,10 +4,6 @@ const config: CapacitorConfig = {
   appId: 'com.blink.solanamobile',
   appName: 'Blink',
   webDir: 'dist',
-  server: {
-    url: 'https://blink-production-5c36.up.railway.app',
-    cleartext: true,
-  },
   plugins: {
     SplashScreen: {
       launchShowDuration: 1500,

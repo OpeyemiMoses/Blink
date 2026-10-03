@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  TextInput,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Shield,
@@ -13,42 +15,25 @@ import {
   ArrowRight,
   Radio,
   Fingerprint,
-  Wallet,
-  Globe,
+  Mail,
   CheckCircle2,
 } from 'lucide-react-native';
-import { usePrivy, useLoginWithOAuth } from '../auth/privyAdapter';
+import { usePrivy } from '../auth/privyAdapter';
 import { PrivyNativeBridge } from '../auth/privyAdapter';
 import { useTheme } from '../theme/ThemeContext';
-import { BlinkBrandMark, BlinkLogo } from './BrandLogos';
+import { BlinkBrandMark } from './BrandLogos';
 import { PrivyIcon } from './PrivyIcon';
-import {
-  EmailLogo,
-  GoogleLogo,
-  GithubLogo,
-  XLogo,
-  DiscordLogo,
-  TelegramLogo,
-} from './SocialLogos';
-import { PhantomIcon, SolflareIcon } from './WalletIcons';
-import { SolanaMobileStackService, InstalledWalletInfo } from '../services/solanaMobileStackService';
+import { EmailLogo } from './SocialLogos';
 import { ToastService } from '../services/toastService';
 
 /**
  * Detect if we're running inside a Capacitor Android WebView.
- * Uses multiple signals for reliability:
- * 1. Android WebView UA always contains "wv" (most reliable)
- * 2. window.Capacitor object (injected by native bridge)
- * 3. Platform + Capacitor combo
- * This avoids relying on isNativePlatform() timing issues.
  */
 const IS_ANDROID_WEBVIEW = (() => {
   try {
     if (typeof navigator === 'undefined') return false;
     const ua = navigator.userAgent || '';
-    // Capacitor WebView on Android always has 'wv' in user agent
     if (/wv/i.test(ua) && /android/i.test(ua)) return true;
-    // Secondary check: Capacitor object present
     if (typeof window !== 'undefined') {
       const cap = (window as any).Capacitor;
       if (cap?.isNativePlatform?.()) return true;
@@ -70,92 +55,30 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
 }) => {
   const { colors, isDark } = useTheme();
   const { login } = usePrivy();
-  const [authNotice, setAuthNotice] = React.useState<string | null>(null);
-  const [installedWallets, setInstalledWallets] = React.useState<InstalledWalletInfo[]>([]);
-  const [isDetectingWallets, setIsDetectingWallets] = React.useState(true);
+  const [email, setEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  React.useEffect(() => {
-    let active = true;
-    SolanaMobileStackService.getInstalledWallets()
-      .then((wallets) => {
-        if (active) {
-          setInstalledWallets(wallets);
-          setIsDetectingWallets(false);
-        }
-      })
-      .catch((err) => {
-        console.warn('Failed to detect wallets:', err);
-        if (active) setIsDetectingWallets(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+  const handleEmailAuth = (directEmail?: string) => {
+    const targetEmail = (directEmail || email).trim();
 
-  // ─── Unified login handler ────────────────────────────────────────────────
-  // In Capacitor APK: ALWAYS open the in-app PrivyAuthModal (no browser OAuth).
-  // On Railway web browser: use the real Privy SDK (real OAuth flows).
-  const openAuthModal = (opts?: { provider?: string; mode?: string }) => {
     if (IS_ANDROID_WEBVIEW) {
-      // Native path: show in-app modal — email OTP + simulated social logins
-      PrivyNativeBridge.open({ mode: 'login', ...opts });
+      // In native APK: open in-app PrivyAuthModal with email OTP
+      PrivyNativeBridge.open({
+        mode: 'email',
+        email: targetEmail || undefined,
+      });
     } else {
-      // Web path: real Privy OAuth
-      if (opts?.provider) {
-        login({ provider: opts.provider });
-      } else if (opts?.mode) {
-        login({ mode: opts.mode });
-      } else {
-        login();
-      }
+      // In web browser: open Privy login configured for email
+      login({ mode: 'email' });
     }
   };
 
-  const handleGoogleLogin = () => { setAuthNotice(null); openAuthModal({ provider: 'google' }); };
-  const handleEmailLogin = () => { setAuthNotice(null); openAuthModal({ mode: 'email' }); };
-  const handleSocialLogin = (provider: string) => { setAuthNotice(null); openAuthModal({ provider }); };
-
-  const handleConnectInstalledWallet = async (walletId: 'phantom' | 'solflare' | 'backpack' | 'mwa') => {
-    try {
-      const name = walletId === 'phantom' ? 'Phantom' : walletId === 'solflare' ? 'Solflare' : 'Solana Wallet';
-      ToastService.info(`Connecting to ${name}...`);
-      await SolanaMobileStackService.connectWalletApp(walletId);
-    } catch (err: any) {
-      console.warn('Wallet connection error:', err);
-      ToastService.error(`Could not connect: ${err?.message || err}`);
+  const handleSubmit = () => {
+    if (email.trim() && (!email.includes('@') || !email.includes('.'))) {
+      ToastService.error('Please enter a valid email address.');
+      return;
     }
-  };
-
-  const handleMwaConnect = async () => {
-    try {
-      ToastService.info('Checking device for Solana wallets...');
-      const wallets = await SolanaMobileStackService.getInstalledWallets();
-      const detected = wallets.filter((w) => w.isInstalled);
-      if (detected.length > 0) {
-        ToastService.info(`Connecting to ${detected[0].name}...`);
-        await SolanaMobileStackService.connectWalletApp(detected[0].id);
-        return;
-      }
-      // Try Seeker Seed Vault / MWA
-      const mwaResult = await SolanaMobileStackService.connectMWA();
-      if (mwaResult) {
-        ToastService.success(`Connected to ${mwaResult.name}`);
-        return;
-      }
-      // Final fallback: open in-app modal with wallet options
-      if (IS_ANDROID_WEBVIEW) {
-        PrivyNativeBridge.open({ mode: 'login', section: 'wallets' });
-      } else {
-        ToastService.info('No Solana wallet app found. Install Phantom or use Privy login.');
-      }
-    } catch (err: any) {
-      console.warn('MWA connect error:', err);
-      if (IS_ANDROID_WEBVIEW) {
-        PrivyNativeBridge.open({ mode: 'login', section: 'wallets' });
-      } else {
-        ToastService.info('No external Solana wallet responded. Please use Privy login.');
-      }
-    }
+    handleEmailAuth(email.trim());
   };
 
   return (
@@ -192,15 +115,15 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
           Tap. Transact. Execute.
         </Text>
         <Text style={[styles.heroSubtext, { color: colors.textSecondary }]}>
-          Connect any real-world object to Solana on-chain Actions. Use your device fingerprint or face unlock for instant payments without manual signing.
+          Connect any real-world object to Solana on-chain Actions. Fast, secure, non-custodial transactions with zero manual friction.
         </Text>
       </View>
 
-      {/* Primary Authentication Card */}
+      {/* Primary Authentication Card: Email Only */}
       <View style={[styles.authCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
         <View style={styles.authCardHeader}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <PrivyIcon size={22} />
+            <EmailLogo size={22} />
             <Text style={[styles.authCardTitle, { color: colors.textPrimary }]}>SIGN IN OR CREATE ACCOUNT</Text>
           </View>
           <View style={styles.nonCustodialBadge}>
@@ -210,162 +133,54 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
         </View>
 
         <Text style={[styles.authCardExplainer, { color: colors.textSecondary }]}>
-          Privy provisions a non-custodial Solana keypair instantly for you. Sign in with any social identity or external wallet.
+          New to Blink? Enter your email to automatically create your account and provision an embedded Solana wallet in seconds.
         </Text>
 
-        {/* Primary 1-Click Privy Action */}
+        {/* Email Direct Input Field */}
+        <View style={styles.inputContainer}>
+          <Text style={[styles.inputLabel, { color: colors.textMuted }]}>EMAIL ADDRESS</Text>
+          <View style={[styles.emailInputWrapper, { backgroundColor: colors.bgInput, borderColor: colors.border }]}>
+            <Mail size={16} color={colors.textMuted} />
+            <TextInput
+              style={[styles.textInput, { color: colors.textPrimary }]}
+              placeholder="name@example.com"
+              placeholderTextColor={colors.textMuted}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              onSubmitEditing={handleSubmit}
+            />
+          </View>
+        </View>
+
+        {/* Primary Action Button */}
         <TouchableOpacity
-          style={styles.primaryPrivyBtn}
-          onPress={() => openAuthModal()}
+          style={styles.primaryBtn}
+          onPress={handleSubmit}
           activeOpacity={0.85}
         >
-          <PrivyIcon size={20} />
-          <Text style={styles.primaryPrivyBtnText}>Sign In / Sign Up with Privy</Text>
+          <EmailLogo size={20} />
+          <Text style={styles.primaryBtnText}>
+            {email.trim() ? 'Continue with Email' : 'Sign In with Email'}
+          </Text>
           <ArrowRight size={16} color="#FFFFFF" />
         </TouchableOpacity>
 
-        {/* Divider */}
-        <View style={styles.dividerRow}>
-          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-          <Text style={[styles.dividerText, { color: colors.textMuted }]}>or connect via</Text>
-          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+        {/* Benefits list */}
+        <View style={styles.benefitRow}>
+          <CheckCircle2 size={13} color="#10B981" />
+          <Text style={[styles.benefitText, { color: colors.textMuted }]}>
+            Instant 6-digit OTP code • No passwords required
+          </Text>
         </View>
-
-        {/* 6 Social Identity Quick Triggers */}
-        <View style={styles.socialGrid}>
-          <TouchableOpacity
-            style={[styles.socialPill, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
-            onPress={handleGoogleLogin}
-            activeOpacity={0.7}
-          >
-            <GoogleLogo size={18} />
-            <Text style={[styles.socialPillText, { color: colors.textPrimary }]}>Google</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.socialPill, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
-            onPress={handleEmailLogin}
-            activeOpacity={0.7}
-          >
-            <EmailLogo size={18} />
-            <Text style={[styles.socialPillText, { color: colors.textPrimary }]}>Email</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.socialPill, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
-            onPress={() => handleSocialLogin('twitter')}
-            activeOpacity={0.7}
-          >
-            <XLogo size={16} />
-            <Text style={[styles.socialPillText, { color: colors.textPrimary }]}>X</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.socialPill, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
-            onPress={() => handleSocialLogin('telegram')}
-            activeOpacity={0.7}
-          >
-            <TelegramLogo size={18} />
-            <Text style={[styles.socialPillText, { color: colors.textPrimary }]}>Telegram</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.socialPill, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
-            onPress={() => handleSocialLogin('discord')}
-            activeOpacity={0.7}
-          >
-            <DiscordLogo size={18} />
-            <Text style={[styles.socialPillText, { color: colors.textPrimary }]}>Discord</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.socialPill, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
-            onPress={() => handleSocialLogin('github')}
-            activeOpacity={0.7}
-          >
-            <GithubLogo size={18} />
-            <Text style={[styles.socialPillText, { color: colors.textPrimary }]}>GitHub</Text>
-          </TouchableOpacity>
+        <View style={styles.benefitRow}>
+          <CheckCircle2 size={13} color="#10B981" />
+          <Text style={[styles.benefitText, { color: colors.textMuted }]}>
+            Non-custodial Solana keypair provisioned by Privy
+          </Text>
         </View>
-
-        {/* Detected Native Mobile Wallets (Phantom / Solflare / MWA) */}
-        {installedWallets.some((w) => w.isInstalled) ? (
-          <View style={styles.detectedWalletsBox}>
-            <View style={styles.detectedWalletsHeader}>
-              <View style={styles.greenPulseDot} />
-              <Text style={[styles.detectedWalletsHeaderText, { color: '#10B981' }]}>
-                SOLANA WALLETS DETECTED ON THIS DEVICE
-              </Text>
-            </View>
-
-            {installedWallets
-              .filter((w) => w.isInstalled)
-              .map((w) => (
-                <TouchableOpacity
-                  key={w.id}
-                  style={[
-                    styles.detectedWalletBtn,
-                    w.id === 'phantom'
-                      ? { backgroundColor: 'rgba(171, 159, 242, 0.12)', borderColor: '#AB9FF2' }
-                      : w.id === 'solflare'
-                      ? { backgroundColor: 'rgba(252, 129, 34, 0.12)', borderColor: '#FC8122' }
-                      : { backgroundColor: colors.accentSoft, borderColor: colors.accent },
-                  ]}
-                  onPress={() => handleConnectInstalledWallet(w.id)}
-                  activeOpacity={0.8}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    {w.id === 'phantom' ? (
-                      <PhantomIcon size={24} />
-                    ) : w.id === 'solflare' ? (
-                      <SolflareIcon size={24} />
-                    ) : (
-                      <Wallet size={20} color={colors.accent} />
-                    )}
-                    <View>
-                      <Text style={[styles.detectedWalletTitle, { color: colors.textPrimary }]}>
-                        Connect {w.name}
-                      </Text>
-                      <Text style={[styles.detectedWalletSub, { color: colors.textSecondary }]}>
-                        Installed • 1-tap instant login
-                      </Text>
-                    </View>
-                  </View>
-                  <ArrowRight
-                    size={16}
-                    color={
-                      w.id === 'phantom' ? '#AB9FF2' : w.id === 'solflare' ? '#FC8122' : colors.accent
-                    }
-                  />
-                </TouchableOpacity>
-              ))}
-          </View>
-        ) : (
-          /* Mobile Wallet Adapter button fallback */
-          <TouchableOpacity
-            style={[styles.mwaButton, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
-            onPress={handleMwaConnect}
-            activeOpacity={0.8}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Wallet size={16} color={colors.accent} />
-              <Text style={[styles.mwaButtonText, { color: colors.textPrimary }]}>
-                Mobile Wallet Adapter (MWA) / Phantom
-              </Text>
-            </View>
-            <ArrowRight size={14} color={colors.textMuted} />
-          </TouchableOpacity>
-        )}
-
-        {authNotice && (
-          <View style={[styles.authNoticeBox, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
-            <Text style={[styles.authNoticeText, { color: colors.textPrimary }]}>{authNotice}</Text>
-          </View>
-        )}
-
-        <Text style={[styles.loginTipText, { color: colors.textMuted }]}>
-          Tip: You can also log in instantly with Email (6-digit OTP code) or connect any Solana Wallet (Phantom / Solflare).
-        </Text>
       </View>
 
       {/* Feature Highlights Grid */}
@@ -399,8 +214,8 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
         </View>
       </View>
 
-      {/* Links row: Guest Explore + Docs & Help */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 4 }}>
+      {/* Links row: Guest Explore */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 4 }}>
         <TouchableOpacity
           style={styles.guestLink}
           onPress={onContinueGuest}
@@ -423,7 +238,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'ios' ? 44 : 16,
     paddingBottom: 60,
-    maxWidth: 580,
+    maxWidth: 540,
     width: '100%',
     alignSelf: 'center',
     gap: 20,
@@ -450,11 +265,11 @@ const styles = StyleSheet.create({
   devnetBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
     borderWidth: 1,
+    gap: 6,
   },
   greenDot: {
     width: 6,
@@ -463,236 +278,155 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
   },
   devnetText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
   },
   heroSection: {
-    gap: 10,
-    marginTop: 8,
+    alignItems: 'center',
+    textAlign: 'center',
+    paddingVertical: 10,
+    gap: 12,
   },
   pillBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
+    paddingVertical: 6,
+    borderRadius: 999,
     borderWidth: 1,
-    alignSelf: 'flex-start',
+    gap: 6,
   },
   pillBadgeText: {
     fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 0.8,
+    letterSpacing: 1,
   },
   heroHeading: {
-    fontSize: 21,
+    fontSize: 28,
     fontWeight: '900',
-    letterSpacing: -0.8,
-    lineHeight: 38,
+    textAlign: 'center',
+    letterSpacing: -0.5,
   },
   heroSubtext: {
-    fontSize: 12,
-    lineHeight: 22,
-    fontWeight: '500',
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+    maxWidth: 420,
   },
   authCard: {
-    borderRadius: 22,
-    borderWidth: 1,
+    borderRadius: 20,
     padding: 20,
-    gap: 16,
-    shadowColor: '#000000',
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 4,
+    borderWidth: 1,
+    gap: 14,
   },
   authCardHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   authCardTitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   nonCustodialBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 3,
+    borderRadius: 999,
   },
   nonCustodialText: {
-    color: '#10B981',
     fontSize: 10,
     fontWeight: '700',
+    color: '#10B981',
   },
   authCardExplainer: {
-    fontSize: 11,
-    lineHeight: 18,
+    fontSize: 13,
+    lineHeight: 19,
   },
-  primaryPrivyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: '#5B67F6',
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    shadowColor: '#5B67F6',
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  primaryPrivyBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginVertical: 4,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-  },
-  dividerText: {
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  socialGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  socialPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  inputContainer: {
     gap: 6,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flexGrow: 1,
-    justifyContent: 'center',
   },
-  socialPillText: {
+  inputLabel: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
-  mwaButton: {
+  emailInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 11,
+    height: 48,
+    gap: 10,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    height: '100%',
+  },
+  primaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#5B67F6',
+    borderRadius: 12,
+    height: 48,
+    gap: 10,
     marginTop: 4,
   },
-  mwaButtonText: {
-    fontSize: 11,
+  primaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '700',
   },
-  detectedWalletsBox: {
+  benefitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    marginTop: 6,
   },
-  detectedWalletsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 2,
-  },
-  greenPulseDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10B981',
-  },
-  detectedWalletsHeaderText: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  detectedWalletBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1.5,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  detectedWalletTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  detectedWalletSub: {
-    fontSize: 10,
-    marginTop: 1,
+  benefitText: {
+    fontSize: 11,
+    fontWeight: '500',
   },
   featuresList: {
-    gap: 12,
+    gap: 10,
   },
   featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    borderWidth: 1,
-    borderRadius: 16,
     padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 12,
   },
   featureIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   featureTitle: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
-    marginBottom: 2,
   },
   featureDesc: {
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 16,
+    marginTop: 2,
   },
   guestLink: {
-    alignSelf: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
   },
   guestLinkText: {
-    fontSize: 11,
-    fontWeight: '700',
-    textDecorationLine: 'underline',
-  },
-  authNoticeBox: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
-    marginTop: 12,
-  },
-  authNoticeText: {
-    fontSize: 10,
-    lineHeight: 16,
+    fontSize: 12,
     fontWeight: '600',
-    textAlign: 'center',
-  },
-  loginTipText: {
-    fontSize: 10,
-    lineHeight: 16,
-    textAlign: 'center',
-    marginTop: 12,
   },
 });

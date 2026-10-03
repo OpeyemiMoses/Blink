@@ -18,32 +18,13 @@ import {
   ArrowRight,
   ArrowLeft,
   Mail,
-  Wallet,
   CheckCircle2,
   Sparkles,
   Lock,
 } from 'lucide-react-native';
 import { BlinkBrandMark } from './BrandLogos';
-import { PrivyIcon } from './PrivyIcon';
-import {
-  GoogleLogo,
-  TelegramLogo,
-  XLogo,
-  DiscordLogo,
-  GithubLogo,
-  EmailLogo,
-} from './SocialLogos';
-import {
-  PhantomIcon,
-  SolflareIcon,
-  BackpackIcon,
-  SolanaLogo,
-} from './WalletIcons';
+import { EmailLogo } from './SocialLogos';
 import { PrivyNativeBridge } from '../auth/privyAdapter';
-import {
-  SolanaMobileStackService,
-  InstalledWalletInfo,
-} from '../services/solanaMobileStackService';
 import { ToastService } from '../services/toastService';
 import { UserProfileService } from '../services/userProfileService';
 import { SolanaService } from '../services/solanaService';
@@ -65,21 +46,17 @@ export const PrivyAuthModal: React.FC<PrivyAuthModalProps> = ({
   const [otpCode, setOtpCode] = useState('');
   const [generatedOtp, setGeneratedOtp] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [activeProvider, setActiveProvider] = useState<string | null>(null);
-  const [installedWallets, setInstalledWallets] = useState<InstalledWalletInfo[]>([]);
 
-  // Check for installed mobile wallets on open
   useEffect(() => {
     if (visible) {
       setStep('main');
       setOtpCode('');
       setIsLoading(false);
-      setActiveProvider(null);
-      SolanaMobileStackService.getInstalledWallets().then((wallets) => {
-        setInstalledWallets(wallets);
-      }).catch(() => {});
+      if (options?.email) {
+        setEmailInput(options.email);
+      }
     }
-  }, [visible]);
+  }, [visible, options]);
 
   if (!visible) return null;
 
@@ -92,7 +69,7 @@ export const PrivyAuthModal: React.FC<PrivyAuthModalProps> = ({
     }
 
     setIsLoading(true);
-    // Generate simulated 6-digit verification code
+    // Generate 6-digit verification code
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setGeneratedOtp(code);
 
@@ -129,7 +106,7 @@ export const PrivyAuthModal: React.FC<PrivyAuthModalProps> = ({
           ],
         };
 
-        // Update profile
+        // Update profile with email as primary identity
         UserProfileService.updateProfile({
           displayName: usernamePrefix,
           username: usernamePrefix,
@@ -145,6 +122,12 @@ export const PrivyAuthModal: React.FC<PrivyAuthModalProps> = ({
           },
         });
 
+        WalletProviderService.setActiveAccount({
+          name: email,
+          publicKey: address,
+          isPrivy: true,
+        });
+
         PrivyNativeBridge.handleAuthSuccess(userPayload);
         ToastService.success(`Signed in as ${email}`);
         onClose();
@@ -154,114 +137,6 @@ export const PrivyAuthModal: React.FC<PrivyAuthModalProps> = ({
         setIsLoading(false);
       }
     }, 500);
-  };
-
-  // Handle Social Login (Google, X, Discord, GitHub, Telegram)
-  const handleSocialLogin = (provider: string) => {
-    setIsLoading(true);
-    setActiveProvider(provider);
-
-    setTimeout(() => {
-      try {
-        const localKp = SolanaService.getOrCreateKeypair();
-        const address = localKp.publicKey.toBase58();
-        const randomNum = Math.floor(100 + Math.random() * 900);
-        const derivedHandle = `${provider}_pioneer${randomNum}`;
-        const mockEmail = `${derivedHandle}@gmail.com`;
-
-        const userPayload = {
-          id: `did:privy:${address.slice(0, 16)}`,
-          email: { address: mockEmail },
-          google: provider === 'google' ? { email: mockEmail, name: `Google User ${randomNum}` } : null,
-          twitter: provider === 'twitter' ? { username: derivedHandle } : null,
-          discord: provider === 'discord' ? { username: derivedHandle } : null,
-          github: provider === 'github' ? { username: derivedHandle } : null,
-          wallet: { address, chainType: 'solana' },
-          linkedAccounts: [
-            { type: provider, address: mockEmail },
-            { type: 'wallet', address, chainType: 'solana', walletClientType: 'privy' },
-          ],
-        };
-
-        UserProfileService.updateProfile({
-          displayName: provider === 'google' ? `Google User` : `@${derivedHandle}`,
-          username: derivedHandle,
-          blinkId: `@${derivedHandle}`,
-          hasCustomizedProfile: true,
-          linkedAccounts: {
-            email: mockEmail,
-            google: provider === 'google' ? mockEmail : null,
-            twitter: provider === 'twitter' ? `@${derivedHandle}` : null,
-            discord: provider === 'discord' ? derivedHandle : null,
-            telegram: provider === 'telegram' ? derivedHandle : null,
-            github: provider === 'github' ? derivedHandle : null,
-          },
-        });
-
-        PrivyNativeBridge.handleAuthSuccess(userPayload);
-        ToastService.success(`Connected via ${provider.toUpperCase()}`);
-        onClose();
-      } catch (err: any) {
-        ToastService.error(err?.message || 'Social authentication error.');
-      } finally {
-        setIsLoading(false);
-        setActiveProvider(null);
-      }
-    }, 600);
-  };
-
-  // Handle Solana Wallet App Connect (Phantom, Solflare, Backpack, MWA)
-  const handleConnectWalletApp = async (walletId: 'phantom' | 'solflare' | 'backpack' | 'mwa') => {
-    setIsLoading(true);
-    setActiveProvider(walletId);
-
-    try {
-      ToastService.info(`Connecting to ${walletId === 'mwa' ? 'Mobile Wallet' : walletId.toUpperCase()}...`);
-      const account = await SolanaMobileStackService.connectWalletApp(walletId);
-
-      if (account && account.publicKey) {
-        const userPayload = {
-          id: `did:privy:${account.publicKey.slice(0, 16)}`,
-          wallet: { address: account.publicKey, chainType: 'solana' },
-          linkedAccounts: [
-            { type: 'wallet', address: account.publicKey, chainType: 'solana', walletClientType: walletId },
-          ],
-        };
-
-        PrivyNativeBridge.handleAuthSuccess(userPayload);
-        ToastService.success(`Connected to ${account.name || 'Solana Wallet'}`);
-        onClose();
-      } else {
-        // Fallback: If wallet app didn't return an on-chain keypair via MWA, provision a non-custodial keypair
-        const localKp = SolanaService.getOrCreateKeypair();
-        const address = localKp.publicKey.toBase58();
-        const shortAddr = `${address.slice(0, 4)}..${address.slice(-4)}`;
-
-        const userPayload = {
-          id: `did:privy:${address.slice(0, 16)}`,
-          wallet: { address, chainType: 'solana' },
-          linkedAccounts: [
-            { type: 'wallet', address, chainType: 'solana', walletClientType: walletId },
-          ],
-        };
-
-        WalletProviderService.setActiveAccount({
-          name: walletId === 'phantom' ? 'Phantom Wallet' : walletId === 'solflare' ? 'Solflare Wallet' : 'Solana Mobile Wallet',
-          publicKey: address,
-          isPrivy: false,
-        });
-
-        PrivyNativeBridge.handleAuthSuccess(userPayload);
-        ToastService.success(`Solana wallet linked (${shortAddr})`);
-        onClose();
-      }
-    } catch (err: any) {
-      console.warn('Wallet connect error:', err);
-      ToastService.error(err?.message || 'Wallet connection cancelled.');
-    } finally {
-      setIsLoading(false);
-      setActiveProvider(null);
-    }
   };
 
   return (
@@ -312,7 +187,7 @@ export const PrivyAuthModal: React.FC<PrivyAuthModalProps> = ({
                     {/* Title */}
                     <Text style={styles.modalHeading}>Sign In or Create Account</Text>
                     <Text style={styles.modalSubheading}>
-                      Choose your preferred method. Privy provisions an embedded Solana keypair instantly.
+                      Enter your email to sign in or get started. An embedded, non-custodial Solana keypair is automatically provisioned for your account.
                     </Text>
 
                     {/* Email Input Box */}
@@ -339,10 +214,11 @@ export const PrivyAuthModal: React.FC<PrivyAuthModalProps> = ({
                         disabled={isLoading}
                         activeOpacity={0.8}
                       >
-                        {isLoading && activeProvider === null ? (
+                        {isLoading ? (
                           <ActivityIndicator size="small" color="#FFFFFF" />
                         ) : (
                           <>
+                            <EmailLogo size={18} />
                             <Text style={styles.emailSubmitBtnText}>Continue with Email</Text>
                             <ArrowRight size={14} color="#FFFFFF" />
                           </>
@@ -350,191 +226,47 @@ export const PrivyAuthModal: React.FC<PrivyAuthModalProps> = ({
                       </TouchableOpacity>
                     </View>
 
-                    {/* Divider */}
-                    <View style={styles.dividerRow}>
-                      <View style={styles.dividerLine} />
-                      <Text style={styles.dividerText}>OR CONNECT VIA</Text>
-                      <View style={styles.dividerLine} />
-                    </View>
-
-                    {/* Social Logins */}
-                    <View style={styles.socialGrid}>
-                      <TouchableOpacity
-                        style={styles.socialBtn}
-                        onPress={() => handleSocialLogin('google')}
-                        disabled={isLoading}
-                        activeOpacity={0.7}
-                      >
-                        <GoogleLogo size={20} />
-                        <Text style={styles.socialBtnText}>Google</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.socialBtn}
-                        onPress={() => handleSocialLogin('twitter')}
-                        disabled={isLoading}
-                        activeOpacity={0.7}
-                      >
-                        <XLogo size={20} />
-                        <Text style={styles.socialBtnText}>X (Twitter)</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.socialBtn}
-                        onPress={() => handleSocialLogin('discord')}
-                        disabled={isLoading}
-                        activeOpacity={0.7}
-                      >
-                        <DiscordLogo size={20} />
-                        <Text style={styles.socialBtnText}>Discord</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.socialBtn}
-                        onPress={() => handleSocialLogin('github')}
-                        disabled={isLoading}
-                        activeOpacity={0.7}
-                      >
-                        <GithubLogo size={20} />
-                        <Text style={styles.socialBtnText}>GitHub</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.socialBtn}
-                        onPress={() => handleSocialLogin('telegram')}
-                        disabled={isLoading}
-                        activeOpacity={0.7}
-                      >
-                        <TelegramLogo size={20} />
-                        <Text style={styles.socialBtnText}>Telegram</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* Detected Solana Mobile Wallets */}
-                    <View style={styles.walletsSection}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                        <Wallet size={14} color="#10B981" />
-                        <Text style={styles.walletsSectionTitle}>SOLANA MOBILE WALLETS</Text>
-                      </View>
-
-                      {/* Phantom */}
-                      <TouchableOpacity
-                        style={styles.walletItem}
-                        onPress={() => handleConnectWalletApp('phantom')}
-                        disabled={isLoading}
-                        activeOpacity={0.8}
-                      >
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                          <PhantomIcon size={24} />
-                          <View>
-                            <Text style={styles.walletItemTitle}>Phantom</Text>
-                            <Text style={styles.walletItemSub}>Solana Self-Custody</Text>
-                          </View>
-                        </View>
-                        {installedWallets.find((w) => w.id === 'phantom' && w.isInstalled) ? (
-                          <View style={styles.installedBadge}>
-                            <View style={styles.greenDot} />
-                            <Text style={styles.installedBadgeText}>Detected</Text>
-                          </View>
-                        ) : (
-                          <ArrowRight size={14} color="#64748B" />
-                        )}
-                      </TouchableOpacity>
-
-                      {/* Solflare */}
-                      <TouchableOpacity
-                        style={styles.walletItem}
-                        onPress={() => handleConnectWalletApp('solflare')}
-                        disabled={isLoading}
-                        activeOpacity={0.8}
-                      >
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                          <SolflareIcon size={24} />
-                          <View>
-                            <Text style={styles.walletItemTitle}>Solflare</Text>
-                            <Text style={styles.walletItemSub}>Solana Ecosystem Wallet</Text>
-                          </View>
-                        </View>
-                        {installedWallets.find((w) => w.id === 'solflare' && w.isInstalled) ? (
-                          <View style={styles.installedBadge}>
-                            <View style={styles.greenDot} />
-                            <Text style={styles.installedBadgeText}>Detected</Text>
-                          </View>
-                        ) : (
-                          <ArrowRight size={14} color="#64748B" />
-                        )}
-                      </TouchableOpacity>
-
-                      {/* Backpack */}
-                      <TouchableOpacity
-                        style={styles.walletItem}
-                        onPress={() => handleConnectWalletApp('backpack')}
-                        disabled={isLoading}
-                        activeOpacity={0.8}
-                      >
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                          <BackpackIcon size={24} />
-                          <View>
-                            <Text style={styles.walletItemTitle}>Backpack</Text>
-                            <Text style={styles.walletItemSub}>xNFT & Solana Wallet</Text>
-                          </View>
-                        </View>
-                        {installedWallets.find((w) => w.id === 'backpack' && w.isInstalled) ? (
-                          <View style={styles.installedBadge}>
-                            <View style={styles.greenDot} />
-                            <Text style={styles.installedBadgeText}>Detected</Text>
-                          </View>
-                        ) : (
-                          <ArrowRight size={14} color="#64748B" />
-                        )}
-                      </TouchableOpacity>
-
-                      {/* Seeker / MWA */}
-                      <TouchableOpacity
-                        style={[styles.walletItem, { backgroundColor: '#131926' }]}
-                        onPress={() => handleConnectWalletApp('mwa')}
-                        disabled={isLoading}
-                        activeOpacity={0.8}
-                      >
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                          <SolanaLogo size={22} />
-                          <View>
-                            <Text style={styles.walletItemTitle}>Mobile Wallet Adapter (MWA)</Text>
-                            <Text style={styles.walletItemSub}>Seeker Seed Vault & System Intents</Text>
-                          </View>
-                        </View>
-                        <ArrowRight size={14} color="#5B67F6" />
-                      </TouchableOpacity>
+                    <View style={styles.infoBanner}>
+                      <Sparkles size={14} color="#10B981" />
+                      <Text style={styles.infoBannerText}>
+                        First time using Blink? We'll create your account and embedded Solana wallet in one tap.
+                      </Text>
                     </View>
                   </>
                 ) : (
-                  /* Step 2: Email OTP Verification */
-                  <View style={styles.otpStepContainer}>
+                  /* Step 2: OTP Verification */
+                  <View style={styles.otpContainer}>
                     <TouchableOpacity
                       style={styles.backBtn}
                       onPress={() => setStep('main')}
-                      activeOpacity={0.7}
                     >
-                      <ArrowLeft size={16} color="#94A3B8" />
+                      <ArrowLeft size={14} color="#94A3B8" />
                       <Text style={styles.backBtnText}>Change Email</Text>
                     </TouchableOpacity>
 
-                    <View style={styles.otpHeader}>
-                      <View style={styles.otpIconCircle}>
-                        <Mail size={24} color="#5B67F6" />
-                      </View>
-                      <Text style={styles.otpTitle}>Enter 6-Digit Code</Text>
-                      <Text style={styles.otpSub}>
-                        We sent a verification code to{' '}
-                        <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>{emailInput}</Text>
+                    <Text style={styles.modalHeading}>Check Your Inbox</Text>
+                    <Text style={styles.modalSubheading}>
+                      We sent a 6-digit verification code to{' '}
+                      <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>
+                        {emailInput}
                       </Text>
-                      {generatedOtp ? (
-                        <View style={styles.sampleCodePill}>
-                          <Text style={styles.sampleCodeText}>Code: {generatedOtp}</Text>
-                        </View>
-                      ) : null}
-                    </View>
+                    </Text>
 
+                    {/* OTP Display Pill (In-App simulated flow) */}
+                    {generatedOtp ? (
+                      <View style={styles.devOtpBox}>
+                        <Text style={styles.devOtpLabel}>YOUR VERIFICATION CODE:</Text>
+                        <Text style={styles.devOtpNumber}>{generatedOtp}</Text>
+                        <TouchableOpacity
+                          style={styles.fillCodeBtn}
+                          onPress={() => setOtpCode(generatedOtp)}
+                        >
+                          <Text style={styles.fillCodeBtnText}>Auto-Fill Code</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+
+                    {/* 6-Digit Input */}
                     <TextInput
                       style={styles.otpInput}
                       placeholder="000000"
@@ -557,7 +289,7 @@ export const PrivyAuthModal: React.FC<PrivyAuthModalProps> = ({
                         <ActivityIndicator size="small" color="#FFFFFF" />
                       ) : (
                         <>
-                          <Text style={styles.emailSubmitBtnText}>Verify & Sign In</Text>
+                          <Text style={styles.emailSubmitBtnText}>Verify & Enter App</Text>
                           <CheckCircle2 size={16} color="#FFFFFF" />
                         </>
                       )}
@@ -652,243 +384,157 @@ const styles = StyleSheet.create({
     color: '#10B981',
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#161922',
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 4,
+    borderRadius: 8,
+    backgroundColor: '#1E2330',
   },
   scrollContent: {
     padding: 20,
   },
   modalHeading: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: '#FFFFFF',
-    marginBottom: 4,
+    letterSpacing: -0.3,
   },
   modalSubheading: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#94A3B8',
-    lineHeight: 17,
-    marginBottom: 16,
+    marginTop: 4,
+    lineHeight: 19,
   },
   emailCard: {
-    backgroundColor: '#11141E',
-    borderRadius: 14,
-    padding: 14,
+    marginTop: 18,
+    backgroundColor: '#111520',
+    borderRadius: 16,
+    padding: 16,
     borderWidth: 1,
-    borderColor: '#1E2330',
-    gap: 10,
+    borderColor: '#1E2538',
   },
   inputLabel: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#64748B',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
+    marginBottom: 8,
   },
   emailInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0B0E14',
-    borderRadius: 10,
-    paddingHorizontal: 12,
+    backgroundColor: '#0A0D14',
     borderWidth: 1,
     borderColor: '#1E2330',
-    gap: 10,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 48,
+    gap: 8,
   },
   emailInput: {
     flex: 1,
-    height: 42,
     color: '#FFFFFF',
     fontSize: 14,
+    fontWeight: '500',
   },
   emailSubmitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#5B67F6',
-    borderRadius: 10,
-    paddingVertical: 12,
+    borderRadius: 12,
+    height: 48,
+    marginTop: 12,
     gap: 8,
   },
   emailSubmitBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
-  dividerRow: {
+  infoBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginVertical: 18,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#1E2330',
-  },
-  dividerText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#64748B',
-    letterSpacing: 0.5,
-  },
-  socialGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 18,
-  },
-  socialBtn: {
-    flex: 1,
-    minWidth: '47%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#11141E',
-    borderColor: '#1E2330',
+    gap: 10,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
     borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
     borderRadius: 12,
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    gap: 8,
+    padding: 12,
+    marginTop: 16,
   },
-  socialBtnText: {
-    color: '#E2E8F0',
+  infoBannerText: {
+    flex: 1,
     fontSize: 12,
-    fontWeight: '600',
+    color: '#94A3B8',
+    lineHeight: 17,
   },
-  walletsSection: {
-    borderTopWidth: 1,
-    borderTopColor: '#161922',
-    paddingTop: 16,
-  },
-  walletsSectionTitle: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#10B981',
-    letterSpacing: 0.5,
-  },
-  walletItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#11141E',
-    borderColor: '#1E2330',
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 8,
-  },
-  walletItemTitle: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  walletItemSub: {
-    color: '#64748B',
-    fontSize: 10,
-    marginTop: 1,
-  },
-  installedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  greenDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10B981',
-  },
-  installedBadgeText: {
-    color: '#10B981',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  otpStepContainer: {
-    alignItems: 'center',
-    paddingVertical: 10,
+  otpContainer: {
+    width: '100%',
   },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    alignSelf: 'flex-start',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   backBtnText: {
-    color: '#94A3B8',
     fontSize: 12,
+    color: '#94A3B8',
     fontWeight: '600',
   },
-  otpHeader: {
+  devOtpBox: {
+    marginTop: 14,
+    backgroundColor: 'rgba(91, 103, 246, 0.12)',
+    borderColor: '#5B67F6',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
     alignItems: 'center',
-    marginBottom: 20,
     gap: 6,
   },
-  otpIconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(91, 103, 246, 0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  otpTitle: {
-    fontSize: 18,
+  devOtpLabel: {
+    fontSize: 10,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: '#93C5FD',
+    letterSpacing: 1,
   },
-  otpSub: {
-    fontSize: 12,
-    color: '#94A3B8',
-    textAlign: 'center',
-    maxWidth: 280,
-    lineHeight: 18,
-  },
-  sampleCodePill: {
-    backgroundColor: 'rgba(91, 103, 246, 0.15)',
-    borderColor: 'rgba(91, 103, 246, 0.3)',
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 999,
-    marginTop: 6,
-  },
-  sampleCodeText: {
-    color: '#818CF8',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  otpInput: {
-    width: '100%',
-    maxWidth: 240,
-    height: 56,
-    backgroundColor: '#11141E',
-    borderWidth: 1,
-    borderColor: '#5B67F6',
-    borderRadius: 14,
-    color: '#FFFFFF',
+  devOtpNumber: {
     fontSize: 28,
-    fontWeight: '800',
+    fontWeight: '900',
+    color: '#FFFFFF',
     letterSpacing: 8,
   },
+  fillCodeBtn: {
+    marginTop: 4,
+    backgroundColor: '#5B67F6',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  fillCodeBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  otpInput: {
+    marginTop: 20,
+    backgroundColor: '#0A0D14',
+    borderWidth: 1.5,
+    borderColor: '#5B67F6',
+    borderRadius: 14,
+    height: 60,
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 10,
+  },
   resendBtn: {
-    marginTop: 14,
-    padding: 8,
+    alignSelf: 'center',
+    marginTop: 16,
+    padding: 6,
   },
   resendBtnText: {
     color: '#64748B',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
   },
   footer: {
@@ -899,11 +545,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: '#161922',
-    backgroundColor: '#080A0E',
   },
   footerText: {
     fontSize: 10,
     color: '#64748B',
-    fontWeight: '600',
   },
 });
