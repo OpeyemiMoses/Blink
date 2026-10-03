@@ -695,15 +695,20 @@ export class SolanaMobileStackService {
           ? window.location.origin
           : 'https://blink-production-5c36.up.railway.app';
 
-      const redirectLink = encodeURIComponent(
-        isNative
-          ? 'blink://onSignAndSendTransaction'
-          : `${currentOrigin}/?callback=onSignAndSendTransaction`
-      );
+      const redirectLink = isNative
+        ? 'blink://onSignTransaction'
+        : `${currentOrigin}/onSignTransaction`;
 
-      const phantomUrl = `https://phantom.app/ul/v1/signAndSendTransaction?dapp_encryption_public_key=${dappPubkeyBase58}&nonce=${nonceBase58}&redirect_link=${redirectLink}&payload=${payloadBase58}`;
+      const params = new URLSearchParams({
+        dapp_encryption_public_key: dappPubkeyBase58,
+        nonce: nonceBase58,
+        redirect_link: redirectLink,
+        payload: payloadBase58,
+      });
 
-      console.log('[SolanaMobileStack] Launching Phantom signAndSend URL:', phantomUrl);
+      const phantomUrl = `https://phantom.app/ul/v1/signTransaction?${params.toString()}`;
+
+      console.log('[SolanaMobileStack] Launching Phantom signTransaction URL:', phantomUrl);
       ToastService.info('Opening Phantom to approve transaction...');
 
       let launched = false;
@@ -824,15 +829,20 @@ export class SolanaMobileStackService {
           ? window.location.origin
           : 'https://blink-production-5c36.up.railway.app';
 
-      const redirectLink = encodeURIComponent(
-        isNative
-          ? 'blink://onSignAndSendTransaction'
-          : `${currentOrigin}/?callback=onSignAndSendTransaction`
-      );
+      const redirectLink = isNative
+        ? 'blink://onSignTransaction'
+        : `${currentOrigin}/onSignTransaction`;
 
-      const solflareUrl = `https://solflare.com/ul/v1/signAndSendTransaction?dapp_encryption_public_key=${dappPubkeyBase58}&nonce=${nonceBase58}&redirect_link=${redirectLink}&payload=${payloadBase58}`;
+      const params = new URLSearchParams({
+        dapp_encryption_public_key: dappPubkeyBase58,
+        nonce: nonceBase58,
+        redirect_link: redirectLink,
+        payload: payloadBase58,
+      });
 
-      console.log('[SolanaMobileStack] Launching Solflare signAndSend URL:', solflareUrl);
+      const solflareUrl = `https://solflare.com/ul/v1/signTransaction?${params.toString()}`;
+
+      console.log('[SolanaMobileStack] Launching Solflare signTransaction URL:', solflareUrl);
       ToastService.info('Opening Solflare to approve transaction...');
 
       let launched = false;
@@ -911,8 +921,15 @@ export class SolanaMobileStackService {
         return null;
       }
 
-      const nonceBase58 = searchParams.get('nonce');
-      const dataBase58 = searchParams.get('data');
+      let nonceBase58 = searchParams.get('nonce');
+      let dataBase58 = searchParams.get('data');
+      if (!nonceBase58 || !dataBase58) {
+        if (parsedUrl.hash && parsedUrl.hash.length > 1) {
+          const hashParams = new URLSearchParams(parsedUrl.hash.substring(1));
+          nonceBase58 = nonceBase58 || hashParams.get('nonce');
+          dataBase58 = dataBase58 || hashParams.get('data');
+        }
+      }
 
       if (!nonceBase58 || !dataBase58) {
         console.warn('Missing crypto parameters in signAndSend callback:', urlString);

@@ -195,7 +195,9 @@ function BlinkMainApp() {
         }
 
         if (
+          urlStr.includes('onSignTransaction') ||
           urlStr.includes('onSignAndSendTransaction') ||
+          urlStr.includes('callback=onSignTransaction') ||
           urlStr.includes('callback=onSignAndSendTransaction')
         ) {
           SolanaMobileStackService.handleSignAndSendCallback(urlStr);
@@ -244,7 +246,9 @@ function BlinkMainApp() {
         ) {
           SolanaMobileStackService.handleConnectCallback(href);
         } else if (
+          href.includes('onSignTransaction') ||
           href.includes('onSignAndSendTransaction') ||
+          href.includes('callback=onSignTransaction') ||
           href.includes('callback=onSignAndSendTransaction')
         ) {
           SolanaMobileStackService.handleSignAndSendCallback(href);
