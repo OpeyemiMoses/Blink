@@ -54,8 +54,12 @@ export class PhysicalBlinkRegistry {
         try {
           const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
           const timer = controller ? setTimeout(() => controller.abort(), 4000) : null;
+          const headers: Record<string, string> = { Accept: 'application/json' };
+          if (ep.includes('loca.lt')) {
+            headers['Bypass-Tunnel-Reminder'] = 'true';
+          }
           const res = await fetch(ep, {
-            headers: { 'Accept': 'application/json', 'Bypass-Tunnel-Reminder': 'true' },
+            headers,
             signal: controller?.signal,
           });
           if (timer) clearTimeout(timer);

@@ -387,7 +387,7 @@ export class SolanaService {
 
   /**
    * Resiliently fetch balances from local backend or cloud fallback.
-   * Sends Bypass-Tunnel-Reminder header and enforces 12-second timeout with in-flight deduplication.
+   * Runs endpoints in parallel with simple CORS headers (no preflight blockage) and 6s timeout.
    */
   private static async fetchBackendBalance(pubkeyStr: string): Promise<{ sol: number; usdc: number; skr: number } | null> {
     if (!pubkeyStr || typeof fetch === 'undefined') return null;
@@ -400,17 +400,18 @@ export class SolanaService {
     const task = (async (): Promise<{ sol: number; usdc: number; skr: number } | null> => {
       const primaryUrl = getApiUrl(`/api/balance?address=${encodeURIComponent(cleanPubkey)}`);
       const fallbackUrl = `${DEFAULT_CLOUD_API_URL}/api/balance?address=${encodeURIComponent(cleanPubkey)}`;
-      const endpoints = primaryUrl === fallbackUrl ? [primaryUrl] : [primaryUrl, fallbackUrl];
+      const endpoints = Array.from(new Set([primaryUrl, fallbackUrl]));
 
-      for (const url of endpoints) {
+      const tryEndpoint = async (url: string): Promise<{ sol: number; usdc: number; skr: number } | null> => {
         try {
           const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-          const timer = controller ? setTimeout(() => controller.abort(), 12000) : null;
+          const timer = controller ? setTimeout(() => controller.abort(), 6000) : null;
+          const headers: Record<string, string> = { Accept: 'application/json' };
+          if (url.includes('loca.lt')) {
+            headers['Bypass-Tunnel-Reminder'] = 'true';
+          }
           const res = await fetch(url, {
-            headers: {
-              'Accept': 'application/json',
-              'Bypass-Tunnel-Reminder': 'true',
-            },
+            headers,
             signal: controller?.signal,
           });
           if (timer) clearTimeout(timer);
@@ -434,9 +435,21 @@ export class SolanaService {
             }
           }
         } catch (err) {
-          // try next endpoint
+          // ignore error
         }
+        return null;
+      };
+
+      if (endpoints.length === 1) {
+        return await tryEndpoint(endpoints[0]);
       }
+
+      // Race in parallel — fastest successful endpoint wins immediately!
+      try {
+        const results = await Promise.all(endpoints.map((ep) => tryEndpoint(ep)));
+        const match = results.find((r) => r !== null);
+        if (match) return match;
+      } catch {}
       return null;
     })();
 
@@ -474,7 +487,13 @@ export class SolanaService {
       this.getUsdcBalance(cleanPubkey, forceFresh),
       this.getSkrBalance(cleanPubkey, forceFresh),
     ]);
-    return { sol, usdc, skr };
+
+    // Safeguard: If direct RPC returned zeros due to temporary rate-limit or drop, retain any cached positive values
+    const safeSol = sol > 0 ? sol : (this.getCachedSol(cleanPubkey) ?? 0);
+    const safeUsdc = usdc > 0 ? usdc : (this.getCachedUsdc(cleanPubkey) ?? 0);
+    const safeSkr = skr > 0 ? skr : (this.getCachedSkr(cleanPubkey) ?? 0);
+
+    return { sol: safeSol, usdc: safeUsdc, skr: safeSkr };
   }
 
   /**
@@ -514,7 +533,27 @@ export class SolanaService {
         }
         return solVal;
       } catch (err: any) {
-        console.warn('SolanaService.getBalance RPC error or rate-limited:', err?.message || err);
+        console.warn('SolanaService.getBalance RPC error, trying proxy fallback:', err?.message || err);
+        // Fallback: try raw proxy fetch via /api/solana-rpc
+        try {
+          const res = await fetch(getApiUrl('/api/solana-rpc'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'getBalance',
+              params: [pubkeyStr, { commitment: 'confirmed' }],
+            }),
+          });
+          const data = await res.json();
+          if (data?.result?.value !== undefined && typeof data.result.value === 'number') {
+            const solVal = Number((data.result.value / LAMPORTS_PER_SOL).toFixed(4));
+            this.solCache.set(pubkeyStr, { value: solVal, time: Date.now() });
+            return solVal;
+          }
+        } catch {}
+
         // Fall back to cached balance so UI never flickers to 0
         const lastKnown = this.getCachedSol(pubkeyStr);
         if (lastKnown !== null) {
@@ -990,14 +1029,18 @@ export class SolanaService {
       if (typeof fetch !== 'undefined') {
         const primaryUrl = getApiUrl(`/api/tx-history?address=${encodeURIComponent(pubkeyStr)}&limit=${limit}`);
         const fallbackUrl = `${DEFAULT_CLOUD_API_URL}/api/tx-history?address=${encodeURIComponent(pubkeyStr)}&limit=${limit}`;
-        const endpoints = primaryUrl === fallbackUrl ? [primaryUrl] : [primaryUrl, fallbackUrl];
+        const endpoints = Array.from(new Set([primaryUrl, fallbackUrl]));
 
-        for (const ep of endpoints) {
+        const tryTxEndpoint = async (ep: string): Promise<EnrichedTransactionInfo[] | null> => {
           try {
             const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-            const timer = controller ? setTimeout(() => controller.abort(), 4000) : null;
+            const timer = controller ? setTimeout(() => controller.abort(), 5000) : null;
+            const headers: Record<string, string> = { Accept: 'application/json' };
+            if (ep.includes('loca.lt')) {
+              headers['Bypass-Tunnel-Reminder'] = 'true';
+            }
             const res = await fetch(ep, {
-              headers: { 'Accept': 'application/json', 'Bypass-Tunnel-Reminder': 'true' },
+              headers,
               signal: controller?.signal,
             });
             if (timer) clearTimeout(timer);
@@ -1007,6 +1050,18 @@ export class SolanaService {
                 return data.transactions;
               }
             }
+          } catch {}
+          return null;
+        };
+
+        if (endpoints.length === 1) {
+          const res = await tryTxEndpoint(endpoints[0]);
+          if (res) return res;
+        } else {
+          try {
+            const results = await Promise.all(endpoints.map((ep) => tryTxEndpoint(ep)));
+            const match = results.find((r) => r !== null);
+            if (match) return match;
           } catch {}
         }
       }

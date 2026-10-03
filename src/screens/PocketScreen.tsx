@@ -48,6 +48,8 @@ import { TransactionReceipt } from '../types';
 interface PocketScreenProps {
   activePublicKey: string | null;
   activeAccount: WalletAccount | null;
+  balanceSol?: number;
+  balanceUsdc?: number;
   onOpenManageWallet: () => void;
   onOpenTap: () => void;
   onOpenSend: () => void;
@@ -60,6 +62,8 @@ interface PocketScreenProps {
 export const PocketScreen: React.FC<PocketScreenProps> = ({
   activePublicKey,
   activeAccount,
+  balanceSol,
+  balanceUsdc,
   onOpenManageWallet,
   onOpenTap,
   onOpenSend,
@@ -148,10 +152,24 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
     if (activePublicKey) {
       const cachedSol = SolanaService.getCachedSol(activePublicKey);
       const cachedUsdc = SolanaService.getCachedUsdc(activePublicKey);
-      if (cachedSol !== null) setBalance(cachedSol);
-      if (cachedUsdc !== null) setUsdcBalance(cachedUsdc);
+      const cachedSkr = SolanaService.getCachedSkr(activePublicKey);
+      if (cachedSol !== null && (cachedSol > 0 || balance === 0)) setBalance(cachedSol);
+      if (cachedUsdc !== null && (cachedUsdc > 0 || usdcBalance === 0)) setUsdcBalance(cachedUsdc);
+      if (cachedSkr !== null && (cachedSkr > 0 || skrBalance === 0)) setSkrBalance(cachedSkr);
     }
   }, [activePublicKey]);
+
+  useEffect(() => {
+    if (typeof balanceSol === 'number' && (balanceSol > 0 || balance === 0)) {
+      setBalance(balanceSol);
+    }
+  }, [balanceSol]);
+
+  useEffect(() => {
+    if (typeof balanceUsdc === 'number' && (balanceUsdc > 0 || usdcBalance === 0)) {
+      setUsdcBalance(balanceUsdc);
+    }
+  }, [balanceUsdc]);
 
   useEffect(() => {
     if (activePublicKey && userBlinkId) {
@@ -178,13 +196,19 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
       if (allBalRes.status === 'fulfilled' && allBalRes.value) {
         const { sol, usdc, skr } = allBalRes.value;
         if (typeof sol === 'number' && !isNaN(sol)) {
-          setBalance(sol);
+          if (sol > 0 || balance === 0) {
+            setBalance(sol);
+          }
         }
         if (typeof usdc === 'number' && !isNaN(usdc)) {
-          setUsdcBalance(usdc);
+          if (usdc > 0 || usdcBalance === 0) {
+            setUsdcBalance(usdc);
+          }
         }
         if (typeof skr === 'number' && !isNaN(skr)) {
-          setSkrBalance(skr);
+          if (skr > 0 || skrBalance === 0) {
+            setSkrBalance(skr);
+          }
         }
       }
 

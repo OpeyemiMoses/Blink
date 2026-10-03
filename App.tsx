@@ -1317,6 +1317,8 @@ function BlinkMainApp() {
               <PocketScreen
                 activePublicKey={activePublicKey}
                 activeAccount={activeAccount}
+                balanceSol={balanceSol}
+                balanceUsdc={balanceUsdc}
                 onOpenManageWallet={login}
                 onOpenTap={() => setCurrentTab('tap')}
                 onOpenSend={handleOpenSend}
@@ -1417,6 +1419,8 @@ function BlinkMainApp() {
               <PocketScreen
                 activePublicKey={activePublicKey}
                 activeAccount={activeAccount}
+                balanceSol={balanceSol}
+                balanceUsdc={balanceUsdc}
                 onOpenManageWallet={login}
                 onOpenTap={() => setCurrentTab('tap')}
                 onOpenSend={handleOpenSend}

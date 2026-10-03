@@ -17,8 +17,12 @@ export function getApiBaseUrl(): string {
       isCapacitorNative ||
       origin.startsWith('capacitor:') ||
       origin.startsWith('ionic:') ||
+      origin.startsWith('file:') ||
+      origin.startsWith('content:') ||
       origin === 'http://localhost' ||
-      origin === 'https://localhost'
+      origin === 'https://localhost' ||
+      origin === 'null' ||
+      !origin
     ) {
       return process.env.EXPO_PUBLIC_API_URL ? process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, '') : DEFAULT_CLOUD_API_URL;
     }

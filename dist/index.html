@@ -10,6 +10,8 @@
       /* These styles make the body full-height */
       html,
       body {
+        background-color: #07080B;
+        color: #FFFFFF;
         height: 100%;
       }
       /* These styles disable body scrolling if you are using <ScrollView> */
@@ -23,7 +25,56 @@
         flex: 1;
       }
     </style>
-  <link rel="icon" href="/favicon.ico"/></head>
+  <link rel="icon" href="/favicon.ico"/>
+    <script>
+      window.__boot_errors = [];
+      window.addEventListener('error', function(e) {
+        var msg = (e.error && (e.error.stack || e.error.message)) || e.message || 'Unknown error';
+        console.error('[Blink Window Error]:', msg);
+        window.__boot_errors.push(msg);
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        var msg = (e.reason && (e.reason.stack || e.reason.message)) || String(e.reason) || 'Unhandled rejection';
+        console.error('[Blink Rejection]:', msg);
+        window.__boot_errors.push(msg);
+      });
+      (function() {
+        try {
+          if (!window.localStorage) throw new Error();
+          var k = '__b_t__';
+          window.localStorage.setItem(k, '1');
+          window.localStorage.removeItem(k);
+        } catch(e) {
+          var mem = {};
+          window.localStorage = {
+            getItem: function(k) { return mem[k] || null; },
+            setItem: function(k, v) { mem[k] = String(v); },
+            removeItem: function(k) { delete mem[k]; },
+            clear: function() { mem = {}; },
+            get length() { return Object.keys(mem).length; },
+            key: function(i) { return Object.keys(mem)[i] || null; }
+          };
+        }
+        try {
+          if (!window.sessionStorage) throw new Error();
+          var sk = '__b_st__';
+          window.sessionStorage.setItem(sk, '1');
+          window.sessionStorage.removeItem(sk);
+        } catch(e) {
+          var smem = {};
+          window.sessionStorage = {
+            getItem: function(k) { return smem[k] || null; },
+            setItem: function(k, v) { smem[k] = String(v); },
+            removeItem: function(k) { delete smem[k]; },
+            clear: function() { smem = {}; },
+            get length() { return Object.keys(smem).length; },
+            key: function(i) { return Object.keys(smem)[i] || null; }
+          };
+        }
+      })();
+    </script>
+
+</head>
 
   <body>
     <!-- Use static rendering with Expo Router to support running without JavaScript. -->
@@ -32,6 +83,28 @@
     </noscript>
     <!-- The root element for your Expo app. -->
     <div id="root"></div>
-  <script src="/_expo/static/js/web/__expo-metro-runtime-1f8f5d3ca6b7f58204d51e14506d73fb.js" defer></script><script src="/_expo/static/js/web/__common-cb45c153939c2edd9dc55c9a8bd7678a.js" defer></script><script src="/_expo/static/js/web/index-ec62a3f7e829d12ad6f8899c30a68590.js" defer></script>
+  <script src="/_expo/static/js/web/__expo-metro-runtime-1f8f5d3ca6b7f58204d51e14506d73fb.js?v=1791069320409" defer></script><script src="/_expo/static/js/web/__common-cb45c153939c2edd9dc55c9a8bd7678a.js?v=1791069320409" defer></script><script src="/_expo/static/js/web/index-37e7c6af6dfda31644cde879f51ce42e.js?v=1791069320409" defer></script>
+
+    <script>
+      setTimeout(function() {
+        var root = document.getElementById('root');
+        if (root && root.children.length === 0) {
+          console.warn('[Blink Boot Guard] Root is still empty after 6 seconds. Rendering recovery screen.');
+          var errHtml = '';
+          if (window.__boot_errors && window.__boot_errors.length > 0) {
+            errHtml = '<pre style="color:#EF4444;font-size:11px;max-width:320px;overflow:auto;max-height:100px;text-align:left;background:#18181B;padding:8px;border-radius:8px;margin-bottom:16px;">' +
+              window.__boot_errors[0] +
+            '</pre>';
+          }
+          root.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#07080B;color:#FFF;padding:24px;font-family:sans-serif;text-align:center;">' +
+            '<h2 style="font-size:22px;font-weight:800;margin-bottom:12px;">Blink</h2>' +
+            '<p style="color:#94A3B8;font-size:14px;max-width:320px;margin-bottom:16px;">Initializing application. Tap below to reload if stalled.</p>' +
+            errHtml +
+            '<button onclick="window.location.reload()" style="background:#5B67F6;color:#FFF;border:none;padding:12px 28px;border-radius:24px;font-weight:700;font-size:14px;cursor:pointer;">Reload App</button>' +
+          '</div>';
+        }
+      }, 6000);
+    </script>
+
 </body>
 </html>
