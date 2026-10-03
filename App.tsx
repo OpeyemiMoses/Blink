@@ -701,6 +701,8 @@ function BlinkMainApp() {
                 ? userProfile.displayName
                 : user?.email?.address
                 ? user.email.address
+                : user?.phone?.number
+                ? user.phone.number
                 : user?.google
                 ? (user.google.email || (user.google as any)?.name || 'Google User')
                 : user?.twitter
@@ -1591,7 +1593,7 @@ export default function App() {
               logo: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
               showWalletLoginFirst: false,
             },
-            loginMethods: ['email'],
+            loginMethods: ['sms', 'email', 'wallet'],
         embeddedWallets: {
           showWalletUIs: false,
           solana: {

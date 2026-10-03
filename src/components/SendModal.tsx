@@ -720,9 +720,7 @@ export const SendModal: React.FC<SendModalProps> = ({
                 <View style={styles.feeInfoRow}>
                   <Text style={styles.feeLabel}>Signing Provider</Text>
                   <Text style={styles.feeValue}>
-                    {activeAccount?.isSeedVault
-                      ? '🛡️ Seeker Seed Vault (Biometrics)'
-                      : (activeAccount?.name || 'Seeker Seed Vault (Biometrics)')}
+                    {activeAccount?.name || 'Solana Wallet'}
                   </Text>
                 </View>
 
