@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Platform, useWindowDimensions, StatusBar as RNStatusBar } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Platform, useWindowDimensions, StatusBar as RNStatusBar, BackHandler } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
 import {
@@ -92,7 +92,23 @@ function BlinkMainApp() {
   const { signAndSendTransaction: privySignAndSend } = useSignAndSendTransaction();
   const { signTransaction: privySignTransaction } = useSignTransaction();
 
-  const [currentTab, setCurrentTab] = useState<TabKey>('markets');
+  const [currentTab, setCurrentTabState] = useState<TabKey>('markets');
+  const [tabHistory, setTabHistory] = useState<TabKey[]>(['markets']);
+  const tabHistoryRef = useRef<TabKey[]>(['markets']);
+  tabHistoryRef.current = tabHistory;
+
+  const currentTabRef = useRef<TabKey>('markets');
+  currentTabRef.current = currentTab;
+
+  const setCurrentTab = (newTab: TabKey) => {
+    if (newTab !== currentTabRef.current) {
+      setTabHistory(prev => {
+        const filtered = prev.filter(t => t !== newTab);
+        return [...filtered, newTab];
+      });
+      setCurrentTabState(newTab);
+    }
+  };
   const [balanceSol, setBalanceSol] = useState<number>(0);
   const [balanceUsdc, setBalanceUsdc] = useState<number>(0);
   const [network] = useState<'devnet'>('devnet');
@@ -365,6 +381,113 @@ function BlinkMainApp() {
   const [pendingAction, setPendingAction] = useState<SolanaActionMetadata | null>(null);
   const [pendingLink, setPendingLink] = useState<LinkedAction | null>(null);
   const [lastReceipt, setLastReceipt] = useState<TransactionReceipt | null>(null);
+
+  const modalsRef = useRef({
+    selectedDetailBlink,
+    sendModalVisible,
+    receiveModalVisible,
+    seedVaultModalVisible,
+    receiptModalVisible,
+    createBlinkModalVisible,
+    pickUsernameModalVisible,
+    notificationsModalVisible,
+    settingsModalVisible,
+    pendingAction,
+    pendingLink,
+    lastReceipt,
+    showOnboarding,
+  });
+  modalsRef.current = {
+    selectedDetailBlink,
+    sendModalVisible,
+    receiveModalVisible,
+    seedVaultModalVisible,
+    receiptModalVisible,
+    createBlinkModalVisible,
+    pickUsernameModalVisible,
+    notificationsModalVisible,
+    settingsModalVisible,
+    pendingAction,
+    pendingLink,
+    lastReceipt,
+    showOnboarding,
+  };
+
+  // Hardware Back Button & Page Stack Handler
+  useEffect(() => {
+    let removeListener: (() => void) | null = null;
+    let removeRnBack: (() => void) | null = null;
+
+    const handleBackAction = (exitAppFn?: () => void): boolean => {
+      const m = modalsRef.current;
+      // 1. If detail modal is open, close it
+      if (m.selectedDetailBlink) {
+        setSelectedDetailBlink(null);
+        return true;
+      }
+      // 2. If any popup/sheet modal is open, close it
+      if (m.sendModalVisible) { setSendModalVisible(false); return true; }
+      if (m.receiveModalVisible) { setReceiveModalVisible(false); return true; }
+      if (m.seedVaultModalVisible) { setSeedVaultModalVisible(false); return true; }
+      if (m.receiptModalVisible) { setReceiptModalVisible(false); return true; }
+      if (m.createBlinkModalVisible) { setCreateBlinkModalVisible(false); return true; }
+      if (m.pickUsernameModalVisible) { setPickUsernameModalVisible(false); return true; }
+      if (m.notificationsModalVisible) { setNotificationsModalVisible(false); return true; }
+      if (m.settingsModalVisible) { setSettingsModalVisible(false); return true; }
+      if (m.pendingAction) { setPendingAction(null); return true; }
+      if (m.pendingLink) { setPendingLink(null); return true; }
+      if (m.lastReceipt) { setLastReceipt(null); return true; }
+      if (m.showOnboarding) { setShowOnboarding(false); return true; }
+
+      // 3. If there is a tab history stack, navigate back to previous screen
+      const history = tabHistoryRef.current;
+      if (history.length > 1) {
+        const nextHistory = [...history];
+        nextHistory.pop(); // remove current tab
+        const prevTab = nextHistory[nextHistory.length - 1];
+        setTabHistory(nextHistory);
+        setCurrentTabState(prevTab);
+        return true;
+      }
+
+      // 4. If current tab is not root 'markets', return to 'markets'
+      if (currentTabRef.current !== 'markets') {
+        setCurrentTabState('markets');
+        setTabHistory(['markets']);
+        return true;
+      }
+
+      // 5. Root page reached with no modals open -> exit app
+      if (exitAppFn) {
+        exitAppFn();
+        return true;
+      }
+      return false;
+    };
+
+    // Capacitor Native Android back button listener
+    const initCapacitorBack = async () => {
+      try {
+        const { App: CapApp } = await import('@capacitor/app');
+        const sub = await CapApp.addListener('backButton', () => {
+          handleBackAction(() => CapApp.exitApp());
+        });
+        removeListener = () => sub.remove();
+      } catch {}
+    };
+    initCapacitorBack();
+
+    // React Native BackHandler fallback
+    const rnSub = BackHandler.addEventListener('hardwareBackPress', () => {
+      return handleBackAction();
+    });
+    removeRnBack = () => rnSub.remove();
+
+    return () => {
+      if (removeListener) removeListener();
+      if (removeRnBack) removeRnBack();
+    };
+  }, []);
 
   // Derive active Solana account from Privy
   const existingLinkedWallet = user?.linkedAccounts?.find(

@@ -615,8 +615,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
         tx = await SolanaService.buildSkrTransferTransaction(fromPubkey, toPubkey, checkoutAmount);
       } else {
         // Native SOL transfer on Solana network
-        const connection = SolanaService.getConnection();
-        const latestBlockhash = await connection.getLatestBlockhash('confirmed');
+        const latestBlockhash = await SolanaService.getLatestBlockhash('confirmed');
         const lamports = Math.round(checkoutAmount * LAMPORTS_PER_SOL);
         tx = new Transaction().add(
           SystemProgram.transfer({
@@ -633,7 +632,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
 
       // Non-blocking: verify transaction on-chain in background (don't block success UI)
       const connection = SolanaService.getConnection();
-      connection.getLatestBlockhash('confirmed').then((latestBlockhash) => {
+      SolanaService.getLatestBlockhash('confirmed').then((latestBlockhash) => {
         connection.confirmTransaction(
           { signature: sig, ...latestBlockhash },
           'confirmed'

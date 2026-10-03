@@ -14,6 +14,7 @@ class SaleWatcherManager {
   private notifiedSignatures: Set<string> = new Set();
   private isStarted: boolean = false;
   private lastPollTimestamp: number = 0;
+  private startedAt: number = 0;
 
   constructor() {
     this.loadNotifiedFromStorage();
@@ -58,6 +59,7 @@ class SaleWatcherManager {
     this.activeAddress = cleanAddr;
     this.activeUsername = cleanUser;
     this.isStarted = true;
+    this.startedAt = Date.now();
 
     // 1. Initial quick catch-up check of recent receipts
     this.checkRecentReceipts();
@@ -188,6 +190,12 @@ class SaleWatcherManager {
     // Mark signature as notified
     this.notifiedSignatures.add(sig);
     this.saveNotifiedToStorage();
+
+    // Guard against historical backlog: do not fire notifications for receipts created before this session
+    const isHistorical = rcpt.timestamp && this.startedAt && rcpt.timestamp < (this.startedAt - 20000);
+    if (isHistorical) {
+      return;
+    }
 
     // Trigger instant Blink Sale notification!
     const title = rcpt.blinkTitle || 'Blink Sale';

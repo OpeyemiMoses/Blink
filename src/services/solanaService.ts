@@ -42,13 +42,23 @@ export interface EnrichedTransactionInfo extends OnChainTransactionInfo {
 
 export class SolanaService {
   private static activeNetwork: 'devnet' | 'mainnet-beta' = 'devnet';
-  private static connection = new Connection(DEVNET_RPC, { commitment: 'confirmed', disableRetryOnRateLimit: true });
+  private static connection: Connection | null = null;
   private static currentKeypair: Keypair | null = null;
+
+  static getRpcUrl(network?: string): string {
+    const net = (network || this.getNetwork()) === 'mainnet-beta' ? 'mainnet-beta' : 'devnet';
+    if (net === 'mainnet-beta') return MAINNET_RPC;
+    try {
+      return getApiUrl('/api/solana-rpc');
+    } catch {
+      return DEVNET_RPC;
+    }
+  }
 
   static setNetwork(network?: string) {
     const net = (network === 'mainnet' || network === 'mainnet-beta') ? 'mainnet-beta' : 'devnet';
     this.activeNetwork = net;
-    const rpc = net === 'mainnet-beta' ? MAINNET_RPC : DEVNET_RPC;
+    const rpc = this.getRpcUrl(net);
     this.connection = new Connection(rpc, { commitment: 'confirmed', disableRetryOnRateLimit: true });
     if (typeof window !== 'undefined' && window.localStorage) {
       try {
@@ -70,7 +80,47 @@ export class SolanaService {
   }
 
   static getConnection(): Connection {
+    const rpcUrl = this.getRpcUrl();
+    if (!this.connection || (this.connection as any)._rpcEndpoint !== rpcUrl) {
+      this.connection = new Connection(rpcUrl, { commitment: 'confirmed', disableRetryOnRateLimit: true });
+    }
     return this.connection;
+  }
+
+  /**
+   * Resilient blockhash fetch with automatic fallback and retries.
+   */
+  static async getLatestBlockhash(commitment: 'confirmed' | 'finalized' = 'confirmed'): Promise<{ blockhash: string; lastValidBlockHeight: number }> {
+    try {
+      const conn = this.getConnection();
+      return await conn.getLatestBlockhash(commitment);
+    } catch (err1) {
+      console.warn('[SolanaService] Primary RPC blockhash fetch failed, trying direct devnet:', err1);
+      try {
+        const directConn = new Connection(DEVNET_RPC, { commitment });
+        return await directConn.getLatestBlockhash(commitment);
+      } catch (err2) {
+        console.warn('[SolanaService] Direct devnet blockhash fetch failed, trying proxy raw fetch:', err2);
+        const res = await fetch(getApiUrl('/api/solana-rpc'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'getLatestBlockhash',
+            params: [{ commitment }],
+          }),
+        });
+        const data = await res.json();
+        if (data?.result?.value?.blockhash) {
+          return {
+            blockhash: data.result.value.blockhash,
+            lastValidBlockHeight: data.result.value.lastValidBlockHeight || 0,
+          };
+        }
+        throw new Error((err1 as any)?.message || 'Failed to fetch recent blockhash');
+      }
+    }
   }
 
   /**
@@ -273,7 +323,7 @@ export class SolanaService {
     const task = (async (): Promise<number> => {
       try {
         const pubkey = new PublicKey(pubkeyStr);
-        const lamports = await this.connection.getBalance(pubkey);
+        const lamports = await this.getConnection().getBalance(pubkey);
         const solVal = Number((lamports / LAMPORTS_PER_SOL).toFixed(4));
 
         this.solCache.set(pubkeyStr, { value: solVal, time: Date.now() });
@@ -358,7 +408,7 @@ export class SolanaService {
 
         // 1. Query official Circle Devnet USDC accounts
         try {
-          const circleAccounts = await this.connection.getParsedTokenAccountsByOwner(pubkey, {
+          const circleAccounts = await this.getConnection().getParsedTokenAccountsByOwner(pubkey, {
             mint: USDC_DEVNET_MINT,
           });
           if (circleAccounts && circleAccounts.value.length > 0) {
@@ -376,7 +426,7 @@ export class SolanaService {
         // 2. Also check common Devnet SPL Faucet USDC mint
         try {
           const faucetMint = new PublicKey('Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr');
-          const faucetAccounts = await this.connection.getParsedTokenAccountsByOwner(pubkey, {
+          const faucetAccounts = await this.getConnection().getParsedTokenAccountsByOwner(pubkey, {
             mint: faucetMint,
           });
           if (faucetAccounts && faucetAccounts.value.length > 0) {
@@ -480,7 +530,7 @@ export class SolanaService {
         // 2. Also check devnet token account
         if (total === 0) {
           try {
-            const devnetAccounts = await this.connection.getParsedTokenAccountsByOwner(pubkey, {
+            const devnetAccounts = await this.getConnection().getParsedTokenAccountsByOwner(pubkey, {
               mint: SKR_DEVNET_MINT,
             });
             if (devnetAccounts && devnetAccounts.value.length > 0) {
@@ -577,7 +627,7 @@ export class SolanaService {
     const transaction = new Transaction();
 
     // Check if recipient ATA exists on Solana network
-    const recipientAtaInfo = await this.connection.getAccountInfo(recipientAta);
+    const recipientAtaInfo = await this.getConnection().getAccountInfo(recipientAta);
     if (!recipientAtaInfo) {
       transaction.add(
         this.createAssociatedTokenAccountInstruction(senderPubkey, recipientAta, recipientPubkey, USDC_DEVNET_MINT)
@@ -590,7 +640,7 @@ export class SolanaService {
       this.createSplTokenTransferInstruction(senderAta, recipientAta, senderPubkey, amountUnits)
     );
 
-    const latestBlockhash = await this.connection.getLatestBlockhash('confirmed');
+    const latestBlockhash = await this.getLatestBlockhash('confirmed');
     transaction.recentBlockhash = latestBlockhash.blockhash;
     transaction.feePayer = senderPubkey;
 
@@ -612,7 +662,7 @@ export class SolanaService {
     const transaction = new Transaction();
 
     // Check if recipient ATA exists on Solana network
-    const recipientAtaInfo = await this.connection.getAccountInfo(recipientAta);
+    const recipientAtaInfo = await this.getConnection().getAccountInfo(recipientAta);
     if (!recipientAtaInfo) {
       transaction.add(
         this.createAssociatedTokenAccountInstruction(senderPubkey, recipientAta, recipientPubkey, SKR_DEVNET_MINT)
@@ -625,7 +675,7 @@ export class SolanaService {
       this.createSplTokenTransferInstruction(senderAta, recipientAta, senderPubkey, amountUnits)
     );
 
-    const latestBlockhash = await this.connection.getLatestBlockhash('confirmed');
+    const latestBlockhash = await this.getLatestBlockhash('confirmed');
     transaction.recentBlockhash = latestBlockhash.blockhash;
     transaction.feePayer = senderPubkey;
 
@@ -641,9 +691,10 @@ export class SolanaService {
     }
     const pubkey = new PublicKey(pubkeyStr);
     try {
-      const signature = await this.connection.requestAirdrop(pubkey, 1 * LAMPORTS_PER_SOL);
-      const latestBlockhash = await this.connection.getLatestBlockhash('confirmed');
-      await this.connection.confirmTransaction({
+      const conn = this.getConnection();
+      const signature = await conn.requestAirdrop(pubkey, 1 * LAMPORTS_PER_SOL);
+      const latestBlockhash = await this.getLatestBlockhash('confirmed');
+      await conn.confirmTransaction({
         signature,
         ...latestBlockhash
       }, 'confirmed');
@@ -678,7 +729,7 @@ export class SolanaService {
       })
     );
 
-    const latestBlockhash = await this.connection.getLatestBlockhash('confirmed');
+    const latestBlockhash = await this.getLatestBlockhash('confirmed');
     transaction.recentBlockhash = latestBlockhash.blockhash;
     transaction.feePayer = fromPubkey;
 
@@ -691,7 +742,7 @@ export class SolanaService {
   static async getRecentSignatures(pubkeyStr: string, limit: number = 50): Promise<OnChainTransactionInfo[]> {
     try {
       const pubkey = new PublicKey(pubkeyStr);
-      const signatures = await this.connection.getSignaturesForAddress(pubkey, { limit });
+      const signatures = await this.getConnection().getSignaturesForAddress(pubkey, { limit });
       return signatures.map(s => ({
         signature: s.signature,
         slot: s.slot,
@@ -730,7 +781,7 @@ export class SolanaService {
     // 2. Fallback: Direct client-side Solana RPC connection
     try {
       const pubkey = new PublicKey(pubkeyStr);
-      const sigInfos = await this.connection.getSignaturesForAddress(pubkey, { limit });
+      const sigInfos = await this.getConnection().getSignaturesForAddress(pubkey, { limit });
       if (!sigInfos || sigInfos.length === 0) return [];
 
       const signatures = sigInfos.map(s => s.signature);
@@ -739,7 +790,7 @@ export class SolanaService {
       const parsedMap = new Map<string, any>();
       try {
         const topSignatures = signatures.slice(0, 8);
-        const parsedBatch = await this.connection.getParsedTransactions(topSignatures, {
+        const parsedBatch = await this.getConnection().getParsedTransactions(topSignatures, {
           maxSupportedTransactionVersion: 0,
           commitment: 'confirmed',
         });
@@ -941,7 +992,7 @@ export class SolanaService {
    */
   static async fetchFullTransactionDetails(signature: string, userAddress?: string | null) {
     try {
-      const parsed = await this.connection.getParsedTransaction(signature, {
+      const parsed = await this.getConnection().getParsedTransaction(signature, {
         maxSupportedTransactionVersion: 0,
         commitment: 'confirmed',
       });

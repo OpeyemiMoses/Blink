@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Image, ActivityIndicator, StyleSheet, ViewStyle } from 'react-native';
+import React, { useState, useEffect, createElement } from 'react';
+import { View, Image, ActivityIndicator, StyleSheet, ViewStyle, Platform } from 'react-native';
 import QRCode from 'qrcode';
 
 interface UniversalQrCodeProps {
@@ -30,6 +30,7 @@ export const UniversalQrCode: React.FC<UniversalQrCodeProps> = ({
 
     const fallbackUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size * 2}x${size * 2}&data=${encodeURIComponent(value)}&bgcolor=${bgColor.replace('#', '')}&color=${fgColor.replace('#', '')}`;
 
+    // 1. Direct SVG Generation (Instant Vector)
     try {
       QRCode.toString(value, {
         type: 'svg',
@@ -47,43 +48,59 @@ export const UniversalQrCode: React.FC<UniversalQrCodeProps> = ({
               `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" $1 style="width:${size}px;height:${size}px;display:block;border-radius:8px;">`
             );
             setSvgHtml(styledSvg);
-            try {
-              const b64 =
-                typeof window !== 'undefined' && window.btoa
-                  ? window.btoa(unescape(encodeURIComponent(svg)))
-                  : '';
-              if (b64) setDataUrl(`data:image/svg+xml;base64,${b64}`);
-            } catch {}
           }
         })
+        .catch(() => {});
+    } catch {}
+
+    // 2. Direct Canvas / PNG Data URL
+    try {
+      QRCode.toDataURL(value, {
+        width: size * 2,
+        margin: 1,
+        color: { dark: fgColor, light: bgColor },
+      })
+        .then((url) => {
+          if (isMounted && url) setDataUrl(url);
+        })
         .catch(() => {
-          QRCode.toDataURL(value, {
-            width: size * 2,
-            margin: 1,
-            color: { dark: fgColor, light: bgColor },
-          })
-            .then((url) => {
-              if (isMounted && url) setDataUrl(url);
-            })
-            .catch(() => {
-              if (isMounted) setDataUrl(fallbackUrl);
-            });
+          if (isMounted) setDataUrl(fallbackUrl);
         });
     } catch {
       if (isMounted) setDataUrl(fallbackUrl);
     }
 
+    // 3. Fallback safety timer
     const timer = setTimeout(() => {
       if (isMounted) {
         setDataUrl((prev) => prev || fallbackUrl);
       }
-    }, 250);
+    }, 200);
 
     return () => {
       isMounted = false;
       clearTimeout(timer);
     };
   }, [value, size, bgColor, fgColor]);
+
+  // In Web / DOM runtime (Capacitor Android WebView and Desktop/Mobile Chrome)
+  if (Platform.OS === 'web' && svgHtml) {
+    return createElement('div', {
+      style: {
+        width: `${size}px`,
+        height: `${size}px`,
+        backgroundColor: bgColor,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: '8px',
+        overflow: 'hidden',
+      },
+      dangerouslySetInnerHTML: { __html: svgHtml },
+    });
+  }
+
+  const fallbackUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size * 2}x${size * 2}&data=${encodeURIComponent(value || 'solana')}&bgcolor=${bgColor.replace('#', '')}&color=${fgColor.replace('#', '')}`;
 
   return (
     <View
@@ -101,19 +118,18 @@ export const UniversalQrCode: React.FC<UniversalQrCodeProps> = ({
         style,
       ]}
     >
-      {svgHtml ? (
-        <View
-          style={{ width: size, height: size }}
-          {...({ dangerouslySetInnerHTML: { __html: svgHtml } } as any)}
-        />
-      ) : dataUrl ? (
+      {dataUrl ? (
         <Image
           source={{ uri: dataUrl }}
           style={{ width: size, height: size, borderRadius: 8 }}
           resizeMode="contain"
         />
       ) : (
-        <ActivityIndicator size="small" color="#5B67F6" />
+        <Image
+          source={{ uri: fallbackUrl }}
+          style={{ width: size, height: size, borderRadius: 8 }}
+          resizeMode="contain"
+        />
       )}
     </View>
   );

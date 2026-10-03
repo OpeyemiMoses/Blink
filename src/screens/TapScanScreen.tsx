@@ -386,7 +386,7 @@ export const TapScanScreen: React.FC<TapScanScreenProps> = ({
       } else {
         // Native SOL transfer on Solana network
         const lamports = Math.round(resolvedBlink.amount * LAMPORTS_PER_SOL);
-        const { blockhash } = await connection.getLatestBlockhash('confirmed');
+        const { blockhash } = await SolanaService.getLatestBlockhash('confirmed');
         transaction = new Transaction().add(
           SystemProgram.transfer({
             fromPubkey: senderPubkey,
@@ -401,7 +401,7 @@ export const TapScanScreen: React.FC<TapScanScreenProps> = ({
       const signature = await WalletProviderService.signAndSendTransaction(transaction);
 
       // Non-blocking: verify transaction on-chain in background (don't block success UI)
-      connection.getLatestBlockhash('confirmed').then((latestBlockhash) => {
+      SolanaService.getLatestBlockhash('confirmed').then((latestBlockhash) => {
         connection.confirmTransaction(
           { signature, ...latestBlockhash },
           'confirmed'
