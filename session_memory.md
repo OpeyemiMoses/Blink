@@ -6,10 +6,11 @@ Workspace: `/Users/user/.gemini/antigravity-ide/scratch/seeker-tapblink`
 GitHub Repo: `https://github.com/OpeyemiMoses/Blink.git`
 
 ## Active Mobile Test URLs
-- **localtunnel**: `https://funny-liger-39.loca.lt` (Password: `105.120.131.143`)
+- **localtunnel**: `https://yellow-trees-exist.loca.lt` (Password: `105.113.35.152`)
 - **Railway Cloud Backend**: `https://blink-production-5c36.up.railway.app`
 - **GitHub Release (APK)**: https://github.com/OpeyemiMoses/Blink/releases
 - **Direct APK Download**: https://github.com/OpeyemiMoses/Blink/releases/download/v1.0.0/blink.apk
+- **Latest Commit**: `2f888d8`
 
 ---
 
@@ -47,6 +48,50 @@ GitHub Repo: `https://github.com/OpeyemiMoses/Blink.git`
   2. User Experience (25%)
   3. Innovation / X-factor (25%)
   4. Presentation & Demo Quality (25%)
+
+---
+
+## Completed Fixes & Diagnoses (Turn Update — Oct 3, 2026)
+
+### 1. Fixed "Sign In / Login" & "Privy Modal" Showing When Already Connected
+- **Issue**: Even after successfully connecting with Phantom, the top header of `ProfileScreen.tsx` displayed blue "Sign In / Login" and "Privy Modal" buttons.
+- **Root Cause**: Condition was checking `!authenticated` (Privy's boolean). When connecting via native Phantom/MWA deep links, Privy's `authenticated` flag was false, even though the user had an active Solana wallet (`activeAccount?.publicKey`).
+- **Fix**: Replaced with `!isUserLoggedIn` where `isUserLoggedIn = authenticated || Boolean(activeAccount?.publicKey) || Boolean(solanaAddress)`. Now, when logged in with Phantom, the top buttons are cleanly hidden.
+
+### 2. Differentiated Wallet Cards & Removed "Export Key" on External Wallets
+- **Issue**: Profile screen hardcoded "PRIVY EMBEDDED SOLANA WALLET" and displayed an "Export Key" button, even for external Phantom/Solflare wallets where Blink does not hold private keys.
+- **Fix**:
+  - Dynamically detects wallet type (`isPrivyWallet`).
+  - If external wallet (e.g. Phantom): displays `"PHANTOM MOBILE SOLANA WALLET"` (or wallet name), Wallet icon, and verified Non-Custodial badge.
+  - The "Export Key" button is strictly hidden for external wallets and only appears for Privy embedded keypairs.
+  - Also in `SettingsScreen.tsx`: "Export Private Key" card is only rendered if `isPrivyWallet`.
+
+### 3. Eliminated Unwanted Email Linking & Account Pollution (`mybitcoind@gmail.com`)
+- **Issue**: Connecting a new Phantom wallet populated `mybitcoind@gmail.com` and `mybitcoind` as the user handle.
+- **Root Causes**:
+  - `INITIAL_PROFILE` in `src/services/userProfileService.ts` hardcoded `username: 'mybitcoind'` and `email: 'mybitcoind@gmail.com'`.
+  - `solanaMobileStackService.ts` line 465 was reusing `existingProf` from previous localStorage instead of creating a clean profile.
+  - `ProfileScreen.tsx` was passing `profile.linkedAccounts.email` into `syncCloudProfile`, causing circular lookup and inheriting the old account.
+  - `databaseService.ts` and `blinkIdService.ts` had fallback lines to `'mybitcoind'`.
+- **Fixes Applied**:
+  - Completely purged all `'mybitcoind'` and `'mybitcoind@gmail.com'` fallbacks across the entire codebase.
+  - `INITIAL_PROFILE` starts with `username: ''`, `displayName: 'Solana User'`, and all `linkedAccounts` set to `null`.
+  - Newly connected wallets generate a clean fresh profile: handle `phantom_${pubkey.slice(0,4)}_${pubkey.slice(-4)}`, display name `Phantom User`, and unlinked email (`email: null`).
+  - `syncCloudProfile` only passes fallbackEmail if the user is authenticated via Privy, and checks address ownership before merging.
+  - Added duplicate email checks on both frontend and backend (`/api/users/check-email` and in `/api/users` POST) to guarantee an email cannot be linked to multiple accounts.
+
+### 4. Added Sign Out of Account in Profile & Settings
+- **Issue**: User could not find "Sign Out of Account" in ProfileScreen, and SettingsScreen had no sign out option for external wallet accounts.
+- **Root Cause**: Line 915 in `ProfileScreen.tsx` was wrapped in `{authenticated && ...}`.
+- **Fix**:
+  - Updated condition to `{isUserLoggedIn && ...}`.
+  - On tap: calls `logout()` (if Privy authenticated), `WalletProviderService.disconnect()`, `UserProfileService.resetProfile()`, dispatches `blink_auth_signout`, and redirects to auth.
+  - Added dedicated "Sign Out of Account" card in `SettingsScreen.tsx` for any active session.
+
+### 5. Fixed Settings Screen Treating Connected Wallet as "Guest Session"
+- **Issue**: Going to Settings displayed "GUEST SESSION - Exploring as Guest - Exit Guest Mode & Sign In" even when connected via Phantom.
+- **Root Cause**: `SettingsScreen.tsx` checked `!authenticated` instead of checking if any wallet/address was active.
+- **Fix**: Replaced with `!isUserLoggedIn` where `isUserLoggedIn = authenticated || Boolean(activeAccount?.publicKey)`. Now connected wallet users see Account Session and Account Danger Zone, not the Guest Session card.
 
 ---
 
