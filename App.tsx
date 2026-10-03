@@ -280,11 +280,18 @@ function BlinkMainApp() {
         window.localStorage.removeItem('solana_connected_wallet_name');
         window.localStorage.removeItem('wallet_mobile_session');
         window.localStorage.removeItem('wallet_shared_secret');
+        window.localStorage.removeItem('phantom_session_dapp_secret_key');
+        window.localStorage.removeItem('phantom_session_dapp_public_key');
+        window.localStorage.removeItem('phantom_dapp_secret_key');
+        window.localStorage.removeItem('phantom_dapp_public_key');
+        window.localStorage.removeItem('solflare_dapp_secret_key');
+        window.localStorage.removeItem('solflare_dapp_public_key');
       }
       WalletProviderService.disconnect();
       setIsGuestMode(false);
       setCurrentTab('markets');
     };
+
     if (typeof window !== 'undefined') {
       window.addEventListener('blink_auth_signout', handleSignOut);
       return () => window.removeEventListener('blink_auth_signout', handleSignOut);

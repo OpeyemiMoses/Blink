@@ -78,7 +78,8 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({
 
   React.useEffect(() => {
     reloadBlinks();
-  }, [refreshTrigger]);
+  }, [activeAccount?.publicKey, refreshTrigger]);
+
 
   React.useEffect(() => {
     const handleUpdate = (e?: any) => {

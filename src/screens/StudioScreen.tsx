@@ -194,12 +194,21 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     }
   }, []);
 
+  // When the logged-in wallet account changes (e.g. Phantom Mobile reconnects asynchronously),
+  // re-sync blinks from cloud so previously created blinks appear immediately.
+  useEffect(() => {
+    if (!activeAccount?.publicKey) return;
+    PhysicalBlinkRegistry.syncFromCloud().then(() => {
+      setBlinks([...PhysicalBlinkRegistry.loadRegistry(true)]);
+    });
+  }, [activeAccount?.publicKey]);
 
   useEffect(() => {
     if (activeAccount?.publicKey && !formRecipient) {
       setFormRecipient(activeAccount.publicKey);
     }
   }, [activeAccount]);
+
 
   const showToast = (msg: string) => {
     ToastService.show(msg);

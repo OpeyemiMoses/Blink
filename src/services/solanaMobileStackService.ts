@@ -259,16 +259,36 @@ export class SolanaMobileStackService {
     try {
       const dappKeyPair = nacl.box.keyPair();
       const secretHex = Buffer.from(dappKeyPair.secretKey).toString('hex');
+      const dappPubkeyBase58 = encodeBs58(dappKeyPair.publicKey);
+
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.setItem('phantom_dapp_secret_key', secretHex);
+        window.localStorage.setItem('phantom_dapp_public_key', dappPubkeyBase58);
+        window.localStorage.removeItem('phantom_session_dapp_secret_key');
+        window.localStorage.removeItem('phantom_session_dapp_public_key');
+        window.localStorage.removeItem('wallet_mobile_session');
+        window.localStorage.removeItem('wallet_shared_secret');
       }
 
-      const dappPubkeyBase58 = encodeBs58(dappKeyPair.publicKey);
-      const appUrl = encodeURIComponent('https://blink-production-5c36.up.railway.app');
-      const redirectLink = encodeURIComponent('blink://onConnect');
+      const isNative =
+        typeof window !== 'undefined' &&
+        Boolean((window as any).Capacitor?.isNativePlatform?.());
+
+      const currentOrigin =
+        typeof window !== 'undefined' && window.location?.origin?.startsWith('http')
+          ? window.location.origin
+          : 'https://blink-production-5c36.up.railway.app';
+
+      const appUrl = encodeURIComponent(
+        currentOrigin.includes('localhost') ? 'https://blink-production-5c36.up.railway.app' : currentOrigin
+      );
+      const redirectLink = encodeURIComponent(
+        isNative ? 'blink://onConnect' : `${currentOrigin}/onConnect`
+      );
       const cluster = SolanaService.getNetwork() === 'devnet' ? 'devnet' : 'mainnet-beta';
 
-      const phantomUrl = `https://phantom.app/ul/v1/connect?app_url=${appUrl}&dapp_encryption_public_key=${dappPubkeyBase58}&redirect_link=${redirectLink}&cluster=${cluster}`;
+      // Official Phantom deeplink domain is phantom.com
+      const phantomUrl = `https://phantom.com/ul/v1/connect?app_url=${appUrl}&dapp_encryption_public_key=${dappPubkeyBase58}&redirect_link=${redirectLink}&cluster=${cluster}`;
 
       console.log('[SolanaMobileStack] Launching Phantom connect URL:', phantomUrl);
 
@@ -305,13 +325,32 @@ export class SolanaMobileStackService {
     try {
       const dappKeyPair = nacl.box.keyPair();
       const secretHex = Buffer.from(dappKeyPair.secretKey).toString('hex');
+      const dappPubkeyBase58 = encodeBs58(dappKeyPair.publicKey);
+
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.setItem('solflare_dapp_secret_key', secretHex);
+        window.localStorage.setItem('solflare_dapp_public_key', dappPubkeyBase58);
+        window.localStorage.removeItem('phantom_session_dapp_secret_key');
+        window.localStorage.removeItem('phantom_session_dapp_public_key');
+        window.localStorage.removeItem('wallet_mobile_session');
+        window.localStorage.removeItem('wallet_shared_secret');
       }
 
-      const dappPubkeyBase58 = encodeBs58(dappKeyPair.publicKey);
-      const appUrl = encodeURIComponent('https://blink-production-5c36.up.railway.app');
-      const redirectLink = encodeURIComponent('blink://onConnect');
+      const isNative =
+        typeof window !== 'undefined' &&
+        Boolean((window as any).Capacitor?.isNativePlatform?.());
+
+      const currentOrigin =
+        typeof window !== 'undefined' && window.location?.origin?.startsWith('http')
+          ? window.location.origin
+          : 'https://blink-production-5c36.up.railway.app';
+
+      const appUrl = encodeURIComponent(
+        currentOrigin.includes('localhost') ? 'https://blink-production-5c36.up.railway.app' : currentOrigin
+      );
+      const redirectLink = encodeURIComponent(
+        isNative ? 'blink://onConnect' : `${currentOrigin}/onConnect`
+      );
       const cluster = SolanaService.getNetwork() === 'devnet' ? 'devnet' : 'mainnet-beta';
 
       const solflareUrl = `https://solflare.com/ul/v1/connect?app_url=${appUrl}&dapp_encryption_public_key=${dappPubkeyBase58}&redirect_link=${redirectLink}&cluster=${cluster}`;
@@ -423,6 +462,16 @@ export class SolanaMobileStackService {
         if (session) {
           window.localStorage.setItem('wallet_mobile_session', session);
           window.localStorage.setItem('wallet_shared_secret', Buffer.from(sharedSecret).toString('hex'));
+          // Lock in the dapp secret key and public key used for THIS session — never overwrite after connect
+          const currentSecret = window.localStorage.getItem('phantom_dapp_secret_key') ||
+            window.localStorage.getItem('solflare_dapp_secret_key');
+          if (currentSecret) {
+            window.localStorage.setItem('phantom_session_dapp_secret_key', currentSecret);
+            try {
+              const currentKeyPair = nacl.box.keyPair.fromSecretKey(new Uint8Array(Buffer.from(currentSecret, 'hex')));
+              window.localStorage.setItem('phantom_session_dapp_public_key', encodeBs58(currentKeyPair.publicKey));
+            } catch {}
+          }
         }
         window.localStorage.setItem('solana_connected_wallet_name', account.name);
         window.localStorage.setItem('blink_connected_native_wallet', JSON.stringify(account));
@@ -658,16 +707,24 @@ export class SolanaMobileStackService {
         typeof window !== 'undefined' && window.localStorage
           ? window.localStorage.getItem('wallet_shared_secret')
           : null;
+      // Use the session-locked secret key (set during connect, never overwritten)
       const dappSecretHex =
         typeof window !== 'undefined' && window.localStorage
-          ? window.localStorage.getItem('phantom_dapp_secret_key')
+          ? window.localStorage.getItem('phantom_session_dapp_secret_key') ||
+            window.localStorage.getItem('phantom_dapp_secret_key')
           : null;
 
       if (!session || !sharedSecretHex || !dappSecretHex) {
         console.warn('[SolanaMobileStack] Missing Phantom session or secrets. Prompting reconnect...');
-        ToastService.info('Session expired. Opening Phantom to reconnect...');
+        ToastService.info('Reconnecting Phantom session for secure signing...');
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.removeItem('wallet_mobile_session');
+          window.localStorage.removeItem('wallet_shared_secret');
+          window.localStorage.removeItem('phantom_session_dapp_secret_key');
+          window.localStorage.removeItem('phantom_session_dapp_public_key');
+        }
         await this.connectPhantomMobile();
-        throw new Error('Please reconnect your Phantom wallet and retry the transaction.');
+        throw new Error('Please approve connection in Phantom and try again.');
       }
 
       const sharedSecret = new Uint8Array(Buffer.from(sharedSecretHex, 'hex'));
@@ -683,13 +740,17 @@ export class SolanaMobileStackService {
       const nonce = nacl.randomBytes(24);
       const encryptedPayload = nacl.box.after(payloadBytes, nonce, sharedSecret);
 
-      const dappPubkeyBase58 = encodeBs58(dappKeyPair.publicKey);
+      const storedSessionPubkey = typeof window !== 'undefined' && window.localStorage
+        ? window.localStorage.getItem('phantom_session_dapp_public_key')
+        : null;
+      const dappPubkeyBase58 = storedSessionPubkey || encodeBs58(dappKeyPair.publicKey);
       const nonceBase58 = encodeBs58(nonce);
       const payloadBase58 = encodeBs58(encryptedPayload);
 
       const isNative =
         typeof window !== 'undefined' &&
         Boolean((window as any).Capacitor?.isNativePlatform?.());
+
       const currentOrigin =
         typeof window !== 'undefined' && window.location?.origin?.startsWith('http')
           ? window.location.origin
@@ -706,7 +767,8 @@ export class SolanaMobileStackService {
         payload: payloadBase58,
       });
 
-      const phantomUrl = `https://phantom.app/ul/v1/signTransaction?${params.toString()}`;
+      // Official Phantom deeplink domain is phantom.com (not phantom.app)
+      const phantomUrl = `https://phantom.com/ul/v1/signTransaction?${params.toString()}`;
 
       console.log('[SolanaMobileStack] Launching Phantom signTransaction URL:', phantomUrl);
       ToastService.info('Opening Phantom to approve transaction...');
@@ -792,16 +854,24 @@ export class SolanaMobileStackService {
         typeof window !== 'undefined' && window.localStorage
           ? window.localStorage.getItem('wallet_shared_secret')
           : null;
+      // Use the session-locked secret key (set during connect, never overwritten)
       const dappSecretHex =
         typeof window !== 'undefined' && window.localStorage
-          ? window.localStorage.getItem('solflare_dapp_secret_key')
+          ? window.localStorage.getItem('phantom_session_dapp_secret_key') ||
+            window.localStorage.getItem('solflare_dapp_secret_key')
           : null;
 
       if (!session || !sharedSecretHex || !dappSecretHex) {
         console.warn('[SolanaMobileStack] Missing Solflare session or secrets. Prompting reconnect...');
-        ToastService.info('Session expired. Opening Solflare to reconnect...');
+        ToastService.info('Reconnecting Solflare session for secure signing...');
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.removeItem('wallet_mobile_session');
+          window.localStorage.removeItem('wallet_shared_secret');
+          window.localStorage.removeItem('phantom_session_dapp_secret_key');
+          window.localStorage.removeItem('phantom_session_dapp_public_key');
+        }
         await this.connectSolflareMobile();
-        throw new Error('Please reconnect your Solflare wallet and retry the transaction.');
+        throw new Error('Please approve connection in Solflare and try again.');
       }
 
       const sharedSecret = new Uint8Array(Buffer.from(sharedSecretHex, 'hex'));
@@ -817,13 +887,17 @@ export class SolanaMobileStackService {
       const nonce = nacl.randomBytes(24);
       const encryptedPayload = nacl.box.after(payloadBytes, nonce, sharedSecret);
 
-      const dappPubkeyBase58 = encodeBs58(dappKeyPair.publicKey);
+      const storedSessionPubkey = typeof window !== 'undefined' && window.localStorage
+        ? window.localStorage.getItem('phantom_session_dapp_public_key')
+        : null;
+      const dappPubkeyBase58 = storedSessionPubkey || encodeBs58(dappKeyPair.publicKey);
       const nonceBase58 = encodeBs58(nonce);
       const payloadBase58 = encodeBs58(encryptedPayload);
 
       const isNative =
         typeof window !== 'undefined' &&
         Boolean((window as any).Capacitor?.isNativePlatform?.());
+
       const currentOrigin =
         typeof window !== 'undefined' && window.location?.origin?.startsWith('http')
           ? window.location.origin
@@ -914,6 +988,15 @@ export class SolanaMobileStackService {
       if (errorCode || errorMessage) {
         const errorText = errorMessage || 'Transaction rejected in wallet';
         console.warn('Wallet transaction rejected:', errorCode, errorText);
+        // Clear stale session if error is related to invalid session or decryption failure
+        if (errorCode === '-32603' || String(errorText).toLowerCase().includes('session') || String(errorText).toLowerCase().includes('unexpected')) {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.removeItem('wallet_mobile_session');
+            window.localStorage.removeItem('wallet_shared_secret');
+            window.localStorage.removeItem('phantom_session_dapp_secret_key');
+            window.localStorage.removeItem('phantom_session_dapp_public_key');
+          }
+        }
         ToastService.error(errorText);
         if (this.pendingSignTransaction) {
           this.pendingSignTransaction.reject(new Error(errorText));

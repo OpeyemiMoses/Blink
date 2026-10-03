@@ -60,18 +60,18 @@ export const BlinkStudioScreen: React.FC<BlinkStudioScreenProps> = ({
     return () => unsub();
   }, []);
 
-  const [allBlinks, setAllBlinks] = useState<PhysicalBlink[]>(() => PhysicalBlinkRegistry.loadRegistry());
+  const [allBlinks, setAllBlinks] = useState<PhysicalBlink[]>(() => PhysicalBlinkRegistry.loadRegistry(true));
 
   const reloadBlinks = () => {
-    setAllBlinks(PhysicalBlinkRegistry.loadRegistry());
+    setAllBlinks([...PhysicalBlinkRegistry.loadRegistry(true)]);
     PhysicalBlinkRegistry.syncFromCloud().then(() => {
-      setAllBlinks(PhysicalBlinkRegistry.loadRegistry());
+      setAllBlinks([...PhysicalBlinkRegistry.loadRegistry(true)]);
     });
   };
 
   React.useEffect(() => {
     reloadBlinks();
-  }, [refreshTrigger]);
+  }, [activeAccount?.publicKey, refreshTrigger]);
 
   React.useEffect(() => {
     const handleUpdate = () => reloadBlinks();
@@ -89,13 +89,14 @@ export const BlinkStudioScreen: React.FC<BlinkStudioScreenProps> = ({
     }
   }, []);
 
-  const userAddress = (activeAccount?.publicKey || '').toLowerCase();
+  const userAddress = (activeAccount?.publicKey || '').trim().toLowerCase();
   const myBlinks = allBlinks.filter((b) => {
     if (!userAddress) return false;
-    const recip = (b.recipient || '').toLowerCase();
-    const creator = ((b as any).creatorAddress || (b as any).owner || '').toLowerCase();
+    const recip = (b.recipient || '').trim().toLowerCase();
+    const creator = ((b as any).creatorAddress || (b as any).owner || '').trim().toLowerCase();
     return recip === userAddress || creator === userAddress;
   });
+
 
   const totalVolume = myBlinks.reduce((sum, b) => sum + (b.stats?.volumeUsdc || 0), 0);
   const totalTaps = myBlinks.reduce((sum, b) => sum + (b.stats?.taps || 0), 0);
