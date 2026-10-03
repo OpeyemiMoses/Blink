@@ -194,6 +194,14 @@ function BlinkMainApp() {
           return;
         }
 
+        if (
+          urlStr.includes('onSignAndSendTransaction') ||
+          urlStr.includes('callback=onSignAndSendTransaction')
+        ) {
+          SolanaMobileStackService.handleSignAndSendCallback(urlStr);
+          return;
+        }
+
         // Inbound Blink payment/interaction link: blink://t/<id>, /t/<id>, or canonical URL
         if (urlStr.includes('/t/') || urlStr.startsWith('blink://')) {
           try {
@@ -235,6 +243,11 @@ function BlinkMainApp() {
           href.includes('solflare_encryption_public_key')
         ) {
           SolanaMobileStackService.handleConnectCallback(href);
+        } else if (
+          href.includes('onSignAndSendTransaction') ||
+          href.includes('callback=onSignAndSendTransaction')
+        ) {
+          SolanaMobileStackService.handleSignAndSendCallback(href);
         } else if (window.location.pathname.startsWith('/t/')) {
           handleUrl(href);
         }

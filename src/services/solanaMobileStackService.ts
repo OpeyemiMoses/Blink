@@ -620,17 +620,395 @@ export class SolanaMobileStackService {
     }
   }
 
+  private static pendingSignTransaction: {
+    resolve: (signature: string) => void;
+    reject: (err: any) => void;
+    timer: any;
+  } | null = null;
+
   /**
-   * Sign and send transaction via MWA if active, otherwise via WalletProviderService signer.
+   * Launch Phantom mobile app with official Universal Link signAndSendTransaction payload.
+   * Encrypts transaction, opens Phantom approval sheet, and awaits signature callback.
+   */
+  static async signAndSendTransactionViaPhantomDeeplink(tx: Transaction): Promise<string> {
+    try {
+      const activeAccount = WalletProviderService.getActiveAccount();
+      if (!activeAccount?.publicKey) {
+        throw new Error('No active Phantom account found.');
+      }
+
+      const connection = SolanaService.getConnection();
+      if (!tx.recentBlockhash) {
+        const latest = await connection.getLatestBlockhash('confirmed');
+        tx.recentBlockhash = latest.blockhash;
+      }
+      if (!tx.feePayer) {
+        tx.feePayer = new PublicKey(activeAccount.publicKey);
+      }
+
+      // Serialize without requiring signatures yet
+      const serializedTx = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+      const bs58Tx = encodeBs58(serializedTx);
+
+      const session =
+        typeof window !== 'undefined' && window.localStorage
+          ? window.localStorage.getItem('wallet_mobile_session')
+          : null;
+      const sharedSecretHex =
+        typeof window !== 'undefined' && window.localStorage
+          ? window.localStorage.getItem('wallet_shared_secret')
+          : null;
+      const dappSecretHex =
+        typeof window !== 'undefined' && window.localStorage
+          ? window.localStorage.getItem('phantom_dapp_secret_key')
+          : null;
+
+      if (!session || !sharedSecretHex || !dappSecretHex) {
+        console.warn('[SolanaMobileStack] Missing Phantom session or secrets. Prompting reconnect...');
+        ToastService.info('Session expired. Opening Phantom to reconnect...');
+        await this.connectPhantomMobile();
+        throw new Error('Please reconnect your Phantom wallet and retry the transaction.');
+      }
+
+      const sharedSecret = new Uint8Array(Buffer.from(sharedSecretHex, 'hex'));
+      const dappSecretKey = new Uint8Array(Buffer.from(dappSecretHex, 'hex'));
+      const dappKeyPair = nacl.box.keyPair.fromSecretKey(dappSecretKey);
+
+      const payload = {
+        session,
+        transaction: bs58Tx,
+      };
+
+      const payloadBytes = new TextEncoder().encode(JSON.stringify(payload));
+      const nonce = nacl.randomBytes(24);
+      const encryptedPayload = nacl.box.after(payloadBytes, nonce, sharedSecret);
+
+      const dappPubkeyBase58 = encodeBs58(dappKeyPair.publicKey);
+      const nonceBase58 = encodeBs58(nonce);
+      const payloadBase58 = encodeBs58(encryptedPayload);
+
+      const isNative =
+        typeof window !== 'undefined' &&
+        Boolean((window as any).Capacitor?.isNativePlatform?.());
+      const currentOrigin =
+        typeof window !== 'undefined' && window.location?.origin?.startsWith('http')
+          ? window.location.origin
+          : 'https://blink-production-5c36.up.railway.app';
+
+      const redirectLink = encodeURIComponent(
+        isNative
+          ? 'blink://onSignAndSendTransaction'
+          : `${currentOrigin}/?callback=onSignAndSendTransaction`
+      );
+
+      const phantomUrl = `https://phantom.app/ul/v1/signAndSendTransaction?dapp_encryption_public_key=${dappPubkeyBase58}&nonce=${nonceBase58}&redirect_link=${redirectLink}&payload=${payloadBase58}`;
+
+      console.log('[SolanaMobileStack] Launching Phantom signAndSend URL:', phantomUrl);
+      ToastService.info('Opening Phantom to approve transaction...');
+
+      let launched = false;
+      try {
+        if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable?.('AppLauncher')) {
+          await AppLauncher.openUrl({ url: phantomUrl });
+          launched = true;
+        }
+      } catch (e) {
+        console.warn('AppLauncher openUrl failed:', e);
+      }
+
+      if (!launched) {
+        try {
+          await Linking.openURL(phantomUrl);
+          launched = true;
+        } catch {
+          if (typeof window !== 'undefined') {
+            window.location.href = phantomUrl;
+          }
+        }
+      }
+
+      return new Promise<string>((resolve, reject) => {
+        if (this.pendingSignTransaction?.timer) {
+          clearTimeout(this.pendingSignTransaction.timer);
+        }
+
+        const timer = setTimeout(() => {
+          this.pendingSignTransaction = null;
+          reject(new Error('Transaction signing in Phantom timed out or was cancelled.'));
+        }, 120000);
+
+        this.pendingSignTransaction = {
+          resolve: (sig: string) => {
+            clearTimeout(timer);
+            this.pendingSignTransaction = null;
+            resolve(sig);
+          },
+          reject: (err: any) => {
+            clearTimeout(timer);
+            this.pendingSignTransaction = null;
+            reject(err);
+          },
+          timer,
+        };
+      });
+    } catch (err: any) {
+      console.error('Failed to initiate Phantom signAndSend:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Launch Solflare mobile app with official Universal Link signAndSendTransaction payload.
+   */
+  static async signAndSendTransactionViaSolflareDeeplink(tx: Transaction): Promise<string> {
+    try {
+      const activeAccount = WalletProviderService.getActiveAccount();
+      if (!activeAccount?.publicKey) {
+        throw new Error('No active Solflare account found.');
+      }
+
+      const connection = SolanaService.getConnection();
+      if (!tx.recentBlockhash) {
+        const latest = await connection.getLatestBlockhash('confirmed');
+        tx.recentBlockhash = latest.blockhash;
+      }
+      if (!tx.feePayer) {
+        tx.feePayer = new PublicKey(activeAccount.publicKey);
+      }
+
+      const serializedTx = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+      const bs58Tx = encodeBs58(serializedTx);
+
+      const session =
+        typeof window !== 'undefined' && window.localStorage
+          ? window.localStorage.getItem('wallet_mobile_session')
+          : null;
+      const sharedSecretHex =
+        typeof window !== 'undefined' && window.localStorage
+          ? window.localStorage.getItem('wallet_shared_secret')
+          : null;
+      const dappSecretHex =
+        typeof window !== 'undefined' && window.localStorage
+          ? window.localStorage.getItem('solflare_dapp_secret_key')
+          : null;
+
+      if (!session || !sharedSecretHex || !dappSecretHex) {
+        console.warn('[SolanaMobileStack] Missing Solflare session or secrets. Prompting reconnect...');
+        ToastService.info('Session expired. Opening Solflare to reconnect...');
+        await this.connectSolflareMobile();
+        throw new Error('Please reconnect your Solflare wallet and retry the transaction.');
+      }
+
+      const sharedSecret = new Uint8Array(Buffer.from(sharedSecretHex, 'hex'));
+      const dappSecretKey = new Uint8Array(Buffer.from(dappSecretHex, 'hex'));
+      const dappKeyPair = nacl.box.keyPair.fromSecretKey(dappSecretKey);
+
+      const payload = {
+        session,
+        transaction: bs58Tx,
+      };
+
+      const payloadBytes = new TextEncoder().encode(JSON.stringify(payload));
+      const nonce = nacl.randomBytes(24);
+      const encryptedPayload = nacl.box.after(payloadBytes, nonce, sharedSecret);
+
+      const dappPubkeyBase58 = encodeBs58(dappKeyPair.publicKey);
+      const nonceBase58 = encodeBs58(nonce);
+      const payloadBase58 = encodeBs58(encryptedPayload);
+
+      const isNative =
+        typeof window !== 'undefined' &&
+        Boolean((window as any).Capacitor?.isNativePlatform?.());
+      const currentOrigin =
+        typeof window !== 'undefined' && window.location?.origin?.startsWith('http')
+          ? window.location.origin
+          : 'https://blink-production-5c36.up.railway.app';
+
+      const redirectLink = encodeURIComponent(
+        isNative
+          ? 'blink://onSignAndSendTransaction'
+          : `${currentOrigin}/?callback=onSignAndSendTransaction`
+      );
+
+      const solflareUrl = `https://solflare.com/ul/v1/signAndSendTransaction?dapp_encryption_public_key=${dappPubkeyBase58}&nonce=${nonceBase58}&redirect_link=${redirectLink}&payload=${payloadBase58}`;
+
+      console.log('[SolanaMobileStack] Launching Solflare signAndSend URL:', solflareUrl);
+      ToastService.info('Opening Solflare to approve transaction...');
+
+      let launched = false;
+      try {
+        if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable?.('AppLauncher')) {
+          await AppLauncher.openUrl({ url: solflareUrl });
+          launched = true;
+        }
+      } catch (e) {
+        console.warn('AppLauncher openUrl failed:', e);
+      }
+
+      if (!launched) {
+        try {
+          await Linking.openURL(solflareUrl);
+          launched = true;
+        } catch {
+          if (typeof window !== 'undefined') {
+            window.location.href = solflareUrl;
+          }
+        }
+      }
+
+      return new Promise<string>((resolve, reject) => {
+        if (this.pendingSignTransaction?.timer) {
+          clearTimeout(this.pendingSignTransaction.timer);
+        }
+
+        const timer = setTimeout(() => {
+          this.pendingSignTransaction = null;
+          reject(new Error('Transaction signing in Solflare timed out.'));
+        }, 120000);
+
+        this.pendingSignTransaction = {
+          resolve: (sig: string) => {
+            clearTimeout(timer);
+            this.pendingSignTransaction = null;
+            resolve(sig);
+          },
+          reject: (err: any) => {
+            clearTimeout(timer);
+            this.pendingSignTransaction = null;
+            reject(err);
+          },
+          timer,
+        };
+      });
+    } catch (err: any) {
+      console.error('Failed to initiate Solflare signAndSend:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Handle incoming deep link callback from Phantom / Solflare signAndSendTransaction.
+   * Decrypts the signature/transaction payload and resolves the pending promise.
+   */
+  static async handleSignAndSendCallback(urlString: string): Promise<string | null> {
+    try {
+      console.log('[SolanaMobileStack] Handling signAndSend callback:', urlString);
+      const cleanUrl = urlString
+        .replace('blink://', 'https://blink.local/')
+        .replace('solana-wallet://', 'https://blink.local/');
+      const parsedUrl = new URL(cleanUrl);
+      const searchParams = parsedUrl.searchParams;
+
+      const errorCode = searchParams.get('errorCode');
+      const errorMessage = searchParams.get('errorMessage');
+      if (errorCode || errorMessage) {
+        const errorText = errorMessage || 'Transaction rejected in wallet';
+        console.warn('Wallet transaction rejected:', errorCode, errorText);
+        ToastService.error(errorText);
+        if (this.pendingSignTransaction) {
+          this.pendingSignTransaction.reject(new Error(errorText));
+        }
+        return null;
+      }
+
+      const nonceBase58 = searchParams.get('nonce');
+      const dataBase58 = searchParams.get('data');
+
+      if (!nonceBase58 || !dataBase58) {
+        console.warn('Missing crypto parameters in signAndSend callback:', urlString);
+        return null;
+      }
+
+      const sharedSecretHex =
+        typeof window !== 'undefined' && window.localStorage
+          ? window.localStorage.getItem('wallet_shared_secret')
+          : null;
+
+      if (!sharedSecretHex) {
+        console.error('Shared secret not found for decrypting signAndSend response');
+        if (this.pendingSignTransaction) {
+          this.pendingSignTransaction.reject(new Error('Wallet session secret missing.'));
+        }
+        return null;
+      }
+
+      const sharedSecret = new Uint8Array(Buffer.from(sharedSecretHex, 'hex'));
+      const nonce = decodeBs58(nonceBase58);
+      const encryptedData = decodeBs58(dataBase58);
+
+      const decrypted = nacl.box.open.after(encryptedData, nonce, sharedSecret);
+      if (!decrypted) {
+        console.error('Failed to decrypt signAndSend response payload');
+        if (this.pendingSignTransaction) {
+          this.pendingSignTransaction.reject(new Error('Failed to decrypt wallet signature response.'));
+        }
+        return null;
+      }
+
+      const payloadStr = new TextDecoder().decode(decrypted);
+      const payload = JSON.parse(payloadStr);
+
+      let txSignature = '';
+      if (payload.signature) {
+        txSignature = payload.signature;
+      } else if (payload.transaction) {
+        // If wallet used signTransaction, broadcast the signed wire bytes
+        const signedBytes = decodeBs58(payload.transaction);
+        txSignature = await SolanaService.sendRawTransactionAndConfirm(signedBytes);
+      }
+
+      if (!txSignature) {
+        console.error('No signature found in signAndSend response:', payload);
+        if (this.pendingSignTransaction) {
+          this.pendingSignTransaction.reject(new Error('No signature returned from wallet.'));
+        }
+        return null;
+      }
+
+      console.log('[SolanaMobileStack] Successfully obtained signature from wallet:', txSignature);
+      ToastService.success('Transaction confirmed on Solana!');
+
+      if (this.pendingSignTransaction) {
+        this.pendingSignTransaction.resolve(txSignature);
+      }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('blink_wallet_signed', { detail: { signature: txSignature } })
+        );
+        window.dispatchEvent(new CustomEvent('blink_tx_updated'));
+      }
+
+      return txSignature;
+    } catch (err: any) {
+      console.error('Error handling signAndSend callback:', err);
+      if (this.pendingSignTransaction) {
+        this.pendingSignTransaction.reject(err);
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Sign and send transaction via Phantom/Solflare mobile deeplink or native MWA.
    */
   static async signAndSendTransaction(tx: Transaction): Promise<string> {
     const activeAcc = WalletProviderService.getActiveAccount();
-    const isMwaActive =
-      activeAcc?.name?.includes('MWA') ||
-      activeAcc?.name?.includes('Seed Vault') ||
-      activeAcc?.name?.includes('Mobile');
+    const accName = (activeAcc?.name || '').toLowerCase();
 
-    if (Platform.OS === 'android' || isMwaActive) {
+    // 1. Direct Phantom Universal Link Deeplink with encrypted payload
+    if (accName.includes('phantom')) {
+      return await this.signAndSendTransactionViaPhantomDeeplink(tx);
+    }
+
+    // 2. Direct Solflare Universal Link Deeplink with encrypted payload
+    if (accName.includes('solflare')) {
+      return await this.signAndSendTransactionViaSolflareDeeplink(tx);
+    }
+
+    // 3. Native MWA protocol (Seeker / Saga Android native)
+    const isMwaActive = accName.includes('mwa') || accName.includes('seed vault');
+    if (Platform.OS === 'android' && isMwaActive) {
       try {
         const { transact } = await import('@solana-mobile/mobile-wallet-adapter-protocol-web3js');
         let txSig = '';
@@ -670,11 +1048,13 @@ export class SolanaMobileStackService {
         });
 
         if (txSig) return txSig;
-      } catch (err) {
-        console.warn('MWA signing fallback to default provider:', err);
+      } catch (err: any) {
+        console.warn('MWA signing error:', err);
+        throw new Error(err?.message || 'MWA signing failed');
       }
     }
 
-    return await WalletProviderService.signAndSendTransaction(tx);
+    throw new Error(`No mobile signing provider available for ${activeAcc?.name || 'wallet'}`);
   }
 }
+

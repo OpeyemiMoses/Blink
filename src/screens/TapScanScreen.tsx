@@ -344,16 +344,23 @@ export const TapScanScreen: React.FC<TapScanScreenProps> = ({
       }
 
       // 2. Biometric / Fingerprint confirmation
-      const priceLabel = resolvedBlink.token === 'SOL'
-        ? `${resolvedBlink.amount} SOL`
-        : (resolvedBlink.token === 'SKR'
-          ? `${checkoutAmount} SKR`
-          : `$${resolvedBlink.amount.toFixed(2)} USDC`);
-      const isAuth = await BiometricService.authenticate(
-        `Authorize ${priceLabel} to ${resolvedBlink.name}`
-      );
-      if (!isAuth.success) {
-        throw new Error(isAuth.error || 'Biometric authorization cancelled or failed.');
+      const isExternalMobileWallet =
+        activeAccount?.name?.toLowerCase().includes('phantom') ||
+        activeAccount?.name?.toLowerCase().includes('solflare');
+
+      // 2. Biometric / Fingerprint confirmation (for local/embedded wallets; external wallets authenticate in their own app)
+      if (!isExternalMobileWallet) {
+        const priceLabel = resolvedBlink.token === 'SOL'
+          ? `${resolvedBlink.amount} SOL`
+          : (resolvedBlink.token === 'SKR'
+            ? `${checkoutAmount} SKR`
+            : `$${resolvedBlink.amount.toFixed(2)} USDC`);
+        const isAuth = await BiometricService.authenticate(
+          `Authorize ${priceLabel} to ${resolvedBlink.name}`
+        );
+        if (!isAuth.success) {
+          throw new Error(isAuth.error || 'Biometric authorization cancelled or failed.');
+        }
       }
 
       if (!activeAccount) {

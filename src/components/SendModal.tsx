@@ -275,14 +275,21 @@ export const SendModal: React.FC<SendModalProps> = ({
         initialTopSig = initSigs[0]?.signature || null;
       } catch {}
 
-      // 1. Mandatory Device Security: Face ID / Fingerprint / Passcode / Pattern
-      const bioAuth = await BiometricService.authenticate(
-        `Authorize transfer of ${tokenDisplayStr} on Solana`
-      );
-      if (!bioAuth.success) {
-        setError(bioAuth.error || 'Device security authorization was cancelled.');
-        setLoading(false);
-        return;
+      const activeAcc = WalletProviderService.getActiveAccount();
+      const isExternalMobileWallet =
+        activeAcc?.name?.toLowerCase().includes('phantom') ||
+        activeAcc?.name?.toLowerCase().includes('solflare');
+
+      // 1. Mandatory Device Security (for local/embedded wallets; external wallets authenticate in their own app)
+      if (!isExternalMobileWallet) {
+        const bioAuth = await BiometricService.authenticate(
+          `Authorize transfer of ${tokenDisplayStr} on Solana`
+        );
+        if (!bioAuth.success) {
+          setError(bioAuth.error || 'Device security authorization was cancelled.');
+          setLoading(false);
+          return;
+        }
       }
 
       const fromPubkey = new PublicKey(senderPublicKey);

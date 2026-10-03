@@ -562,22 +562,28 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
           ? `${effectiveAmount} SKR`
           : `$${effectiveAmount.toFixed(2)} USDC`);
 
-      // 2. Invoke the real on-device biometric scanner (Android fingerprint / Face ID)
-      const bioResult = await BiometricService.authenticate(
-        `Authorize ${priceLabel} to ${currentBlink.name}`
-      );
+      const isExternalMobileWallet =
+        activeAccount?.name?.toLowerCase().includes('phantom') ||
+        activeAccount?.name?.toLowerCase().includes('solflare');
 
-      if (!bioResult.success) {
-        setAuthorizing(false);
-        if (bioResult.error === 'user_cancel' || bioResult.error?.includes('cancelled')) {
-          ToastService.info('Biometric authorization cancelled.');
-        } else {
-          ToastService.error(bioResult.error || 'Biometric hardware authorization failed.');
+      // 2. Invoke real on-device biometric scanner (for local/embedded wallets; external wallets authenticate in their own app)
+      if (!isExternalMobileWallet) {
+        const bioResult = await BiometricService.authenticate(
+          `Authorize ${priceLabel} to ${currentBlink.name}`
+        );
+
+        if (!bioResult.success) {
+          setAuthorizing(false);
+          if (bioResult.error === 'user_cancel' || bioResult.error?.includes('cancelled')) {
+            ToastService.info('Biometric authorization cancelled.');
+          } else {
+            ToastService.error(bioResult.error || 'Biometric hardware authorization failed.');
+          }
+          return;
         }
-        return;
       }
 
-      // 3. Real biometrics verified! Broadcast REAL on-chain transaction
+      // 3. Broadcast on-chain transaction through the wallet provider
       await executeDirectPayment(effectiveAmount);
     } catch (err: any) {
       console.error('Authorization error:', err);

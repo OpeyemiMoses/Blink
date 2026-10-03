@@ -230,41 +230,17 @@ export class WalletProviderService {
       return await SolanaService.sendRawTransactionAndConfirm(serialized);
     }
 
-    // 2. If account was authorized via Mobile Wallet Adapter / Seed Vault external intent
-    if (
-      this.activeAccount?.name?.includes('MWA') ||
-      this.activeAccount?.name?.includes('Mobile')
-    ) {
-      try {
-        const { SolanaMobileStackService } = await import('./solanaMobileStackService');
-        return await SolanaMobileStackService.signAndSendTransaction(transaction);
-      } catch (mwaErr) {
-        console.warn('MWA transaction signing error, checking fallbacks:', mwaErr);
-      }
-    }
-
-    if (this.privySigner) {
-      try {
-        return await this.privySigner(transaction);
-      } catch (err: any) {
-        console.warn('Privy signer error, checking fallback:', err);
-        if (this.activeAccount?.isPrivy) {
-          throw err;
-        }
-      }
-    }
-
+    // 2. Direct Injected Browser Providers (Extension or Phantom/Solflare In-App Browser)
     let provider: any = null;
-    if (this.activeAccount) {
-      if (this.activeAccount.name === 'Phantom') {
-        provider = this.getPhantomProvider();
-      } else if (this.activeAccount.name === 'Solflare') {
-        provider = this.getSolflareProvider();
-      } else if (this.activeAccount.name === 'Backpack') {
-        provider = this.getBackpackProvider();
-      } else if (this.activeAccount.name === 'Coinbase Wallet') {
-        provider = this.getCoinbaseProvider();
-      }
+    const accName = (this.activeAccount?.name || '').toLowerCase();
+    if (accName.includes('phantom')) {
+      provider = this.getPhantomProvider();
+    } else if (accName.includes('solflare')) {
+      provider = this.getSolflareProvider();
+    } else if (accName.includes('backpack')) {
+      provider = this.getBackpackProvider();
+    } else if (accName.includes('coinbase')) {
+      provider = this.getCoinbaseProvider();
     }
 
     if (provider) {
@@ -280,6 +256,29 @@ export class WalletProviderService {
       } catch (err: any) {
         console.warn('Wallet provider transaction signing error:', err);
         throw err;
+      }
+    }
+
+    // 3. Mobile Deeplink / SMS (Phantom Mobile, Solflare Mobile, Seeker MWA)
+    if (
+      this.activeAccount?.name?.includes('MWA') ||
+      this.activeAccount?.name?.includes('Mobile') ||
+      accName.includes('phantom') ||
+      accName.includes('solflare')
+    ) {
+      const { SolanaMobileStackService } = await import('./solanaMobileStackService');
+      return await SolanaMobileStackService.signAndSendTransaction(transaction);
+    }
+
+    // 4. Privy Signer
+    if (this.privySigner) {
+      try {
+        return await this.privySigner(transaction);
+      } catch (err: any) {
+        console.warn('Privy signer error, checking fallback:', err);
+        if (this.activeAccount?.isPrivy) {
+          throw err;
+        }
       }
     }
 
