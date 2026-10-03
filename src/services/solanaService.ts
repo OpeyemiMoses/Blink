@@ -53,11 +53,10 @@ export class SolanaService {
   static getRpcUrl(network?: string): string {
     const net = (network || this.getNetwork()) === 'mainnet-beta' ? 'mainnet-beta' : 'devnet';
     if (net === 'mainnet-beta') return MAINNET_RPC;
-    try {
-      return getApiUrl('/api/solana-rpc');
-    } catch {
-      return DEVNET_RPC;
+    if (process.env.EXPO_PUBLIC_SOLANA_RPC_URL) {
+      return process.env.EXPO_PUBLIC_SOLANA_RPC_URL;
     }
+    return DEVNET_RPC;
   }
 
   static setNetwork(network?: string) {
@@ -722,18 +721,62 @@ export class SolanaService {
   }
 
   /**
+   * Safely query account info with multi-tier fallback (Direct Devnet -> Primary Connection -> HTTP raw fetch)
+   * to guarantee it never crashes with "TypeError: Failed to fetch".
+   */
+  static async getAccountInfoSafe(pubkey: PublicKey): Promise<any | null> {
+    // 1. Direct official Solana Devnet RPC (natively supports CORS + solana-client header)
+    try {
+      const directConn = new Connection(DEVNET_RPC, { commitment: 'confirmed' });
+      return await directConn.getAccountInfo(pubkey);
+    } catch (err1) {
+      console.warn('[SolanaService] Direct Devnet getAccountInfo failed, trying primary connection:', err1);
+    }
+
+    // 2. Primary connection
+    try {
+      const conn = this.getConnection();
+      return await conn.getAccountInfo(pubkey);
+    } catch (err2) {
+      console.warn('[SolanaService] Primary connection getAccountInfo failed, trying HTTP raw fetch:', err2);
+    }
+
+    // 3. Raw HTTP fetch via proxy without solana-client header
+    try {
+      const res = await fetch(getApiUrl('/api/solana-rpc'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getAccountInfo',
+          params: [pubkey.toBase58(), { encoding: 'base64' }],
+        }),
+      });
+      const json = await res.json();
+      if (json?.result?.value) {
+        return json.result.value;
+      }
+    } catch (err3) {
+      console.warn('[SolanaService] Raw fetch getAccountInfo failed:', err3);
+    }
+
+    return null;
+  }
+
+  /**
    * Resolve which USDC mint the sender holds tokens on.
    * Devnet has two common mints: official USDC_DEVNET_MINT (4zMMC...) and secondary faucet mint (Gh9Zw...).
    */
   static async resolveUsdcMint(senderPubkey: PublicKey): Promise<PublicKey> {
     try {
       const primaryAta = getAssociatedTokenAddressSync(USDC_DEVNET_MINT, senderPubkey);
-      const acc1 = await this.getConnection().getAccountInfo(primaryAta);
+      const acc1 = await this.getAccountInfoSafe(primaryAta);
       if (acc1) return USDC_DEVNET_MINT;
 
       const secondaryMint = new PublicKey('Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr');
       const secondaryAta = getAssociatedTokenAddressSync(secondaryMint, senderPubkey);
-      const acc2 = await this.getConnection().getAccountInfo(secondaryAta);
+      const acc2 = await this.getAccountInfoSafe(secondaryAta);
       if (acc2) return secondaryMint;
     } catch (e) {
       console.warn('resolveUsdcMint error:', e);
@@ -757,8 +800,16 @@ export class SolanaService {
     const transaction = new Transaction();
 
     // Check if recipient ATA exists on Solana network; create if not
-    const recipientAtaInfo = await this.getConnection().getAccountInfo(recipientAta);
-    if (!recipientAtaInfo) {
+    // If sender is sending to their own address, senderAta === recipientAta, which already exists!
+    let needsAtaCreation = false;
+    if (senderAta.equals(recipientAta)) {
+      needsAtaCreation = false;
+    } else {
+      const recipientAtaInfo = await this.getAccountInfoSafe(recipientAta);
+      needsAtaCreation = !recipientAtaInfo;
+    }
+
+    if (needsAtaCreation) {
       transaction.add(
         createAssociatedTokenAccountInstruction(senderPubkey, recipientAta, recipientPubkey, mint)
       );
@@ -793,8 +844,15 @@ export class SolanaService {
     const transaction = new Transaction();
 
     // Check if recipient ATA exists on Solana network; create if not
-    const recipientAtaInfo = await this.getConnection().getAccountInfo(recipientAta);
-    if (!recipientAtaInfo) {
+    let needsAtaCreation = false;
+    if (senderAta.equals(recipientAta)) {
+      needsAtaCreation = false;
+    } else {
+      const recipientAtaInfo = await this.getAccountInfoSafe(recipientAta);
+      needsAtaCreation = !recipientAtaInfo;
+    }
+
+    if (needsAtaCreation) {
       transaction.add(
         createAssociatedTokenAccountInstruction(senderPubkey, recipientAta, recipientPubkey, mint)
       );

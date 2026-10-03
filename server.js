@@ -139,8 +139,8 @@ function sendJson(res, statusCode, data) {
   res.writeHead(statusCode, {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Accept',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS, PUT, PATCH',
+    'Access-Control-Allow-Headers': 'Content-Type, Accept, solana-client, authorization, x-requested-with, *',
   });
   res.end(JSON.stringify(data));
 }
@@ -265,10 +265,11 @@ const server = http.createServer((req, res) => {
 
   // CORS preflight
   if (req.method === 'OPTIONS') {
+    const reqHeaders = req.headers['access-control-request-headers'] || '*';
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Accept',
+      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS, PUT, PATCH',
+      'Access-Control-Allow-Headers': reqHeaders,
     });
     res.end();
     return;
@@ -1648,8 +1649,8 @@ const server = http.createServer((req, res) => {
         res.writeHead(rpcRes.statusCode || 200, {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
+          'Access-Control-Allow-Headers': '*',
         });
         rpcRes.pipe(res);
       });
