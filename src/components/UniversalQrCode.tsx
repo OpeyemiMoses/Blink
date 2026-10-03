@@ -17,34 +17,71 @@ export const UniversalQrCode: React.FC<UniversalQrCodeProps> = ({
   fgColor = '#090A0F',
   style,
 }) => {
+  const [svgHtml, setSvgHtml] = useState<string | null>(null);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
     if (!value) {
+      setSvgHtml(null);
       setDataUrl(null);
       return;
     }
 
-    QRCode.toDataURL(
-      value,
-      {
-        width: size * 2, // 2x density for retina crispness
+    const fallbackUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size * 2}x${size * 2}&data=${encodeURIComponent(value)}&bgcolor=${bgColor.replace('#', '')}&color=${fgColor.replace('#', '')}`;
+
+    try {
+      QRCode.toString(value, {
+        type: 'svg',
         margin: 1,
+        width: size,
         color: {
           dark: fgColor,
           light: bgColor,
         },
-      },
-      (err, url) => {
-        if (!err && isMounted && url) {
-          setDataUrl(url);
-        }
+      })
+        .then((svg) => {
+          if (isMounted && svg) {
+            const styledSvg = svg.replace(
+              /<svg\b([^>]*)>/i,
+              `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" $1 style="width:${size}px;height:${size}px;display:block;border-radius:8px;">`
+            );
+            setSvgHtml(styledSvg);
+            try {
+              const b64 =
+                typeof window !== 'undefined' && window.btoa
+                  ? window.btoa(unescape(encodeURIComponent(svg)))
+                  : '';
+              if (b64) setDataUrl(`data:image/svg+xml;base64,${b64}`);
+            } catch {}
+          }
+        })
+        .catch(() => {
+          QRCode.toDataURL(value, {
+            width: size * 2,
+            margin: 1,
+            color: { dark: fgColor, light: bgColor },
+          })
+            .then((url) => {
+              if (isMounted && url) setDataUrl(url);
+            })
+            .catch(() => {
+              if (isMounted) setDataUrl(fallbackUrl);
+            });
+        });
+    } catch {
+      if (isMounted) setDataUrl(fallbackUrl);
+    }
+
+    const timer = setTimeout(() => {
+      if (isMounted) {
+        setDataUrl((prev) => prev || fallbackUrl);
       }
-    );
+    }, 250);
 
     return () => {
       isMounted = false;
+      clearTimeout(timer);
     };
   }, [value, size, bgColor, fgColor]);
 
@@ -56,11 +93,20 @@ export const UniversalQrCode: React.FC<UniversalQrCodeProps> = ({
           width: size,
           height: size,
           backgroundColor: bgColor,
+          justifyContent: 'center',
+          alignItems: 'center',
+          borderRadius: 8,
+          overflow: 'hidden',
         },
         style,
       ]}
     >
-      {dataUrl ? (
+      {svgHtml ? (
+        <View
+          style={{ width: size, height: size }}
+          {...({ dangerouslySetInnerHTML: { __html: svgHtml } } as any)}
+        />
+      ) : dataUrl ? (
         <Image
           source={{ uri: dataUrl }}
           style={{ width: size, height: size, borderRadius: 8 }}
@@ -75,9 +121,8 @@ export const UniversalQrCode: React.FC<UniversalQrCodeProps> = ({
 
 const styles = StyleSheet.create({
   container: {
+    padding: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    overflow: 'hidden',
   },
 });

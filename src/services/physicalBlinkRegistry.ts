@@ -693,10 +693,44 @@ export class PhysicalBlinkRegistry {
   }
 
   /**
+   * Get canonical public gateway base URL.
+   * If running inside Capacitor APK or localhost, defaults to the public Railway deployment.
+   */
+  static getPublicBaseUrl(): string {
+    if (typeof window !== 'undefined' && window.location) {
+      const origin = window.location.origin;
+      if (
+        origin &&
+        !origin.includes('localhost') &&
+        !origin.includes('127.0.0.1') &&
+        !origin.startsWith('capacitor://') &&
+        !origin.startsWith('ionic://')
+      ) {
+        return origin;
+      }
+    }
+    return 'https://blink-production-5c36.up.railway.app';
+  }
+
+  /**
+   * Direct deep link scheme to launch the installed mobile APK.
+   */
+  static getAppDeepLink(id: string): string {
+    return `blink://t/${id}`;
+  }
+
+  /**
+   * Android Chrome Intent URL to immediately launch com.blink.solanamobile or fallback.
+   */
+  static getAndroidIntentUrl(id: string, search = ''): string {
+    return `intent://t/${id}${search}#Intent;scheme=blink;package=com.blink.solanamobile;end`;
+  }
+
+  /**
    * Generate canonical Physical Blink URL.
    */
   static getPhysicalUrl(id: string): string {
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://blink.so';
+    const origin = this.getPublicBaseUrl();
     return `${origin}/t/${id}`;
   }
 
@@ -704,7 +738,7 @@ export class PhysicalBlinkRegistry {
    * Generate shareable URL with parameters if physical, ensuring anyone clicking it remotely can load it.
    */
   static getShareableUrl(blink: PhysicalBlink): string {
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://blink.so';
+    const origin = this.getPublicBaseUrl();
     const q = new URLSearchParams({
       name: blink.name,
       amount: String(blink.amount),

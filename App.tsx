@@ -130,6 +130,9 @@ function BlinkMainApp() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(() => UserProfileService.getProfile());
 
+  // In-app detail modal state for physical / scanned / deep-linked Blink
+  const [selectedDetailBlink, setSelectedDetailBlink] = useState<PhysicalBlink | null>(null);
+
   // Native In-App Privy Auth Modal state
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const [authModalOptions, setAuthModalOptions] = useState<any>(null);
@@ -167,23 +170,42 @@ function BlinkMainApp() {
     }
   }, []);
 
-  // Listen for inbound deep links (e.g. blink://onConnect from Phantom / Solflare)
+  // Listen for inbound deep links (e.g. blink://onConnect from Phantom / Solflare, or blink://t/<id>)
   useEffect(() => {
     let removeListener: (() => void) | null = null;
     const initDeepLinkListener = async () => {
+      const handleUrl = async (urlStr: string) => {
+        if (!urlStr) return;
+        console.log('[App] Received inbound deep link URL:', urlStr);
+        if (
+          urlStr.includes('onConnect') ||
+          urlStr.includes('phantom_encryption_public_key') ||
+          urlStr.includes('solflare_encryption_public_key')
+        ) {
+          SolanaMobileStackService.handleConnectCallback(urlStr);
+          return;
+        }
+
+        // Inbound Blink payment/interaction link: blink://t/<id>, /t/<id>, or canonical URL
+        if (urlStr.includes('/t/') || urlStr.startsWith('blink://')) {
+          try {
+            let resolved = PhysicalBlinkRegistry.resolve(urlStr);
+            if (!resolved) {
+              await PhysicalBlinkRegistry.syncFromCloud().catch(() => {});
+              resolved = PhysicalBlinkRegistry.resolve(urlStr);
+            }
+            if (resolved) {
+              setSelectedDetailBlink(resolved);
+              ToastService.info(`Opened: ${resolved.name}`);
+            }
+          } catch (err) {
+            console.warn('[App] Failed to resolve deep link blink:', err);
+          }
+        }
+      };
+
       try {
         const { App: CapApp } = await import('@capacitor/app');
-        const handleUrl = (urlStr: string) => {
-          if (!urlStr) return;
-          console.log('[App] Received deep link URL:', urlStr);
-          if (
-            urlStr.includes('onConnect') ||
-            urlStr.includes('phantom_encryption_public_key') ||
-            urlStr.includes('solflare_encryption_public_key')
-          ) {
-            SolanaMobileStackService.handleConnectCallback(urlStr);
-          }
-        };
 
         const sub = await CapApp.addListener('appUrlOpen', (event) => {
           handleUrl(event.url);
@@ -205,7 +227,16 @@ function BlinkMainApp() {
           href.includes('solflare_encryption_public_key')
         ) {
           SolanaMobileStackService.handleConnectCallback(href);
+        } else if (window.location.pathname.startsWith('/t/')) {
+          handleUrl(href);
         }
+
+        const handlePopState = () => {
+          if (window.location.pathname.startsWith('/t/')) {
+            handleUrl(window.location.href);
+          }
+        };
+        window.addEventListener('popstate', handlePopState);
       }
     };
 
@@ -297,7 +328,6 @@ function BlinkMainApp() {
   }, []);
 
   // Detail Modal for Screenshot 2 view
-  const [selectedDetailBlink, setSelectedDetailBlink] = useState<PhysicalBlink | null>(null);
 
   useEffect(() => {
     const handleBlinkDeleted = (e: any) => {
