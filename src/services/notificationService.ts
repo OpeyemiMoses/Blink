@@ -22,26 +22,62 @@ class NotificationServiceManager {
   private notifications: AppNotification[] = [];
   private clearedSignatures: Set<string> = new Set();
   private clearedAtTimestamp: number = 0;
+  private activeAddress: string | null = null;
 
   constructor() {
     this.loadFromStorage();
   }
 
+  public setActiveAddress(address: string | null): void {
+    const clean = (address || '').trim().toLowerCase();
+    if (clean === this.activeAddress) return;
+    this.activeAddress = clean || null;
+    this.loadFromStorage();
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      window.dispatchEvent(new CustomEvent('blink_notifications_updated'));
+      window.dispatchEvent(new CustomEvent('tapblink_notifications_updated'));
+    }
+  }
+
+  public getActiveAddress(): string | null {
+    return this.activeAddress;
+  }
+
+  private getStorageKey(): string {
+    return this.activeAddress ? `tapblink_notifications_${this.activeAddress}` : STORAGE_KEY;
+  }
+
+  private getClearedKey(): string {
+    return this.activeAddress ? `tapblink_cleared_notifications_${this.activeAddress}` : CLEARED_KEY;
+  }
+
+  private getClearedTimeKey(): string {
+    return this.activeAddress ? `tapblink_cleared_timestamp_${this.activeAddress}` : CLEARED_TIME_KEY;
+  }
+
   private loadFromStorage() {
     if (typeof window === 'undefined') return;
+    this.clearedSignatures = new Set();
+    this.clearedAtTimestamp = 0;
+    this.notifications = [];
+
+    const storageKey = this.getStorageKey();
+    const clearedKey = this.getClearedKey();
+    const clearedTimeKey = this.getClearedTimeKey();
+
     try {
-      const rawCleared = localStorage.getItem(CLEARED_KEY);
+      const rawCleared = localStorage.getItem(clearedKey);
       if (rawCleared) {
         this.clearedSignatures = new Set(JSON.parse(rawCleared));
       }
-      const rawClearedTime = localStorage.getItem(CLEARED_TIME_KEY);
+      const rawClearedTime = localStorage.getItem(clearedTimeKey);
       if (rawClearedTime) {
         this.clearedAtTimestamp = parseInt(rawClearedTime, 10) || 0;
       }
     } catch {}
 
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(storageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
@@ -94,13 +130,11 @@ class NotificationServiceManager {
           }
 
           this.notifications = deduped;
-          this.saveToStorage();
         } else {
           this.notifications = [];
         }
       } else {
         this.notifications = [];
-        this.saveToStorage();
       }
     } catch {
       this.notifications = [];
@@ -110,7 +144,7 @@ class NotificationServiceManager {
   private saveToStorage() {
     if (typeof window === 'undefined') return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.notifications));
+      localStorage.setItem(this.getStorageKey(), JSON.stringify(this.notifications));
       window.dispatchEvent(new CustomEvent('blink_notifications_updated'));
       window.dispatchEvent(new CustomEvent('tapblink_notifications_updated'));
     } catch {}
@@ -119,8 +153,8 @@ class NotificationServiceManager {
   private saveClearedToStorage() {
     if (typeof window === 'undefined') return;
     try {
-      localStorage.setItem(CLEARED_KEY, JSON.stringify(Array.from(this.clearedSignatures)));
-      localStorage.setItem(CLEARED_TIME_KEY, this.clearedAtTimestamp.toString());
+      localStorage.setItem(this.getClearedKey(), JSON.stringify(Array.from(this.clearedSignatures)));
+      localStorage.setItem(this.getClearedTimeKey(), this.clearedAtTimestamp.toString());
     } catch {}
   }
 

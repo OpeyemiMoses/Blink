@@ -156,8 +156,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     }
   };
 
-  // Profile edit panel: hidden by default once profile is saved, shown for new users
-  const [isEditingProfile, setIsEditingProfile] = useState(() => !profile.hasCustomizedProfile);
+  // Profile edit panel: strictly collapsed by default once saved/connected per Persistent Rule 5
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
 
   const [isCheckingUsername, setIsCheckingUsername] = useState(false);
   const [isUsernameAvailable, setIsUsernameAvailable] = useState<boolean | null>(null);

@@ -337,6 +337,7 @@ function BlinkMainApp() {
     const handleSignOut = () => {
       setNativeWalletAccount(null);
       setActiveWalletSource('privy');
+      NotificationService.setActiveAddress(null);
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.removeItem('blink_connected_native_wallet');
         window.localStorage.removeItem('solana_connected_wallet_name');
@@ -350,6 +351,7 @@ function BlinkMainApp() {
         window.localStorage.removeItem('solflare_dapp_secret_key');
         window.localStorage.removeItem('solflare_dapp_public_key');
       }
+      try { sessionStorage.removeItem('blink_session_explicit_native'); } catch {}
       WalletProviderService.disconnect();
       setIsGuestMode(false);
       setCurrentTab('markets');
@@ -703,6 +705,12 @@ function BlinkMainApp() {
     }
   };
 
+  // Synchronize active address with NotificationService so account notifications never bleed across wallets
+  useEffect(() => {
+    NotificationService.setActiveAddress(effectiveAddress || null);
+    initialSyncDoneRef.current = false;
+  }, [effectiveAddress]);
+
   useEffect(() => {
     if (!effectiveAddress) return;
     const syncCloudData = async () => {
@@ -727,9 +735,13 @@ function BlinkMainApp() {
               const myUserClean = (userProfile?.username || '').toLowerCase().trim().replace(/^@+/, '');
               const myBlinkClean = (userProfile?.blinkId || '').toLowerCase().trim().replace(/^@+/, '');
 
-              const isForMe = recip === myEffAddr || recipNoAt === myEffAddr ||
-                              (myUserClean && (recip === myUserClean || recipNoAt === myUserClean)) ||
-                              (myBlinkClean && (recip === myBlinkClean || recipNoAt === myBlinkClean));
+              // When using a native external wallet (e.g. Phantom), strictly match Phantom's own address.
+              // Never match Privy's username or Privy's blinkId to Phantom!
+              const isForMe = isPrivyActive
+                ? (recip === myEffAddr || recipNoAt === myEffAddr ||
+                   (myUserClean && (recip === myUserClean || recipNoAt === myUserClean)) ||
+                   (myBlinkClean && (recip === myBlinkClean || recipNoAt === myBlinkClean)))
+                : (recip === myEffAddr || recipNoAt === myEffAddr);
 
               // Guard against historical backlog flood: only notify for fresh receipts created in this session
               const isRecent = rcpt.timestamp && rcpt.timestamp >= (sessionMountTimeRef - 15000);

@@ -553,7 +553,7 @@ export class SolanaMobileStackService {
             username: defaultHandle,
             avatarUrl: UserProfileService.getRandomMascot(),
             bio: 'Building and tapping physical Solana Blinks in the wild.',
-            hasCustomizedProfile: false,
+            hasCustomizedProfile: true,
             linkedAccounts: {
               email: null,
               google: null,

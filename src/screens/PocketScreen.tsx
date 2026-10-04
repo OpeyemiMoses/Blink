@@ -722,32 +722,11 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
         {activePublicKey && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity
-              onPress={() => loadOnChainData(true)}
-              style={[styles.solscanLink, { backgroundColor: colors.bgCardAlt, borderColor: colors.border, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }]}
-              activeOpacity={0.7}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator size="small" color={colors.accent} style={{ transform: [{ scale: 0.75 }] }} />
-              ) : (
-                <RefreshCw size={11} color={colors.accent} />
-              )}
-              <Text style={[styles.solscanLinkText, { color: colors.accent, fontWeight: '600' }]}>Refresh</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
               onPress={() => window.open?.(`https://solscan.io/account/${activePublicKey}?cluster=devnet`, '_blank')}
               style={styles.solscanLink}
               activeOpacity={0.7}
             >
               <Text style={styles.solscanLinkText}>Solscan (Devnet)</Text>
-              <ExternalLink size={11} color={colors.accent} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => window.open?.(`https://explorer.solana.com/address/${activePublicKey}?cluster=devnet`, '_blank')}
-              style={styles.solscanLink}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.solscanLinkText}>Explorer</Text>
               <ExternalLink size={11} color={colors.accent} />
             </TouchableOpacity>
           </View>
