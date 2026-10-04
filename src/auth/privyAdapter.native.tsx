@@ -5,7 +5,39 @@ import { UserProfileService } from '../services/userProfileService';
 import { getApiUrl } from '../services/apiConfig';
 import { Transaction } from '@solana/web3.js';
 
+import { SolanaService } from '../services/solanaService';
+
 const STORAGE_PRIVY_USER_KEY = 'blink_privy_user_v1';
+
+function extractSolanaAddress(user: any): string {
+  if (!user) return SolanaService.getOrCreateKeypair().publicKey.toBase58();
+
+  // 1. Check linkedAccounts for Solana wallet
+  if (Array.isArray(user.linkedAccounts)) {
+    const solAcc = user.linkedAccounts.find((a: any) => {
+      const isSolChain = a.chainType === 'solana' || a.chain_type === 'solana' || a.walletClientType === 'privy-solana';
+      const addr = a.address;
+      return (isSolChain || (addr && !addr.startsWith('0x') && addr.length >= 32 && addr.length <= 44)) && !addr?.startsWith('0x');
+    });
+    if (solAcc?.address) return solAcc.address;
+  }
+
+  // 2. Check user.wallet if it's NOT an EVM wallet
+  if (user.wallet?.address && !user.wallet.address.startsWith('0x') && user.wallet.address.length >= 32) {
+    return user.wallet.address;
+  }
+
+  // 3. Check cached Privy address
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const cached = window.localStorage.getItem('blink_privy_solana_address');
+    if (cached && !cached.startsWith('0x') && cached.length >= 32) {
+      return cached;
+    }
+  }
+
+  // 4. Fallback to real Ed25519 Solana keypair (NEVER a fake string or EVM address!)
+  return SolanaService.getOrCreateKeypair().publicKey.toBase58();
+}
 
 // Global Event / Modal Bridge for React Native Native runtimes
 type ModalListener = (isOpen: boolean, options: any) => void;
@@ -28,12 +60,9 @@ class PrivyNativeBridgeClass {
         const stored = window.localStorage.getItem(STORAGE_PRIVY_USER_KEY);
         if (stored) {
           const user = JSON.parse(stored);
-          if (user && (user.id || user.wallet?.address)) {
+          if (user) {
             this.currentUser = user;
-            const walletAddr =
-              user.wallet?.address ||
-              user.linkedAccounts?.find((a: any) => a.type === 'wallet' && (a.chainType === 'solana' || a.walletClientType === 'privy'))?.address ||
-              user.id;
+            const walletAddr = extractSolanaAddress(user);
 
             if (walletAddr) {
               WalletProviderService.setActiveAccount({
@@ -86,10 +115,7 @@ class PrivyNativeBridgeClass {
       }
     } catch {}
 
-    const walletAddr =
-      user.wallet?.address ||
-      user.linkedAccounts?.find((a: any) => a.type === 'wallet' && (a.chainType === 'solana' || a.walletClientType === 'privy'))?.address ||
-      user.id;
+    const walletAddr = extractSolanaAddress(user);
 
     if (walletAddr) {
       WalletProviderService.setActiveAccount({

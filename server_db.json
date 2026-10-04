@@ -1,0 +1,41 @@
+[
+  {
+    "id": "tip-jar",
+    "name": "Skr Tip jar",
+    "actionType": "tip",
+    "amount": 206.9,
+    "baseUsdcAmount": 4,
+    "token": "SKR",
+    "recipient": "CigK1RsqCMLNa3R3io58XkrxoLxWR77615x7ugCz92dV",
+    "creatorAddress": "CigK1RsqCMLNa3R3io58XkrxoLxWR77615x7ugCz92dV",
+    "description": "Tip me on skr",
+    "verifiedDomain": "mybitcoind.sol",
+    "visibility": "global",
+    "createdAt": 1790870569742,
+    "updatedAt": 1790870603193,
+    "stats": {
+      "taps": 0,
+      "completed": 0,
+      "volumeUsdc": 0
+    }
+  },
+  {
+    "id": "dev-hub",
+    "name": "Dev Hub Payment",
+    "actionType": "mint",
+    "amount": 5,
+    "token": "USDC",
+    "recipient": "CigK1RsqCMLNa3R3io58XkrxoLxWR77615x7ugCz92dV",
+    "creatorAddress": "CigK1RsqCMLNa3R3io58XkrxoLxWR77615x7ugCz92dV",
+    "description": "Payment for dev hub trip",
+    "verifiedDomain": "mybitcoind.sol",
+    "visibility": "global",
+    "createdAt": 1790782681323,
+    "updatedAt": 1790782682086,
+    "stats": {
+      "taps": 19,
+      "completed": 19,
+      "volumeUsdc": 95
+    }
+  }
+]

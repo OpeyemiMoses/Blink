@@ -34,11 +34,7 @@ yarn-error.*
 .env
 .env*.local
 
-# local db and runtime files
-server_db.json
-server_receipts_db.json
-server_users_db.json
-server_deleted_db.json
+# local runtime files
 ACTIVE_TUNNEL_URL.txt
 *.log
 fast_download_and_release.js

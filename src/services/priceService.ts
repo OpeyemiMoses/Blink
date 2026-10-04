@@ -198,15 +198,21 @@ export class PriceService {
     }
 
     if (blink.token === 'SOL') {
-      const solPrice = this.getSolPriceSync();
-      let solAmt = typeof blink.amount === 'number' && !isNaN(blink.amount) ? blink.amount : 0;
-      let baseUsdc = typeof blink.baseUsdcAmount === 'number' && blink.baseUsdcAmount > 0
-        ? blink.baseUsdcAmount
-        : Number((solAmt * solPrice).toFixed(2));
+      const solPrice = this.getSolPriceSync() || DEFAULT_SOL_PRICE;
+      let baseUsdc = 0;
+      let solAmt = 0;
 
-      // Guard against existing blinks where amount was mistakenly stored as the USD value (e.g. 5 SOL instead of $5 worth of SOL)
-      if (blink.baseUsdcAmount && blink.amount === blink.baseUsdcAmount && blink.amount >= 1) {
-        solAmt = Number((blink.baseUsdcAmount / solPrice).toFixed(4));
+      if (typeof blink.baseUsdcAmount === 'number' && blink.baseUsdcAmount > 0) {
+        baseUsdc = blink.baseUsdcAmount;
+        // Dynamically compute the required SOL quantity from the pegged USD price at live SOL spot rate
+        solAmt = Number((baseUsdc / solPrice).toFixed(4));
+      } else if (typeof blink.amount === 'number' && blink.amount >= 1) {
+        // Legacy fallback: whole integer amounts were entered as USD ($)
+        baseUsdc = blink.amount;
+        solAmt = Number((baseUsdc / solPrice).toFixed(4));
+      } else if (typeof blink.amount === 'number' && blink.amount > 0) {
+        solAmt = blink.amount;
+        baseUsdc = Number((solAmt * solPrice).toFixed(2));
       }
 
       return {

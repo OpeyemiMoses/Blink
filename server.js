@@ -1035,7 +1035,22 @@ const server = http.createServer((req, res) => {
     return sendJson(res, 404, { success: false, error: 'User not found' });
   }
 
-  // Clock In Streak sync endpoint
+  // Clock In Streak sync endpoints (GET and POST)
+  if (pathname === '/api/profile/streak' && req.method === 'GET') {
+    const rawId = (parsedUrl.query.identifier || '').toString().trim().toLowerCase().replace(/^@/, '');
+    if (!rawId) {
+      return sendJson(res, 400, { success: false, error: 'Missing identifier parameter' });
+    }
+    const user = usersDb[rawId] || Object.values(usersDb).find(u => {
+      if (!u) return false;
+      const uName = (u.username || '').toLowerCase().replace(/^@/, '');
+      const uAddr = (u.address || u.publicKey || '').toLowerCase();
+      const uEmail = (u.email || '').toLowerCase();
+      return uName === rawId || uAddr === rawId || uEmail === rawId;
+    });
+    return sendJson(res, 200, { success: true, streakData: user?.streakData || null });
+  }
+
   if (pathname === '/api/profile/streak' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
@@ -1049,6 +1064,18 @@ const server = http.createServer((req, res) => {
             usersDb[cleanKey] = { username: cleanKey };
           }
           usersDb[cleanKey].streakData = streakData;
+
+          // Also propagate to any matching user record by address or email
+          Object.values(usersDb).forEach(u => {
+            if (u) {
+              const uName = (u.username || '').toLowerCase().replace(/^@/, '');
+              const uAddr = (u.address || u.publicKey || '').toLowerCase();
+              if (uName === cleanKey || uAddr === cleanKey) {
+                u.streakData = streakData;
+              }
+            }
+          });
+
           saveUsersDb();
         }
         return sendJson(res, 200, { success: true, streakData });

@@ -502,7 +502,9 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       setAuthorizing(true);
 
       const editedAmountNum = parseFloat(editPriceInput.replace(/[^0-9.]/g, ''));
-      let effectiveAmount = currentBlink.amount;
+      const liveDetails = PriceService.getLiveBlinkDetails(currentBlink);
+      let effectiveAmount = liveDetails.displayAmount;
+
       if (isEditingPrice && !isNaN(editedAmountNum) && editedAmountNum > 0) {
         if (currentBlink.token === 'SOL') {
           effectiveAmount = Number((editedAmountNum / PriceService.getSolPriceSync()).toFixed(4));
@@ -514,41 +516,60 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       }
 
       // 1. Pre-flight balance check before biometrics or transaction construction
-      const [freshSol, freshUsdc, freshSkr] = await Promise.all([
-        SolanaService.getBalance(activeAccount.publicKey, true),
-        SolanaService.getUsdcBalance(activeAccount.publicKey, true),
-        SolanaService.getSkrBalance(activeAccount.publicKey, true),
-      ]);
-      setWalletBalanceSol(freshSol);
-      setWalletBalanceUsdc(freshUsdc);
+      const allBalances = await SolanaService.getAllBalances(activeAccount.publicKey).catch(() => ({ sol: 0, usdc: 0, skr: 0 }));
+      const freshSol = allBalances.sol;
+      const freshUsdc = allBalances.usdc;
+      const freshSkr = allBalances.skr;
+
+      // Resilient fallback: ensure transient Devnet RPC hiccups never block payment when client has verified funds
+      const effectiveSol = Math.max(
+        typeof freshSol === 'number' && !isNaN(freshSol) ? freshSol : 0,
+        typeof walletBalanceSol === 'number' && !isNaN(walletBalanceSol) ? walletBalanceSol : 0,
+        typeof currentBalanceSol === 'number' && !isNaN(currentBalanceSol) ? currentBalanceSol : 0,
+        SolanaService.getCachedSol(activeAccount.publicKey) || 0
+      );
+      const effectiveUsdc = Math.max(
+        typeof freshUsdc === 'number' && !isNaN(freshUsdc) ? freshUsdc : 0,
+        typeof walletBalanceUsdc === 'number' && !isNaN(walletBalanceUsdc) ? walletBalanceUsdc : 0,
+        SolanaService.getCachedUsdc(activeAccount.publicKey) || 0
+      );
+      const effectiveSkr = Math.max(
+        typeof freshSkr === 'number' && !isNaN(freshSkr) ? freshSkr : 0,
+        typeof walletBalanceSkr === 'number' && !isNaN(walletBalanceSkr) ? walletBalanceSkr : 0,
+        SolanaService.getCachedSkr(activeAccount.publicKey) || 0
+      );
+
+      setWalletBalanceSol(effectiveSol);
+      setWalletBalanceUsdc(effectiveUsdc);
+      setWalletBalanceSkr(effectiveSkr);
 
       const MIN_GAS_SOL = 0.00001;
 
       if (currentBlink.token === 'USDC') {
-        if (freshUsdc < effectiveAmount) {
-          const msg = `Insufficient USDC balance. You have $${freshUsdc.toFixed(2)} USDC, but this Blink requires $${effectiveAmount.toFixed(2)} USDC.`;
+        if (effectiveUsdc < effectiveAmount) {
+          const msg = `Insufficient USDC balance. You have $${effectiveUsdc.toFixed(2)} USDC, but this Blink requires $${effectiveAmount.toFixed(2)} USDC.`;
           setError(msg);
           ToastService.error(msg);
           setAuthorizing(false);
           return;
         }
-        if (freshSol < MIN_GAS_SOL) {
-          const msg = `Insufficient SOL for network fee. You need at least 0.00001 SOL for Solana gas, but have ${freshSol.toFixed(4)} SOL.`;
+        if (effectiveSol < MIN_GAS_SOL) {
+          const msg = `Insufficient SOL for network fee. You need at least 0.00001 SOL for Solana gas, but have ${effectiveSol.toFixed(4)} SOL.`;
           setError(msg);
           ToastService.error(msg);
           setAuthorizing(false);
           return;
         }
       } else if (currentBlink.token === 'SKR') {
-        if (freshSkr < effectiveAmount) {
-          const msg = `Insufficient SKR balance. You have ${freshSkr.toFixed(2)} SKR, but this Blink requires ${effectiveAmount.toFixed(2)} SKR.`;
+        if (effectiveSkr < effectiveAmount) {
+          const msg = `Insufficient SKR balance. You have ${effectiveSkr.toFixed(2)} SKR, but this Blink requires ${effectiveAmount.toFixed(2)} SKR.`;
           setError(msg);
           ToastService.error(msg);
           setAuthorizing(false);
           return;
         }
-        if (freshSol < MIN_GAS_SOL) {
-          const msg = `Insufficient SOL for network fee. You need at least 0.00001 SOL for Solana gas, but have ${freshSol.toFixed(4)} SOL.`;
+        if (effectiveSol < MIN_GAS_SOL) {
+          const msg = `Insufficient SOL for network fee. You need at least 0.00001 SOL for Solana gas, but have ${effectiveSol.toFixed(4)} SOL.`;
           setError(msg);
           ToastService.error(msg);
           setAuthorizing(false);
@@ -556,8 +577,8 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
         }
       } else {
         const totalNeeded = effectiveAmount + MIN_GAS_SOL;
-        if (freshSol < totalNeeded) {
-          const msg = `Insufficient SOL balance. You have ${freshSol.toFixed(4)} SOL, but this transaction requires ${totalNeeded.toFixed(4)} SOL (including network gas fee).`;
+        if (effectiveSol < totalNeeded) {
+          const msg = `Insufficient SOL balance. You have ${effectiveSol.toFixed(4)} SOL, but this transaction requires ${totalNeeded.toFixed(4)} SOL (including network gas fee).`;
           setError(msg);
           ToastService.error(msg);
           setAuthorizing(false);

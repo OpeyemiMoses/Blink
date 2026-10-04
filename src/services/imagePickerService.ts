@@ -25,10 +25,7 @@ export class ImagePickerService {
 
         if (!result.canceled && result.assets && result.assets.length > 0) {
           const asset = result.assets[0];
-          if (asset.base64) {
-            return `data:image/jpeg;base64,${asset.base64}`;
-          }
-          return asset.uri;
+          return await this.uriToBase64(asset.uri, asset.base64);
         }
         return null;
       }
@@ -93,10 +90,7 @@ export class ImagePickerService {
 
         if (!result.canceled && result.assets && result.assets.length > 0) {
           const asset = result.assets[0];
-          if (asset.base64) {
-            return `data:image/jpeg;base64,${asset.base64}`;
-          }
-          return asset.uri;
+          return await this.uriToBase64(asset.uri, asset.base64);
         }
         return null;
       }
@@ -135,6 +129,32 @@ export class ImagePickerService {
     } catch (err) {
       console.warn('[ImagePickerService] pickBlinkImage error:', err);
       return null;
+    }
+  }
+
+  /**
+   * Converts any local or temporary image URI into a durable base64 data URL.
+   */
+  private static async uriToBase64(uri: string, existingBase64?: string | null): Promise<string> {
+    if (existingBase64) {
+      return existingBase64.startsWith('data:') ? existingBase64 : `data:image/jpeg;base64,${existingBase64}`;
+    }
+    if (uri.startsWith('data:')) {
+      return uri;
+    }
+    try {
+      const res = await fetch(uri);
+      const blob = await res.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          resolve((reader.result as string) || uri);
+        };
+        reader.onerror = () => resolve(uri);
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return uri;
     }
   }
 }

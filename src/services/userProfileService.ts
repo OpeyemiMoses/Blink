@@ -194,10 +194,12 @@ export class UserProfileService {
             rawAvatar.includes('<svg') ||
             rawAvatar.includes('viewBox=')
           );
-          const avatarValid = !isBrokenLegacyMock && !isOldSvg && rawAvatar && (
+          const avatarValid = !isBrokenLegacyMock && !isOldSvg && Boolean(rawAvatar) && (
             rawAvatar.startsWith('data:image/') ||
             rawAvatar.startsWith('http://') ||
             rawAvatar.startsWith('https://') ||
+            rawAvatar.startsWith('file://') ||
+            rawAvatar.startsWith('content://') ||
             rawAvatar.startsWith('/assets/avatars/')
           );
           const isCustom = typeof parsed.hasCustomizedProfile === 'boolean'

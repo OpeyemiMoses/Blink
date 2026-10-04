@@ -56,7 +56,7 @@ export class StreakService {
 
   /**
    * Evaluates if more than 48 hours have passed since the last clock-in.
-   * If yes, the streak is reset to 0.
+   * If yes, only currentStreak is reset to 0; highestStreak and totalClockIns are preserved!
    */
   private static evaluateStreak(data: StreakData): StreakData {
     if (!data.lastClockInTimestamp || data.currentStreak === 0) {
@@ -67,7 +67,7 @@ export class StreakService {
     const elapsed = now - data.lastClockInTimestamp;
 
     if (elapsed > FORTY_EIGHT_HOURS_MS) {
-      // Streak broken
+      // Streak broken after 48h without clocking in
       const updated: StreakData = {
         ...data,
         currentStreak: 0,
@@ -87,6 +87,8 @@ export class StreakService {
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        // Permanent backup key that is never cleared on simple session resets
+        window.localStorage.setItem(`${STORAGE_KEY}_backup`, JSON.stringify(data));
       }
     } catch (err) {
       console.warn('[StreakService] Error saving streak data:', err);
@@ -97,6 +99,42 @@ export class StreakService {
       window.dispatchEvent(new CustomEvent('blink_streak_updated', { detail: data }));
       window.dispatchEvent(new CustomEvent('tapblink_streak_updated', { detail: data }));
     }
+  }
+
+  /**
+   * Synchronize streak from the cloud backend.
+   * Merges server streak if it has more progress or newer clock-in timestamp.
+   */
+  static async syncFromCloud(identifier?: string): Promise<StreakData> {
+    const local = this.getStreakData();
+    if (!identifier || typeof fetch === 'undefined') return local;
+
+    try {
+      const cleanId = identifier.trim().toLowerCase().replace(/^@/, '');
+      const res = await fetch(getApiUrl(`/api/profile/streak?identifier=${encodeURIComponent(cleanId)}`));
+      if (res.ok) {
+        const body = await res.json();
+        const cloudStreak: StreakData | null = body?.streakData;
+        if (cloudStreak && typeof cloudStreak.currentStreak === 'number') {
+          // If cloud has newer or higher streak, adopt it
+          const isCloudNewer = (cloudStreak.lastClockInTimestamp || 0) > (local.lastClockInTimestamp || 0);
+          const isCloudHigher = cloudStreak.currentStreak > local.currentStreak;
+          if (isCloudNewer || isCloudHigher) {
+            const merged: StreakData = {
+              currentStreak: Math.max(local.currentStreak, cloudStreak.currentStreak),
+              highestStreak: Math.max(local.highestStreak, cloudStreak.highestStreak || 0),
+              lastClockInTimestamp: Math.max(local.lastClockInTimestamp || 0, cloudStreak.lastClockInTimestamp || 0) || null,
+              totalClockIns: Math.max(local.totalClockIns, cloudStreak.totalClockIns || 0),
+            };
+            this.saveStreakData(merged);
+            return merged;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[StreakService] syncFromCloud error:', err);
+    }
+    return local;
   }
 
   /**

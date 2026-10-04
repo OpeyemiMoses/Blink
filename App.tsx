@@ -71,6 +71,20 @@ import { ToastService } from './src/services/toastService';
 import { PickUsernameModal } from './src/components/PickUsernameModal';
 import { PushNotificationService } from './src/services/pushNotificationService';
 import { PrivyWebAuthBridge } from './src/components/PrivyWebAuthBridge';
+import { StreakService } from './src/services/streakService';
+
+function isValidSolanaPublicKey(address: any): boolean {
+  if (typeof address !== 'string') return false;
+  const clean = address.trim();
+  if (clean.startsWith('0x') || clean.startsWith('did:')) return false;
+  if (clean.length < 32 || clean.length > 44) return false;
+  try {
+    new PublicKey(clean);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const solanaConnectors = toSolanaWalletConnectors();
 
@@ -364,7 +378,7 @@ function BlinkMainApp() {
   useEffect(() => {
     PushNotificationService.initialize().catch(() => {});
     // Listen for notification taps (e.g. navigate to Pocket tab)
-    const unsub = PushNotificationService.addResponseListener((response) => {
+    const unsub = PushNotificationService.addResponseListener((response: any) => {
       const data = response?.notification?.request?.content?.data;
       if (data?.type === 'blink_sale' || data?.type === 'payment_received') {
         setCurrentTab('wallet');
@@ -559,25 +573,46 @@ function BlinkMainApp() {
   }, []);
 
   // Derive active Solana account from Privy
-  const existingLinkedWallet = user?.linkedAccounts?.find(
-    (acc: any) => acc.type === 'wallet' && acc.chainType === 'solana'
+  const solanaWalletFromWallets = solanaWallets?.find(
+    (w: any) => isValidSolanaPublicKey(w?.address)
+  ) || null;
+
+  const solanaAccountFromLinked = user?.linkedAccounts?.find(
+    (acc: any) =>
+      (acc.type === 'wallet' || acc.chainType === 'solana' || acc.chain_type === 'solana') &&
+      isValidSolanaPublicKey(acc?.address)
   ) as any;
 
-  // Find the first wallet from solanaWallets that has signing capability
-  const activeSolanaWallet =
-    solanaWallets?.find((w: any) => typeof w.signTransaction === 'function' || typeof w.signAndSendTransaction === 'function') ||
-    solanaWallets?.[0] ||
-    null;
+  const activeSolanaWallet = solanaWalletFromWallets || solanaWallets?.[0] || null;
 
-  const solanaAddress =
-    activeSolanaWallet?.address ||
-    existingLinkedWallet?.address ||
-    null;
+  // Cached Privy Solana address from previous successful sessions
+  const cachedPrivySolana = typeof window !== 'undefined' && window.localStorage
+    ? window.localStorage.getItem('blink_privy_solana_address')
+    : null;
+
+  let solanaAddress: string | null = null;
+  if (solanaWalletFromWallets?.address && isValidSolanaPublicKey(solanaWalletFromWallets.address)) {
+    solanaAddress = solanaWalletFromWallets.address;
+  } else if (solanaAccountFromLinked?.address && isValidSolanaPublicKey(solanaAccountFromLinked.address)) {
+    solanaAddress = solanaAccountFromLinked.address;
+  } else if (user?.wallet?.address && isValidSolanaPublicKey(user.wallet.address)) {
+    solanaAddress = user.wallet.address;
+  } else if (cachedPrivySolana && isValidSolanaPublicKey(cachedPrivySolana)) {
+    solanaAddress = cachedPrivySolana;
+  }
+
+  // Persist valid address to localStorage for instant hydration on reboot/reload
+  useEffect(() => {
+    if (solanaAddress && typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('blink_privy_solana_address', solanaAddress);
+    }
+  }, [solanaAddress]);
 
   // Only check Solana wallets — user.wallet is always an EVM wallet, not Solana
   const hasExistingWallet = Boolean(
+    solanaAddress ||
     (solanaWallets && solanaWallets.length > 0) ||
-    existingLinkedWallet
+    solanaAccountFromLinked
   );
 
   // Auto-provision embedded Solana wallet ONLY if brand new account with NO wallet existing
@@ -594,14 +629,13 @@ function BlinkMainApp() {
     }
   }, [ready, authenticated, user?.id, hasExistingWallet]);
 
-  // Stable devnet fallback address if Solana wallet is provisioning
+  // Real valid 32-byte Ed25519 Solana fallback address if Solana wallet is still provisioning
   const fallbackSolanaAddress = React.useMemo(() => {
-    if (user?.id) {
-      const cleanId = user.id.replace(/[^a-zA-Z0-9]/g, '');
-      return `Sol${cleanId.slice(-32).padEnd(32, '1')}`;
+    if (authenticated) {
+      return SolanaService.getOrCreateKeypair().publicKey.toBase58();
     }
     return null;
-  }, [user?.id]);
+  }, [authenticated]);
 
   const privyAddress = solanaAddress || fallbackSolanaAddress;
 
@@ -1008,6 +1042,14 @@ function BlinkMainApp() {
       }
     });
   }, [authenticated, user?.id, effectiveAddress]);
+
+  // Synchronize Clock-In streak from cloud whenever active account or username changes
+  useEffect(() => {
+    const userIdentifier = effectiveAddress || userProfile.username;
+    if (userIdentifier && userIdentifier !== 'seeker_user') {
+      StreakService.syncFromCloud(userIdentifier).catch(() => {});
+    }
+  }, [effectiveAddress, userProfile.username]);
 
   // Sync active account and signer with WalletProviderService
   useEffect(() => {
