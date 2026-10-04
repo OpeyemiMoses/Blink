@@ -505,7 +505,7 @@ export class SolanaMobileStackService {
       const walletName = account.name || 'Solana Wallet';
 
       let cloudUser = await DatabaseService.syncUserFromCloud(solanaPubkey).catch(() => null);
-      if (cloudUser && cloudUser.username && cloudUser.username !== 'seeker_user') {
+      if (cloudUser && cloudUser.username && cloudUser.username !== 'seeker_user' && !cloudUser.username.startsWith('phantom_') && !cloudUser.username.startsWith('sol_')) {
         const updated = UserProfileService.updateProfile({
           address: solanaPubkey,
           publicKey: solanaPubkey,
@@ -525,42 +525,58 @@ export class SolanaMobileStackService {
         });
         ToastService.success(`Welcome back @${cloudUser.username}! Connected with ${walletName}`);
       } else {
-        // Clean fresh account for this newly connected Solana wallet
-        const shortAddr = `${solanaPubkey.slice(0, 4)}_${solanaPubkey.slice(-4)}`.toLowerCase();
-        const prefix = walletName.toLowerCase().includes('phantom') ? 'phantom' : 'sol';
-        const defaultHandle = `${prefix}_${shortAddr}`;
-        const defaultName = `${walletName.replace(/mobile|wallet/gi, '').trim() || 'Solana'} User`;
+        const currentProf = UserProfileService.getProfile();
+        // If user already has an active customized profile (e.g. from Privy/Email/Google), DO NOT overwrite it with phantom_... or Phantom User!
+        if (
+          currentProf.hasCustomizedProfile &&
+          currentProf.username &&
+          currentProf.username !== 'seeker_user' &&
+          !currentProf.username.startsWith('phantom_') &&
+          !currentProf.username.startsWith('sol_')
+        ) {
+          UserProfileService.updateProfile({
+            address: solanaPubkey,
+            publicKey: solanaPubkey,
+          });
+          ToastService.success(`Connected ${walletName} to your profile @${currentProf.username}`);
+        } else {
+          // Clean fresh account for standalone external wallet connection
+          const shortAddr = `${solanaPubkey.slice(0, 4)}_${solanaPubkey.slice(-4)}`.toLowerCase();
+          const prefix = walletName.toLowerCase().includes('phantom') ? 'phantom' : 'sol';
+          const defaultHandle = `${prefix}_${shortAddr}`;
+          const defaultName = `${walletName.replace(/mobile|wallet/gi, '').trim() || 'Solana'} User`;
 
-        const newProf = UserProfileService.updateProfile({
-          address: solanaPubkey,
-          publicKey: solanaPubkey,
-          displayName: defaultName,
-          username: defaultHandle,
-          avatarUrl: UserProfileService.getRandomMascot(),
-          bio: 'Building and tapping physical Solana Blinks in the wild.',
-          hasCustomizedProfile: false,
-          linkedAccounts: {
-            email: null,
-            google: null,
-            twitter: null,
-            discord: null,
-            telegram: null,
-            github: null,
-          },
-        });
+          const newProf = UserProfileService.updateProfile({
+            address: solanaPubkey,
+            publicKey: solanaPubkey,
+            displayName: defaultName,
+            username: defaultHandle,
+            avatarUrl: UserProfileService.getRandomMascot(),
+            bio: 'Building and tapping physical Solana Blinks in the wild.',
+            hasCustomizedProfile: false,
+            linkedAccounts: {
+              email: null,
+              google: null,
+              twitter: null,
+              discord: null,
+              telegram: null,
+              github: null,
+            },
+          });
 
-        DatabaseService.saveUserAccount({
-          id: solanaPubkey,
-          address: solanaPubkey,
-          publicKey: solanaPubkey,
-          displayName: newProf.displayName,
-          username: newProf.username,
-          name: newProf.displayName,
-          avatarUrl: newProf.avatarUrl,
-          createdAt: Date.now(),
-        });
-        BlinkIdService.registerBlinkId(`@${newProf.username}`, solanaPubkey, newProf.displayName, newProf.avatarUrl);
-        ToastService.success(`Connected to ${walletName}! Account ready: @${newProf.username}`);
+          DatabaseService.saveUserAccount({
+            id: solanaPubkey,
+            address: solanaPubkey,
+            publicKey: solanaPubkey,
+            displayName: newProf.displayName,
+            username: newProf.username,
+            name: newProf.displayName,
+            avatarUrl: newProf.avatarUrl,
+            createdAt: Date.now(),
+          });
+          BlinkIdService.registerBlinkId(`@${newProf.username}`, solanaPubkey, newProf.displayName, newProf.avatarUrl);
+          ToastService.success(`Connected to ${walletName}! Account ready: @${newProf.username}`);
+        }
       }
 
       if (typeof window !== 'undefined' && window.dispatchEvent) {
@@ -688,6 +704,9 @@ export class SolanaMobileStackService {
       const activeAccount = WalletProviderService.getActiveAccount();
       if (!activeAccount?.publicKey) {
         throw new Error('No active Phantom account found.');
+      }
+      if (activeAccount.isPrivy) {
+        throw new Error('Active account is a Privy embedded wallet. Cannot route transaction to Phantom.');
       }
 
       const connection = SolanaService.getConnection();
@@ -836,6 +855,9 @@ export class SolanaMobileStackService {
       const activeAccount = WalletProviderService.getActiveAccount();
       if (!activeAccount?.publicKey) {
         throw new Error('No active Solflare account found.');
+      }
+      if (activeAccount.isPrivy) {
+        throw new Error('Active account is a Privy embedded wallet. Cannot route transaction to Solflare.');
       }
 
       const connection = SolanaService.getConnection();

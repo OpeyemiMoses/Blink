@@ -906,6 +906,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   onPress={() => {
                     const target = isPrivyWallet ? 'native' : 'privy';
                     if (typeof window !== 'undefined') {
+                      if (target === 'native') {
+                        try { sessionStorage.setItem('blink_session_explicit_native', '1'); } catch {}
+                      } else {
+                        try { sessionStorage.removeItem('blink_session_explicit_native'); } catch {}
+                      }
                       window.dispatchEvent(new CustomEvent('blink_switch_wallet', { detail: { source: target } }));
                     }
                   }}

@@ -214,6 +214,13 @@ function BlinkMainApp() {
         setActiveWalletSource(target);
         if (typeof window !== 'undefined') {
           window.localStorage.setItem('blink_active_wallet_source', target);
+          try {
+            if (target === 'native') {
+              sessionStorage.setItem('blink_session_explicit_native', '1');
+            } else {
+              sessionStorage.removeItem('blink_session_explicit_native');
+            }
+          } catch {}
         }
       }
     };
@@ -573,7 +580,12 @@ function BlinkMainApp() {
   }, []);
 
   // Derive active Solana account from Privy
-  const solanaWalletFromWallets = solanaWallets?.find(
+  // Prioritize embedded Privy Solana wallet first, then other valid Solana wallets
+  const embeddedPrivyWallet = solanaWallets?.find(
+    (w: any) => (w?.walletClientType === 'privy' || w?.connectorType === 'embedded') && isValidSolanaPublicKey(w?.address)
+  ) || null;
+
+  const solanaWalletFromWallets = embeddedPrivyWallet || solanaWallets?.find(
     (w: any) => isValidSolanaPublicKey(w?.address)
   ) || null;
 
@@ -583,7 +595,8 @@ function BlinkMainApp() {
       isValidSolanaPublicKey(acc?.address)
   ) as any;
 
-  const activeSolanaWallet = solanaWalletFromWallets || solanaWallets?.[0] || null;
+  // Active Solana wallet MUST be the embedded Privy wallet if available, not external Phantom connector
+  const activeSolanaWallet = embeddedPrivyWallet || solanaWalletFromWallets || solanaWallets?.[0] || null;
 
   // Cached Privy Solana address from previous successful sessions
   const cachedPrivySolana = typeof window !== 'undefined' && window.localStorage
@@ -591,7 +604,9 @@ function BlinkMainApp() {
     : null;
 
   let solanaAddress: string | null = null;
-  if (solanaWalletFromWallets?.address && isValidSolanaPublicKey(solanaWalletFromWallets.address)) {
+  if (embeddedPrivyWallet?.address && isValidSolanaPublicKey(embeddedPrivyWallet.address)) {
+    solanaAddress = embeddedPrivyWallet.address;
+  } else if (solanaWalletFromWallets?.address && isValidSolanaPublicKey(solanaWalletFromWallets.address)) {
     solanaAddress = solanaWalletFromWallets.address;
   } else if (solanaAccountFromLinked?.address && isValidSolanaPublicKey(solanaAccountFromLinked.address)) {
     solanaAddress = solanaAccountFromLinked.address;
@@ -639,7 +654,7 @@ function BlinkMainApp() {
 
   const privyAddress = solanaAddress || fallbackSolanaAddress;
 
-  // Prioritize Privy when user signed in with email/Privy, unless explicitly choosing connected native wallet
+  // Prioritize Privy when user signed in with email/Privy, unless explicitly choosing connected native wallet in this session
   const isPrivyActive = authenticated && Boolean(privyAddress) && (activeWalletSource === 'privy' || !nativeWalletAccount?.publicKey);
 
   const effectiveAddress = isPrivyActive
@@ -648,13 +663,13 @@ function BlinkMainApp() {
 
   const isUserLoggedIn = authenticated || Boolean(nativeWalletAccount?.publicKey);
 
-  // Automatically reset to Privy as active source whenever a Privy email/SMS login is completed
+  // Automatically reset to Privy as active source whenever a Privy login is active
   useEffect(() => {
     if (ready && authenticated && user) {
-      const saved = typeof window !== 'undefined' ? window.localStorage.getItem('blink_active_wallet_source') : null;
-      if (saved !== 'native') {
+      const explicitSessionNative = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('blink_session_explicit_native') : null;
+      if (!explicitSessionNative) {
         setActiveWalletSource('privy');
-        if (typeof window !== 'undefined') {
+        if (typeof window !== 'undefined' && window.localStorage) {
           window.localStorage.setItem('blink_active_wallet_source', 'privy');
         }
       }
@@ -843,7 +858,7 @@ function BlinkMainApp() {
 
   const privyAccount: WalletAccount | null = authenticated && privyAddress
     ? {
-        name: (userProfile.displayName && userProfile.displayName !== 'Seeker Pioneer')
+        name: (userProfile.displayName && userProfile.displayName !== 'Seeker Pioneer' && !userProfile.displayName.toLowerCase().includes('phantom'))
           ? userProfile.displayName
           : user?.email?.address
           ? user.email.address
@@ -859,11 +874,7 @@ function BlinkMainApp() {
           ? (user.discord.username || 'Discord User')
           : user?.telegram
           ? `@${user.telegram.username}`
-          : (activeSolanaWallet as any)?.walletClientType === 'phantom'
-          ? 'Phantom'
-          : (activeSolanaWallet as any)?.walletClientType === 'solflare'
-          ? 'Solflare'
-          : userProfile.displayName || 'Privy Solana Wallet',
+          : 'Privy Solana Wallet',
         publicKey: privyAddress,
         isPrivy: true,
       }
@@ -901,6 +912,21 @@ function BlinkMainApp() {
   useEffect(() => {
     if (!isUserLoggedIn) return;
 
+    // If authenticated with Privy and profile was corrupted to a phantom name/handle, immediately try restoring Privy backup
+    if (authenticated) {
+      const current = UserProfileService.getProfile();
+      if (
+        current.username.startsWith('phantom_') ||
+        current.username.startsWith('sol_') ||
+        (current.displayName && current.displayName.toLowerCase().includes('phantom'))
+      ) {
+        const restoredFromPrivy = UserProfileService.restorePrivyProfileIfAvailable();
+        if (restoredFromPrivy) {
+          setUserProfile(restoredFromPrivy);
+        }
+      }
+    }
+
     const lookupKey = effectiveAddress || user?.email?.address || user?.id;
     if (!lookupKey) return;
 
@@ -918,21 +944,42 @@ function BlinkMainApp() {
     DatabaseService.syncUserFromCloud(lookupKey).then(async (cloudUser) => {
       let resolvedCloudUser = cloudUser;
 
-      // If user profile on current address has an auto-assigned handle (e.g. user_xxx), check if user email had an established custom handle
-      if (
-        userEmail &&
-        (!resolvedCloudUser || !resolvedCloudUser.username || resolvedCloudUser.username.startsWith('user_') || resolvedCloudUser.username === 'seeker_user')
-      ) {
+      // Check if resolved cloud user is a generic, uncustomized, or phantom artifact
+      const isPhantomOrGeneric =
+        !resolvedCloudUser ||
+        !resolvedCloudUser.username ||
+        resolvedCloudUser.username.startsWith('user_') ||
+        resolvedCloudUser.username.startsWith('phantom_') ||
+        resolvedCloudUser.username.startsWith('sol_') ||
+        resolvedCloudUser.username === 'seeker_user' ||
+        (resolvedCloudUser.displayName && resolvedCloudUser.displayName.toLowerCase().includes('phantom'));
+
+      // If user profile on current address has an auto-assigned or phantom handle, check if user email had an established custom handle
+      if (userEmail && isPhantomOrGeneric) {
         try {
           const emailUser = await DatabaseService.syncUserFromCloud(userEmail);
           const emailUserAddr = (emailUser?.address || emailUser?.publicKey || '').toLowerCase();
-          if (emailUser && emailUser.username && !emailUser.username.startsWith('user_') && (!emailUserAddr || emailUserAddr === lookupKey.toLowerCase())) {
+          if (
+            emailUser &&
+            emailUser.username &&
+            !emailUser.username.startsWith('user_') &&
+            !emailUser.username.startsWith('phantom_') &&
+            !emailUser.username.startsWith('sol_') &&
+            (!emailUserAddr || emailUserAddr === lookupKey.toLowerCase() || isPrivyActive)
+          ) {
             resolvedCloudUser = emailUser;
           }
         } catch (e) {}
       }
 
-      if (resolvedCloudUser && resolvedCloudUser.username && resolvedCloudUser.username !== 'seeker_user') {
+      if (
+        resolvedCloudUser &&
+        resolvedCloudUser.username &&
+        resolvedCloudUser.username !== 'seeker_user' &&
+        !resolvedCloudUser.username.startsWith('phantom_') &&
+        !resolvedCloudUser.username.startsWith('sol_') &&
+        !(resolvedCloudUser.displayName && resolvedCloudUser.displayName.toLowerCase().includes('phantom'))
+      ) {
         const restored = UserProfileService.updateProfile({
           displayName: resolvedCloudUser.displayName,
           username: resolvedCloudUser.username,
@@ -963,12 +1010,21 @@ function BlinkMainApp() {
         return;
       }
 
+      // Check if local profile needs recovery because it was corrupted to phantom_... or Phantom User
+      const currentProf = UserProfileService.getProfile();
+      const needsProfileRecovery =
+        !currentProf.hasCustomizedProfile ||
+        currentProf.username === 'seeker_user' ||
+        currentProf.username.startsWith('user_') ||
+        currentProf.username.startsWith('phantom_') ||
+        currentProf.username.startsWith('sol_') ||
+        (currentProf.displayName && currentProf.displayName.toLowerCase().includes('phantom'));
+
       // If no customized profile on cloud, proceed with onboarding derivation
       const isGoogleAuth = Boolean(googleEmail);
-      const currentProf = UserProfileService.getProfile();
 
       if (isGoogleAuth && googleEmail) {
-        if (!currentProf.hasCustomizedProfile || currentProf.username === 'seeker_user') {
+        if (needsProfileRecovery) {
           const googleName = user?.google?.name || googleAccount?.name;
           const { profile: updated, wasUsernameTaken, assignedUsername, originalRequested } =
             await UserProfileService.setupGoogleProfileAsync(googleEmail, googleName, effectiveAddress || undefined);
@@ -1000,13 +1056,13 @@ function BlinkMainApp() {
           } catch {}
         }
       } else if (userEmail) {
-        if (!currentProf.hasCustomizedProfile || currentProf.username === 'seeker_user' || currentProf.username.startsWith('user_')) {
+        if (needsProfileRecovery) {
           const emailPrefix = userEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
           const cleanUser = emailPrefix.length >= 2 ? emailPrefix : `user_${Math.random().toString(36).substring(2, 7)}`;
           const updated = UserProfileService.updateProfile({
             displayName: cleanUser,
             username: cleanUser,
-            avatarUrl: currentProf.avatarUrl || UserProfileService.getRandomMascot(),
+            avatarUrl: currentProf.avatarUrl && !currentProf.avatarUrl.includes('AWgAAAFoCAYAAAB65WHVAAJo') ? currentProf.avatarUrl : UserProfileService.getRandomMascot(),
             hasCustomizedProfile: true,
             linkedAccounts: {
               ...userProfile.linkedAccounts,

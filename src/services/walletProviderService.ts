@@ -230,17 +230,46 @@ export class WalletProviderService {
       return await SolanaService.sendRawTransactionAndConfirm(serialized);
     }
 
-    // 2. Direct Injected Browser Providers (Extension or Phantom/Solflare In-App Browser)
+    // 2. PRIVY EMBEDDED WALLET (Strictly in-app headless signing, ZERO Phantom/external wallet prompts)
+    const isExplicitExternal = Boolean(
+      this.activeAccount &&
+      !this.activeAccount.isPrivy &&
+      (this.activeAccount.name === 'Phantom' || this.activeAccount.name === 'Solflare' || this.activeAccount.name === 'Backpack')
+    );
+
+    if (this.activeAccount?.isPrivy || (this.privySigner && !isExplicitExternal)) {
+      if (this.privySigner) {
+        try {
+          return await this.privySigner(transaction);
+        } catch (err: any) {
+          console.warn('Privy signer error:', err);
+          const msg = err?.message || String(err);
+          if (/reject|cancel|denied|dismiss/i.test(msg)) {
+            throw err;
+          }
+          if (this.activeAccount?.isPrivy) {
+            console.log('Attempting local keypair fallback for Privy account...');
+            return await this.fallbackKeypairSignAndSend(transaction);
+          }
+        }
+      } else if (this.activeAccount?.isPrivy) {
+        return await this.fallbackKeypairSignAndSend(transaction);
+      }
+    }
+
+    // 3. Direct Injected Browser Providers (Extension or Phantom/Solflare In-App Browser)
     let provider: any = null;
     const accName = (this.activeAccount?.name || '').toLowerCase();
-    if (accName.includes('phantom')) {
-      provider = this.getPhantomProvider();
-    } else if (accName.includes('solflare')) {
-      provider = this.getSolflareProvider();
-    } else if (accName.includes('backpack')) {
-      provider = this.getBackpackProvider();
-    } else if (accName.includes('coinbase')) {
-      provider = this.getCoinbaseProvider();
+    if (!this.activeAccount?.isPrivy) {
+      if (accName.includes('phantom')) {
+        provider = this.getPhantomProvider();
+      } else if (accName.includes('solflare')) {
+        provider = this.getSolflareProvider();
+      } else if (accName.includes('backpack')) {
+        provider = this.getBackpackProvider();
+      } else if (accName.includes('coinbase')) {
+        provider = this.getCoinbaseProvider();
+      }
     }
 
     if (provider) {
@@ -259,30 +288,27 @@ export class WalletProviderService {
       }
     }
 
-    // 3. Mobile Deeplink / SMS (Phantom Mobile, Solflare Mobile, Seeker MWA)
+    // 4. Mobile Deeplink / SMS (Phantom Mobile, Solflare Mobile, Seeker MWA)
+    // ONLY executed for external native wallets, NEVER for Privy accounts!
     if (
-      this.activeAccount?.name?.includes('MWA') ||
-      this.activeAccount?.name?.includes('Mobile') ||
-      accName.includes('phantom') ||
-      accName.includes('solflare')
+      !this.activeAccount?.isPrivy &&
+      (this.activeAccount?.name?.includes('MWA') ||
+       this.activeAccount?.name?.includes('Mobile') ||
+       accName.includes('phantom') ||
+       accName.includes('solflare'))
     ) {
       const { SolanaMobileStackService } = await import('./solanaMobileStackService');
       return await SolanaMobileStackService.signAndSendTransaction(transaction);
     }
 
-    // 4. Privy Signer
-    if (this.privySigner) {
-      try {
-        return await this.privySigner(transaction);
-      } catch (err: any) {
-        console.warn('Privy signer error, checking fallback:', err);
-        if (this.activeAccount?.isPrivy) {
-          throw err;
-        }
-      }
-    }
+    // 5. Fallback to real on-chain transaction via Seeker On-Device Keypair
+    return await this.fallbackKeypairSignAndSend(transaction);
+  }
 
-    // Fall back to real on-chain transaction via Seeker On-Device Keypair
+  /**
+   * Helper: Fall back to real on-chain transaction via Seeker On-Device Keypair
+   */
+  private static async fallbackKeypairSignAndSend(transaction: Transaction): Promise<string> {
     try {
       const connection = SolanaService.getConnection();
       const localKeypair = SolanaService.getOrCreateKeypair();
@@ -331,6 +357,9 @@ export class WalletProviderService {
    * Sign transaction.
    */
   static async signTransaction(transaction: Transaction): Promise<Transaction> {
+    if (this.activeAccount?.isPrivy) {
+      return transaction;
+    }
     let provider: any = null;
     if (this.activeAccount) {
       if (this.activeAccount.name === 'Phantom') provider = this.getPhantomProvider();

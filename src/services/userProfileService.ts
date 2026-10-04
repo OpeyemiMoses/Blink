@@ -374,12 +374,51 @@ export class UserProfileService {
     return null;
   }
 
+  /**
+   * Restores a previously saved Privy profile, isolating Privy users from any external Phantom session overwrites.
+   */
+  static restorePrivyProfileIfAvailable(): UserProfile | null {
+    if (typeof window === 'undefined' || !window.localStorage) return null;
+    const privySaved = window.localStorage.getItem('blink_privy_profile_v1');
+    if (privySaved) {
+      try {
+        const parsed = JSON.parse(privySaved);
+        if (
+          parsed.username &&
+          !parsed.username.startsWith('phantom_') &&
+          !parsed.username.startsWith('sol_') &&
+          parsed.username !== 'seeker_user' &&
+          !(parsed.displayName && parsed.displayName.toLowerCase().includes('phantom'))
+        ) {
+          return this.updateProfile({
+            ...parsed,
+            username: String(parsed.username),
+            displayName: parsed.displayName || String(parsed.username),
+            hasCustomizedProfile: true,
+          });
+        }
+      } catch {}
+    }
+    return null;
+  }
+
   private static saveProfile(): void {
     if (typeof window !== 'undefined' && window.localStorage && this.profile) {
       try {
         window.localStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(this.profile));
         if (this.profile.avatarUrl) {
           window.localStorage.setItem(STORAGE_AVATAR_BACKUP_KEY, this.profile.avatarUrl);
+        }
+        if (
+          this.profile.linkedAccounts?.email ||
+          this.profile.linkedAccounts?.google ||
+          (this.profile.username &&
+            !this.profile.username.startsWith('phantom_') &&
+            !this.profile.username.startsWith('sol_') &&
+            this.profile.username !== 'seeker_user' &&
+            !this.profile.displayName?.toLowerCase().includes('phantom'))
+        ) {
+          window.localStorage.setItem('blink_privy_profile_v1', JSON.stringify(this.profile));
         }
       } catch (err) {
         console.error('Failed to save profile:', err);
