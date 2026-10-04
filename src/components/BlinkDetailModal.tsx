@@ -431,12 +431,14 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       return;
     }
 
+    const solPrice = PriceService.getSolPriceSync();
+    const solAmount = editTokenInput === 'SOL' ? Number((parsedAmount / solPrice).toFixed(4)) : parsedAmount;
     const skrDetails = editTokenInput === 'SKR' ? PriceService.getSkrPaymentDetails(parsedAmount) : null;
-    const finalAmount = skrDetails ? skrDetails.skrAmount : parsedAmount;
+    const finalAmount = editTokenInput === 'SKR' ? (skrDetails ? skrDetails.skrAmount : parsedAmount) : (editTokenInput === 'SOL' ? solAmount : parsedAmount);
 
     const updated = PhysicalBlinkRegistry.updateAction(currentBlink.id, {
       amount: finalAmount,
-      baseUsdcAmount: editTokenInput === 'SKR' ? parsedAmount : undefined,
+      baseUsdcAmount: parsedAmount,
       token: editTokenInput,
       description: editDescInput.trim() || currentBlink.description,
       recipient: editRecipientInput.trim() || currentBlink.recipient,
@@ -449,7 +451,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       setEditRecipientInput(updated.recipient);
       setIsEditingPrice(false);
       const formatted = updated.token === 'SOL'
-        ? `${parsedAmount} SOL`
+        ? `${finalAmount} SOL ($${parsedAmount.toFixed(2)})`
         : (updated.token === 'SKR' ? `${finalAmount} SKR ($${parsedAmount.toFixed(2)} USDC)` : `$${parsedAmount.toFixed(2)} USDC`);
       ToastService.success(`Blink updated to ${formatted} globally.`);
       onUpdateBlink?.(updated);
@@ -500,9 +502,16 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       setAuthorizing(true);
 
       const editedAmountNum = parseFloat(editPriceInput.replace(/[^0-9.]/g, ''));
-      const effectiveAmount = isEditingPrice && !isNaN(editedAmountNum) && editedAmountNum > 0
-        ? editedAmountNum
-        : currentBlink.amount;
+      let effectiveAmount = currentBlink.amount;
+      if (isEditingPrice && !isNaN(editedAmountNum) && editedAmountNum > 0) {
+        if (currentBlink.token === 'SOL') {
+          effectiveAmount = Number((editedAmountNum / PriceService.getSolPriceSync()).toFixed(4));
+        } else if (currentBlink.token === 'SKR') {
+          effectiveAmount = PriceService.getSkrPaymentDetails(editedAmountNum).skrAmount;
+        } else {
+          effectiveAmount = editedAmountNum;
+        }
+      }
 
       // 1. Pre-flight balance check before biometrics or transaction construction
       const [freshSol, freshUsdc, freshSkr] = await Promise.all([

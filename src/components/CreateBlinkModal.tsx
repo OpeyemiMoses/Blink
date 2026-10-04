@@ -38,6 +38,7 @@ import { ToastService } from '../services/toastService';
 import { PriceService } from '../services/priceService';
 import { ImagePickerService } from '../services/imagePickerService';
 import { SolanaService } from '../services/solanaService';
+import { SolanaLogo } from './WalletIcons';
 import { useTheme } from '../theme/ThemeContext';
 import { BlinkBrandMark } from './BrandLogos';
 
@@ -141,13 +142,15 @@ export const CreateBlinkModal: React.FC<CreateBlinkModalProps> = ({
       }
     }
 
+    const solPrice = PriceService.getSolPriceSync();
+    const solAmount = token === 'SOL' ? Number((cleanAmount / solPrice).toFixed(4)) : cleanAmount;
     const skrDetails = token === 'SKR' ? PriceService.getSkrPaymentDetails(cleanAmount) : null;
 
     const newBlink = PhysicalBlinkRegistry.createBlink({
       id: finalId,
       name: name.trim(),
       actionType,
-      amount: skrDetails ? skrDetails.skrAmount : cleanAmount,
+      amount: token === 'SKR' ? (skrDetails ? skrDetails.skrAmount : cleanAmount) : (token === 'SOL' ? solAmount : cleanAmount),
       baseUsdcAmount: cleanAmount,
       token,
       recipient: cleanRecipient,
@@ -388,6 +391,22 @@ export const CreateBlinkModal: React.FC<CreateBlinkModalProps> = ({
                     </View>
                   </View>
                 </View>
+
+                {token === 'SOL' && (
+                  <View style={{ backgroundColor: 'rgba(153, 69, 255, 0.12)', borderColor: 'rgba(153, 69, 255, 0.35)', borderWidth: 1, borderRadius: 8, padding: 10, marginTop: 4, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <SolanaLogo size={16} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 10, fontWeight: '800', color: '#A855F7' }}>
+                        {parseFloat(amount) > 0
+                          ? `$${parseFloat(amount).toFixed(2)} USD ≈ ${(parseFloat(amount) / PriceService.getSolPriceSync()).toFixed(4)} SOL`
+                          : `Live Rate: 1 SOL ≈ $${PriceService.getSolPriceSync().toFixed(2)} USD`}
+                      </Text>
+                      <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2, lineHeight: 15 }}>
+                        Blink charges the live SOL equivalent of your USD ($) price.
+                      </Text>
+                    </View>
+                  </View>
+                )}
 
                 {token === 'SKR' && (
                   <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)', borderColor: '#10B981', borderWidth: 1, borderRadius: 8, padding: 10, marginTop: 4, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>

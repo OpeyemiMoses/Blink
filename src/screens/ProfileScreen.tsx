@@ -829,65 +829,95 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </Text>
 
         {solanaAddress ? (
-          <View style={[styles.walletAddressBox, { backgroundColor: colors.bgInput, borderColor: colors.border }]}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.walletAddressLabel, { color: colors.textMuted }]}>SOLANA DEVNET / MAINNET PUBLIC KEY</Text>
-              <Text style={[styles.walletAddressText, { color: colors.textPrimary }]} selectable>
-                {solanaAddress}
-              </Text>
-            </View>
-
-            <View style={[styles.walletAddressActions, { borderTopColor: colors.border }]}>
-              <TouchableOpacity
-                style={[styles.addressActionBtn, { backgroundColor: colors.bgCardAlt }]}
-                onPress={copyPublicKey}
-                activeOpacity={0.7}
-              >
-                <Copy size={14} color={copiedAddress ? '#10B981' : colors.textMuted} />
-                <Text style={[styles.addressActionText, { color: copiedAddress ? '#10B981' : colors.textSecondary }]}>
-                  {copiedAddress ? 'Copied' : 'Copy'}
+          <>
+            <View style={[styles.walletAddressBox, { backgroundColor: colors.bgInput, borderColor: colors.border }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.walletAddressLabel, { color: colors.textMuted }]}>SOLANA DEVNET / MAINNET PUBLIC KEY</Text>
+                <Text style={[styles.walletAddressText, { color: colors.textPrimary }]} selectable>
+                  {solanaAddress}
                 </Text>
-              </TouchableOpacity>
+              </View>
 
-              {/* ONLY show Export Key for Privy embedded wallets, NEVER for Phantom or external wallets */}
-              {isPrivyWallet && (
+              <View style={[styles.walletAddressActions, { borderTopColor: colors.border }]}>
                 <TouchableOpacity
-                  style={[
-                    styles.addressActionBtn,
-                    {
-                      backgroundColor: 'rgba(245, 158, 11, 0.12)',
-                      borderColor: 'rgba(245, 158, 11, 0.35)',
-                      borderWidth: 1,
-                    },
-                  ]}
-                  onPress={handleExportKey}
-                  disabled={isExporting}
+                  style={[styles.addressActionBtn, { backgroundColor: colors.bgCardAlt }]}
+                  onPress={copyPublicKey}
                   activeOpacity={0.7}
                 >
-                  <Key size={14} color="#F59E0B" />
-                  <Text style={[styles.addressActionText, { color: '#F59E0B', fontWeight: '700' }]}>
-                    {isExporting ? 'Opening...' : 'Export Key'}
+                  <Copy size={14} color={copiedAddress ? '#10B981' : colors.textMuted} />
+                  <Text style={[styles.addressActionText, { color: copiedAddress ? '#10B981' : colors.textSecondary }]}>
+                    {copiedAddress ? 'Copied' : 'Copy'}
                   </Text>
                 </TouchableOpacity>
-              )}
 
-              <TouchableOpacity
-                style={[styles.addressActionBtn, { backgroundColor: colors.bgCardAlt }]}
-                onPress={() => {
-                  if (typeof window !== 'undefined') {
-                    window.open(
-                      `https://solscan.io/account/${solanaAddress}?cluster=devnet`,
-                      '_blank'
-                    );
-                  }
-                }}
-                activeOpacity={0.7}
-              >
-                <ExternalLink size={14} color={colors.textMuted} />
-                <Text style={[styles.addressActionText, { color: colors.textSecondary }]}>Solscan</Text>
-              </TouchableOpacity>
+                {/* ONLY show Export Key for Privy embedded wallets, NEVER for Phantom or external wallets */}
+                {isPrivyWallet && (
+                  <TouchableOpacity
+                    style={[
+                      styles.addressActionBtn,
+                      {
+                        backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                        borderColor: 'rgba(245, 158, 11, 0.35)',
+                        borderWidth: 1,
+                      },
+                    ]}
+                    onPress={handleExportKey}
+                    disabled={isExporting}
+                    activeOpacity={0.7}
+                  >
+                    <Key size={14} color="#F59E0B" />
+                    <Text style={[styles.addressActionText, { color: '#F59E0B', fontWeight: '700' }]}>
+                      {isExporting ? 'Opening...' : 'Export Key'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.addressActionBtn, { backgroundColor: colors.bgCardAlt }]}
+                  onPress={() => {
+                    if (typeof window !== 'undefined') {
+                      window.open(
+                        `https://solscan.io/account/${solanaAddress}?cluster=devnet`,
+                        '_blank'
+                      );
+                    }
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <ExternalLink size={14} color={colors.textMuted} />
+                  <Text style={[styles.addressActionText, { color: colors.textSecondary }]}>Solscan</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+
+            {/* Account Switcher: Switch between Privy Embedded (Email) and External Native (Phantom) */}
+            {typeof window !== 'undefined' && Boolean(window.localStorage.getItem('blink_connected_native_wallet')) && authenticated && (
+              <View style={{ marginTop: 12, backgroundColor: colors.bgCardAlt, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flex: 1, marginRight: 10 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textPrimary }}>
+                    {isPrivyWallet ? 'Switch to External Phantom' : 'Switch to Privy Email Wallet'}
+                  </Text>
+                  <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>
+                    {isPrivyWallet ? 'Use Phantom wallet for signing and payments' : 'Use your non-custodial email embedded wallet'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={{ backgroundColor: colors.accent, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 6 }}
+                  onPress={() => {
+                    const target = isPrivyWallet ? 'native' : 'privy';
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('blink_switch_wallet', { detail: { source: target } }));
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+                    {isPrivyWallet ? 'Use Phantom' : 'Use Privy'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
         ) : (
           <View style={styles.connectWalletPrompt}>
             <Text style={[styles.connectWalletPromptText, { color: colors.textSecondary }]}>

@@ -271,10 +271,14 @@ class NotificationServiceManager {
 
     if (newNotif.title && typeof window !== 'undefined') {
       try {
-        if (newNotif.type === 'blink_paid') {
-          ToastService.success(`${newNotif.title} (+${newNotif.amount ? (newNotif.token === 'SOL' ? `${newNotif.amount.toFixed(4)} SOL` : (newNotif.token === 'SKR' ? `${newNotif.amount.toFixed(2)} SKR` : `$${newNotif.amount.toFixed(2)} USDC`)) : ''})`);
-        } else if (newNotif.type === 'payment_received') {
-          ToastService.success(newNotif.title);
+        // Guard: Only show live on-screen toast for fresh events (created within last 60 seconds)
+        const isFresh = Math.abs(Date.now() - newNotif.timestamp) < 60000;
+        if (isFresh) {
+          if (newNotif.type === 'blink_paid') {
+            ToastService.success(`${newNotif.title} (+${newNotif.amount ? (newNotif.token === 'SOL' ? `${newNotif.amount.toFixed(4)} SOL` : (newNotif.token === 'SKR' ? `${newNotif.amount.toFixed(2)} SKR` : `$${newNotif.amount.toFixed(2)} USDC`)) : ''})`);
+          } else if (newNotif.type === 'payment_received') {
+            ToastService.success(newNotif.title);
+          }
         }
       } catch {}
     }

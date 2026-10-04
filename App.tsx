@@ -163,18 +163,49 @@ function BlinkMainApp() {
     return WalletProviderService.getActiveAccount();
   });
 
+  // Active Wallet Source: 'privy' (Email / SMS embedded key) or 'native' (Phantom / Solflare / MWA)
+  const [activeWalletSource, setActiveWalletSource] = useState<'privy' | 'native'>(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const saved = window.localStorage.getItem('blink_active_wallet_source');
+      if (saved === 'native' || saved === 'privy') return saved;
+    }
+    return 'privy';
+  });
+
   // Listen for native wallet connect / update events
   useEffect(() => {
     const handleWalletConnected = (e: any) => {
       const acc = e?.detail || WalletProviderService.getActiveAccount();
       if (acc) {
         setNativeWalletAccount(acc);
+        setActiveWalletSource('native');
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('blink_connected_native_wallet', JSON.stringify(acc));
+          window.localStorage.setItem('blink_active_wallet_source', 'native');
+        }
         setIsGuestMode(false);
       }
     };
     if (typeof window !== 'undefined') {
       window.addEventListener('blink_wallet_connected', handleWalletConnected);
       return () => window.removeEventListener('blink_wallet_connected', handleWalletConnected);
+    }
+  }, []);
+
+  // Listen for wallet switch events (e.g. from Profile or Settings)
+  useEffect(() => {
+    const handleSwitch = (e: any) => {
+      const target = e?.detail?.source as 'privy' | 'native';
+      if (target === 'privy' || target === 'native') {
+        setActiveWalletSource(target);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('blink_active_wallet_source', target);
+        }
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('blink_switch_wallet', handleSwitch);
+      return () => window.removeEventListener('blink_switch_wallet', handleSwitch);
     }
   }, []);
 
@@ -193,6 +224,11 @@ function BlinkMainApp() {
           const acc = await SolanaMobileStackService.handleConnectCallback(urlStr);
           if (acc) {
             setNativeWalletAccount(acc);
+            setActiveWalletSource('native');
+            if (typeof window !== 'undefined') {
+              window.localStorage.setItem('blink_connected_native_wallet', JSON.stringify(acc));
+              window.localStorage.setItem('blink_active_wallet_source', 'native');
+            }
             setIsGuestMode(false);
           }
           return;
@@ -279,9 +315,11 @@ function BlinkMainApp() {
   useEffect(() => {
     const handleSignOut = () => {
       setNativeWalletAccount(null);
+      setActiveWalletSource('privy');
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.removeItem('blink_connected_native_wallet');
         window.localStorage.removeItem('solana_connected_wallet_name');
+        window.localStorage.removeItem('blink_active_wallet_source');
         window.localStorage.removeItem('wallet_mobile_session');
         window.localStorage.removeItem('wallet_shared_secret');
         window.localStorage.removeItem('phantom_session_dapp_secret_key');
@@ -565,16 +603,56 @@ function BlinkMainApp() {
     return null;
   }, [user?.id]);
 
-  const effectiveAddress =
-    nativeWalletAccount?.publicKey ||
-    solanaAddress ||
-    fallbackSolanaAddress;
+  const privyAddress = solanaAddress || fallbackSolanaAddress;
+
+  // Prioritize Privy when user signed in with email/Privy, unless explicitly choosing connected native wallet
+  const isPrivyActive = authenticated && Boolean(privyAddress) && (activeWalletSource === 'privy' || !nativeWalletAccount?.publicKey);
+
+  const effectiveAddress = isPrivyActive
+    ? privyAddress
+    : (nativeWalletAccount?.publicKey || privyAddress);
 
   const isUserLoggedIn = authenticated || Boolean(nativeWalletAccount?.publicKey);
 
+  // Automatically reset to Privy as active source whenever a Privy email/SMS login is completed
+  useEffect(() => {
+    if (ready && authenticated && user) {
+      const saved = typeof window !== 'undefined' ? window.localStorage.getItem('blink_active_wallet_source') : null;
+      if (saved !== 'native') {
+        setActiveWalletSource('privy');
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('blink_active_wallet_source', 'privy');
+        }
+      }
+    }
+  }, [ready, authenticated, user?.id]);
+
   // Global background poller for incoming cloud receipts and global Blink stats sync
+  const sessionMountTimeRef = React.useRef(Date.now()).current;
   const initialSyncDoneRef = React.useRef(false);
   const syncedSigsRef = React.useRef<Set<string>>(new Set());
+
+  // Load seen transaction signatures from localStorage to prevent historical notification floods
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const raw = window.localStorage.getItem('blink_seen_tx_signatures_v1');
+        if (raw) {
+          const arr = JSON.parse(raw);
+          if (Array.isArray(arr)) arr.forEach((sig: string) => syncedSigsRef.current.add(sig));
+        }
+      } catch {}
+    }
+  }, []);
+
+  const saveSeenSigs = () => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const arr = Array.from(syncedSigsRef.current).slice(-300);
+        window.localStorage.setItem('blink_seen_tx_signatures_v1', JSON.stringify(arr));
+      } catch {}
+    }
+  };
 
   useEffect(() => {
     if (!effectiveAddress) return;
@@ -604,11 +682,15 @@ function BlinkMainApp() {
                               (myUserClean && (recip === myUserClean || recipNoAt === myUserClean)) ||
                               (myBlinkClean && (recip === myBlinkClean || recipNoAt === myBlinkClean));
 
+              // Guard against historical backlog flood: only notify for fresh receipts created in this session
+              const isRecent = rcpt.timestamp && rcpt.timestamp >= (sessionMountTimeRef - 15000);
+
               if (
                 rcpt.signature &&
                 !syncedSigsRef.current.has(rcpt.signature) &&
                 isForMe &&
-                !notifSigSet.has(rcpt.signature)
+                !notifSigSet.has(rcpt.signature) &&
+                isRecent
               ) {
                 hasNewIncoming = true;
                 notifSigSet.add(rcpt.signature);
@@ -648,12 +730,16 @@ function BlinkMainApp() {
 
           if (Array.isArray(enrichedTxs) && enrichedTxs.length > 0) {
             for (const tx of enrichedTxs) {
+              const txTime = (tx as any).timestamp || (tx.blockTime ? tx.blockTime * 1000 : 0);
+              const isRecent = txTime >= (sessionMountTimeRef - 15000);
+
               if (
                 tx.signature &&
                 !syncedSigsRef.current.has(tx.signature) &&
                 tx.direction === 'receive' &&
                 !tx.err &&
-                !notifSigSet.has(tx.signature)
+                !notifSigSet.has(tx.signature) &&
+                isRecent
               ) {
                 const amt = tx.token === 'SOL' ? (tx.amountSol || 0) : (tx.amountUsdc || 0);
                 if (amt > 0) {
@@ -684,6 +770,7 @@ function BlinkMainApp() {
           });
         }
         initialSyncDoneRef.current = true;
+        saveSeenSigs();
 
         if (hasNewIncoming && typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('blink_tx_updated'));
@@ -720,36 +807,37 @@ function BlinkMainApp() {
     }
   };
 
-  const activeAccount: WalletAccount | null =
-    nativeWalletAccount
-      ? nativeWalletAccount
-      : (authenticated && effectiveAddress
-          ? {
-              name: (userProfile.displayName && userProfile.displayName !== 'Seeker Pioneer')
-                ? userProfile.displayName
-                : user?.email?.address
-                ? user.email.address
-                : user?.phone?.number
-                ? user.phone.number
-                : user?.google
-                ? (user.google.email || (user.google as any)?.name || 'Google User')
-                : user?.twitter
-                ? `@${user.twitter.username}`
-                : user?.github
-                ? `@${user.github.username}`
-                : user?.discord
-                ? (user.discord.username || 'Discord User')
-                : user?.telegram
-                ? `@${user.telegram.username}`
-                : (activeSolanaWallet as any)?.walletClientType === 'phantom'
-                ? 'Phantom'
-                : (activeSolanaWallet as any)?.walletClientType === 'solflare'
-                ? 'Solflare'
-                : userProfile.displayName || 'Privy Solana Wallet',
-              publicKey: effectiveAddress,
-              isPrivy: true,
-            }
-          : null);
+  const privyAccount: WalletAccount | null = authenticated && privyAddress
+    ? {
+        name: (userProfile.displayName && userProfile.displayName !== 'Seeker Pioneer')
+          ? userProfile.displayName
+          : user?.email?.address
+          ? user.email.address
+          : user?.phone?.number
+          ? user.phone.number
+          : user?.google
+          ? (user.google.email || (user.google as any)?.name || 'Google User')
+          : user?.twitter
+          ? `@${user.twitter.username}`
+          : user?.github
+          ? `@${user.github.username}`
+          : user?.discord
+          ? (user.discord.username || 'Discord User')
+          : user?.telegram
+          ? `@${user.telegram.username}`
+          : (activeSolanaWallet as any)?.walletClientType === 'phantom'
+          ? 'Phantom'
+          : (activeSolanaWallet as any)?.walletClientType === 'solflare'
+          ? 'Solflare'
+          : userProfile.displayName || 'Privy Solana Wallet',
+        publicKey: privyAddress,
+        isPrivy: true,
+      }
+    : null;
+
+  const activeAccount: WalletAccount | null = isPrivyActive
+    ? privyAccount
+    : (nativeWalletAccount || privyAccount);
 
   // Ensure unauthenticated users never have a profile page to navigate to
   useEffect(() => {

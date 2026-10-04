@@ -230,6 +230,17 @@ export class PhysicalBlinkRegistry {
         }
       }
 
+      // Ensure SOL Blinks with USD peg are correctly normalized to SOL token amounts
+      if (b.token === 'SOL') {
+        const solPrice = PriceService.getSolPriceSync();
+        if (b.baseUsdcAmount && b.baseUsdcAmount > 0) {
+          // If stored amount equals baseUsdcAmount (e.g. 5) or is >= 1, it was saved as USD instead of SOL!
+          if (b.amount === b.baseUsdcAmount || (b.amount >= 1 && b.baseUsdcAmount === b.amount)) {
+            b.amount = Number((b.baseUsdcAmount / solPrice).toFixed(4));
+          }
+        }
+      }
+
       const existing = map.get(key);
       if (!existing) {
         map.set(key, { ...b });
@@ -463,6 +474,7 @@ export class PhysicalBlinkRegistry {
     const visibility: BlinkVisibility = data.visibility || (globalActionTypes.includes(data.actionType) ? 'global' : 'physical');
 
     const isSkr = data.token === 'SKR';
+    const isSol = data.token === 'SOL';
     let baseUsdc = data.baseUsdcAmount;
     let initialAmount = data.amount;
     if (isSkr) {
@@ -470,6 +482,18 @@ export class PhysicalBlinkRegistry {
         baseUsdc = data.amount > 50 ? 4.0 : data.amount;
       }
       initialAmount = PriceService.getSkrPaymentDetails(baseUsdc).skrAmount;
+    } else if (isSol) {
+      const solPrice = PriceService.getSolPriceSync();
+      if (typeof baseUsdc === 'number' && baseUsdc > 0) {
+        // Amount was entered in USD ($)
+        if (initialAmount === baseUsdc || initialAmount >= 1) {
+          initialAmount = Number((baseUsdc / solPrice).toFixed(4));
+        }
+      } else if (initialAmount >= 1) {
+        // Fallback: If amount >= 1 and no baseUsdc was specified, assume input was $ USD
+        baseUsdc = initialAmount;
+        initialAmount = Number((baseUsdc / solPrice).toFixed(4));
+      }
     }
 
     const newBlink: PhysicalBlink = {
@@ -535,7 +559,9 @@ export class PhysicalBlinkRegistry {
     if (idx === -1) return null;
 
     const currentItem = list[idx];
-    const isSkr = (updates.token || currentItem.token) === 'SKR';
+    const targetToken = updates.token || currentItem.token;
+    const isSkr = targetToken === 'SKR';
+    const isSol = targetToken === 'SOL';
     let finalAmount = currentItem.amount;
     let baseUsdcAmount = currentItem.baseUsdcAmount;
 
@@ -547,6 +573,10 @@ export class PhysicalBlinkRegistry {
         if (isSkr) {
           baseUsdcAmount = parsed > 50 ? (currentItem.baseUsdcAmount || 4.0) : parsed;
           finalAmount = PriceService.getSkrPaymentDetails(baseUsdcAmount).skrAmount;
+        } else if (isSol) {
+          const solPrice = PriceService.getSolPriceSync();
+          baseUsdcAmount = parsed;
+          finalAmount = Number((parsed / solPrice).toFixed(4));
         } else {
           finalAmount = parsed;
           baseUsdcAmount = parsed;
@@ -554,13 +584,15 @@ export class PhysicalBlinkRegistry {
       }
     }
 
-    // Protect SKR blinks: baseUsdcAmount must NEVER default to finalAmount (which is the SKR token quantity!)
+    // Protect SKR & SOL blinks: baseUsdcAmount must reflect USD peg
     const effectiveBaseUsdc = updates.baseUsdcAmount !== undefined
       ? updates.baseUsdcAmount
-      : (isSkr ? (baseUsdcAmount || currentItem.baseUsdcAmount || 4.0) : (baseUsdcAmount || finalAmount));
+      : (isSkr ? (baseUsdcAmount || currentItem.baseUsdcAmount || 4.0) : (isSol ? (baseUsdcAmount || currentItem.baseUsdcAmount) : (baseUsdcAmount || finalAmount)));
 
     if (isSkr && effectiveBaseUsdc) {
       finalAmount = PriceService.getSkrPaymentDetails(effectiveBaseUsdc).skrAmount;
+    } else if (isSol && effectiveBaseUsdc) {
+      finalAmount = Number((effectiveBaseUsdc / PriceService.getSolPriceSync()).toFixed(4));
     }
 
     const updatedItem: PhysicalBlink = {

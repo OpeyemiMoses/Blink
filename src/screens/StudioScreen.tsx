@@ -262,12 +262,16 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       formRecipient.trim() ||
       activeAccount.publicKey;
 
+    const solPrice = PriceService.getSolPriceSync();
+    const solAmount = formToken === 'SOL' ? Number((amountVal / solPrice).toFixed(4)) : amountVal;
+    const skrDetails = formToken === 'SKR' ? PriceService.getSkrPaymentDetails(amountVal) : null;
+
     const created = PhysicalBlinkRegistry.createBlink({
       id: finalId,
       name: formName.trim(),
       actionType: formActionType,
-      amount: amountVal,
-      baseUsdcAmount: formToken === 'SKR' ? amountVal : undefined,
+      amount: formToken === 'SKR' ? (skrDetails ? skrDetails.skrAmount : amountVal) : (formToken === 'SOL' ? solAmount : amountVal),
+      baseUsdcAmount: amountVal,
       token: formToken,
       recipient: recipientVal,
       creatorAddress: activeAccount.publicKey,
@@ -308,9 +312,15 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     }
     const current = blinks.find(b => b.id.toLowerCase() === id.toLowerCase());
     const isSkr = current?.token === 'SKR';
+    const isSol = current?.token === 'SOL';
+    const solPrice = PriceService.getSolPriceSync();
+    const solAmount = isSol ? Number((parsed / solPrice).toFixed(4)) : parsed;
+    const skrDetails = isSkr ? PriceService.getSkrPaymentDetails(parsed) : null;
+    const finalAmount = isSkr ? (skrDetails ? skrDetails.skrAmount : parsed) : (isSol ? solAmount : parsed);
+
     const updated = PhysicalBlinkRegistry.updateAction(id, {
-      amount: parsed,
-      baseUsdcAmount: isSkr ? parsed : undefined,
+      amount: finalAmount,
+      baseUsdcAmount: parsed,
       description: editDesc.trim(),
     });
     if (updated) {

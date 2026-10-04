@@ -198,13 +198,23 @@ export class PriceService {
     }
 
     if (blink.token === 'SOL') {
-      const solAmt = typeof blink.amount === 'number' && !isNaN(blink.amount) ? blink.amount : 0;
+      const solPrice = this.getSolPriceSync();
+      let solAmt = typeof blink.amount === 'number' && !isNaN(blink.amount) ? blink.amount : 0;
+      let baseUsdc = typeof blink.baseUsdcAmount === 'number' && blink.baseUsdcAmount > 0
+        ? blink.baseUsdcAmount
+        : Number((solAmt * solPrice).toFixed(2));
+
+      // Guard against existing blinks where amount was mistakenly stored as the USD value (e.g. 5 SOL instead of $5 worth of SOL)
+      if (blink.baseUsdcAmount && blink.amount === blink.baseUsdcAmount && blink.amount >= 1) {
+        solAmt = Number((blink.baseUsdcAmount / solPrice).toFixed(4));
+      }
+
       return {
         displayAmount: solAmt,
-        displayString: `${solAmt} SOL`,
+        displayString: `${solAmt} SOL (≈ $${baseUsdc.toFixed(2)})`,
         fullAmount: solAmt,
         fullString: `${solAmt} SOL`,
-        baseUsdc: Number((solAmt * this.getSolPriceSync()).toFixed(2)),
+        baseUsdc,
         discountPercent: 0,
         skrPrice: 0,
       };
