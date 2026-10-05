@@ -574,7 +574,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
           return;
         }
       } else if (currentBlink.token === 'SKR') {
-        if (effectiveSkr < effectiveAmount) {
+        if (effectiveSkr <= 0 || effectiveSkr < effectiveAmount) {
           const msg = `Insufficient SKR balance. You have ${effectiveSkr.toFixed(2)} SKR on Mainnet, but this Blink requires ${effectiveAmount.toFixed(2)} SKR.`;
           setError(msg);
           ToastService.error(msg);

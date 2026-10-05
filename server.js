@@ -1450,7 +1450,7 @@ const server = http.createServer((req, res) => {
 
         const getAtaBal = async (conn, mint, owner) => {
           try {
-            const ata = getAssociatedTokenAddressSync(mint, owner);
+            const ata = getAssociatedTokenAddressSync(mint, owner, true);
             const r = await conn.getTokenAccountBalance(ata);
             return r?.value?.uiAmount || 0;
           } catch { return 0; }
@@ -1481,7 +1481,7 @@ const server = http.createServer((req, res) => {
 
         let usdc = totalUsdc > 0 ? Number(totalUsdc.toFixed(2)) : (cachedBal?.data?.usdc ?? 0);
 
-        let skr = (skrMainnet.status === 'fulfilled' && skrMainnet.value > 0)
+        let skr = (skrMainnet.status === 'fulfilled' && typeof skrMainnet.value === 'number')
           ? Number(skrMainnet.value.toFixed(2))
           : (cachedBal?.data?.skr ?? 0);
 

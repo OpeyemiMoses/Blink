@@ -335,7 +335,7 @@ export const TapScanScreen: React.FC<TapScanScreenProps> = ({
           return;
         }
       } else if (resolvedBlink.token === 'SKR') {
-        if (effectiveSkr < checkoutAmount) {
+        if (effectiveSkr <= 0 || effectiveSkr < checkoutAmount) {
           const msg = `Insufficient SKR balance. You have ${effectiveSkr.toFixed(2)} SKR, but this Blink requires ${checkoutAmount.toFixed(2)} SKR.`;
           setError(msg);
           ToastService.error(msg);

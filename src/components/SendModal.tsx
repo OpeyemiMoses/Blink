@@ -263,7 +263,7 @@ export const SendModal: React.FC<SendModalProps> = ({
           return;
         }
       } else if (selectedToken === 'SKR') {
-        if (numAmount > freshSkr) {
+        if (freshSkr <= 0 || numAmount > freshSkr) {
           setError(`Insufficient SKR balance. You have ${freshSkr.toFixed(2)} SKR on Mainnet, but are trying to send ${numAmount.toFixed(2)} SKR.`);
           setLoading(false);
           return;

@@ -10,6 +10,7 @@ import {
 import {
   createTransferInstruction,
   createAssociatedTokenAccountInstruction,
+  createAssociatedTokenAccountIdempotentInstruction,
   getAssociatedTokenAddressSync,
 } from '@solana/spl-token';
 import bs58 from 'bs58';
@@ -946,17 +947,59 @@ export class SolanaService {
   }
 
   /**
+   * Safely query Mainnet account info with multi-tier fallback (HTTP proxy -> Direct Mainnet Connection)
+   * to guarantee it never crashes due to browser CORS or RPC rate limiting.
+   */
+  static async getMainnetAccountInfoSafe(pubkey: PublicKey): Promise<any | null> {
+    // 1. Primary: Backend proxy with tunnel bypass (bypasses browser CORS & IP rate limits)
+    try {
+      const res = await fetch(getApiUrl('/api/solana-rpc?network=mainnet-beta'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-solana-network': 'mainnet-beta',
+          'Bypass-Tunnel-Reminder': 'true',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getAccountInfo',
+          params: [pubkey.toBase58(), { encoding: 'base64' }],
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.result) {
+          return json.result.value; // null if account does not exist on-chain
+        }
+      }
+    } catch (proxyErr) {
+      console.warn('[SolanaService] Proxy getMainnetAccountInfoSafe failed, trying direct:', proxyErr);
+    }
+
+    // 2. Direct Mainnet connection fallback
+    try {
+      const conn = this.getMainnetConnection();
+      return await conn.getAccountInfo(pubkey);
+    } catch (directErr) {
+      console.warn('[SolanaService] Direct Mainnet getAccountInfo failed:', directErr);
+    }
+
+    return null;
+  }
+
+  /**
    * Resolve which USDC mint the sender holds tokens on.
    * Devnet has two common mints: official USDC_DEVNET_MINT (4zMMC...) and secondary faucet mint (Gh9Zw...).
    */
   static async resolveUsdcMint(senderPubkey: PublicKey): Promise<PublicKey> {
     try {
-      const primaryAta = getAssociatedTokenAddressSync(USDC_DEVNET_MINT, senderPubkey);
+      const primaryAta = getAssociatedTokenAddressSync(USDC_DEVNET_MINT, senderPubkey, true);
       const acc1 = await this.getAccountInfoSafe(primaryAta);
       if (acc1) return USDC_DEVNET_MINT;
 
       const secondaryMint = new PublicKey('Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr');
-      const secondaryAta = getAssociatedTokenAddressSync(secondaryMint, senderPubkey);
+      const secondaryAta = getAssociatedTokenAddressSync(secondaryMint, senderPubkey, true);
       const acc2 = await this.getAccountInfoSafe(secondaryAta);
       if (acc2) return secondaryMint;
     } catch (e) {
@@ -967,7 +1010,7 @@ export class SolanaService {
 
   /**
    * Build complete on-chain USDC transfer transaction on Solana network.
-   * Auto-creates recipient ATA if not already existing.
+   * Auto-creates recipient ATA idempotently if not already existing.
    */
   static async buildUsdcTransferTransaction(
     senderPubkey: PublicKey,
@@ -975,8 +1018,8 @@ export class SolanaService {
     amountUsdc: number
   ): Promise<Transaction> {
     const mint = await this.resolveUsdcMint(senderPubkey);
-    const senderAta = getAssociatedTokenAddressSync(mint, senderPubkey);
-    const recipientAta = getAssociatedTokenAddressSync(mint, recipientPubkey);
+    const senderAta = getAssociatedTokenAddressSync(mint, senderPubkey, true);
+    const recipientAta = getAssociatedTokenAddressSync(mint, recipientPubkey, true);
 
     const transaction = new Transaction();
 
@@ -992,7 +1035,7 @@ export class SolanaService {
 
     if (needsAtaCreation) {
       transaction.add(
-        createAssociatedTokenAccountInstruction(senderPubkey, recipientAta, recipientPubkey, mint)
+        createAssociatedTokenAccountIdempotentInstruction(senderPubkey, recipientAta, recipientPubkey, mint)
       );
     }
 
@@ -1011,7 +1054,7 @@ export class SolanaService {
 
   /**
    * Build complete on-chain SKR transfer transaction on Solana network.
-   * Auto-creates recipient SKR ATA if not already existing.
+   * Auto-creates recipient SKR ATA idempotently if not already existing.
    */
   static async buildSkrTransferTransaction(
     senderPubkey: PublicKey,
@@ -1019,33 +1062,43 @@ export class SolanaService {
     amountSkr: number
   ): Promise<Transaction> {
     const mint = SKR_MINT;
-    const senderAta = getAssociatedTokenAddressSync(mint, senderPubkey);
-    const recipientAta = getAssociatedTokenAddressSync(mint, recipientPubkey);
+    const senderAta = getAssociatedTokenAddressSync(mint, senderPubkey, true);
+    const recipientAta = getAssociatedTokenAddressSync(mint, recipientPubkey, true);
+
+    // 1. Verify sender ATA exists and is initialized on Solana Mainnet
+    const senderAtaInfo = await this.getMainnetAccountInfoSafe(senderAta);
+    if (!senderAtaInfo) {
+      throw new Error(
+        'Your wallet does not have an active $SKR token account on Solana Mainnet. Please ensure your wallet holds $SKR before transferring.'
+      );
+    }
 
     const transaction = new Transaction();
 
-    // Check if recipient ATA exists on Solana Mainnet; create if not
+    // 2. Check if recipient ATA exists on Solana Mainnet; create idempotently if not
     let needsAtaCreation = false;
     if (senderAta.equals(recipientAta)) {
       needsAtaCreation = false;
     } else {
-      try {
-        const mainnetConn = this.getMainnetConnection();
-        const recipientAtaInfo = await mainnetConn.getAccountInfo(recipientAta);
-        needsAtaCreation = !recipientAtaInfo;
-      } catch (checkErr) {
-        console.warn('[SolanaService] Mainnet ATA check error, creating ATA defensively:', checkErr);
-        needsAtaCreation = true;
-      }
+      const recipientAtaInfo = await this.getMainnetAccountInfoSafe(recipientAta);
+      needsAtaCreation = !recipientAtaInfo;
     }
 
     if (needsAtaCreation) {
+      // Check sender SOL balance to ensure they can pay for recipient ATA rent (~0.00204 SOL)
+      const senderSol = await this.getMainnetSolBalance(senderPubkey.toBase58());
+      if (senderSol < 0.00204) {
+        throw new Error(
+          `The recipient does not yet have an $SKR token account. Creating it requires ~0.00204 SOL for Solana rent exemption, but your wallet has ${senderSol.toFixed(4)} Mainnet SOL.`
+        );
+      }
+
       transaction.add(
-        createAssociatedTokenAccountInstruction(senderPubkey, recipientAta, recipientPubkey, mint)
+        createAssociatedTokenAccountIdempotentInstruction(senderPubkey, recipientAta, recipientPubkey, mint)
       );
     }
 
-    // 1 SKR = 1,000,000 atomic units (6 decimals)
+    // 3. 1 SKR = 1,000,000 atomic units (6 decimals)
     const amountUnits = BigInt(Math.max(1, Math.round(amountSkr * 1_000_000)));
     transaction.add(
       createTransferInstruction(senderAta, recipientAta, senderPubkey, amountUnits)
