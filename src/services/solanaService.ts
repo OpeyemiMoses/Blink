@@ -19,9 +19,10 @@ import { getApiUrl, DEFAULT_CLOUD_API_URL } from './apiConfig';
 export const DEVNET_RPC = 'https://api.devnet.solana.com';
 export const MAINNET_RPC = 'https://api.mainnet-beta.solana.com';
 
-// Official Solana Devnet USDC & SKR SPL Mint & Program IDs
+// Official Solana Devnet USDC & Mainnet SKR SPL Mint & Program IDs
 export const USDC_DEVNET_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
-export const SKR_DEVNET_MINT = new PublicKey('SKRbvo6Gf7GondiT3BbTfuRDPqLWei4j2Qy2NPGZhW3');
+export const SKR_MINT = new PublicKey('SKRbvo6Gf7GondiT3BbTfuRDPqLWei4j2Qy2NPGZhW3');
+export const SKR_DEVNET_MINT = SKR_MINT; // Alias for backward compatibility
 export const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 export const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 
@@ -90,6 +91,87 @@ export class SolanaService {
     return this.activeNetwork;
   }
 
+  static getMainnetConnection(): Connection {
+    return new Connection(MAINNET_RPC, {
+      commitment: 'confirmed',
+      disableRetryOnRateLimit: true,
+      wsEndpoint: 'wss://api.mainnet-beta.solana.com/',
+    });
+  }
+
+  static async getMainnetBlockhash(commitment: 'confirmed' = 'confirmed'): Promise<{ blockhash: string; lastValidBlockHeight: number }> {
+    try {
+      const conn = this.getMainnetConnection();
+      return await conn.getLatestBlockhash(commitment);
+    } catch (n: any) {
+      console.warn('[SolanaService] Direct Mainnet blockhash fetch failed, trying proxy raw fetch:', n);
+      try {
+        const res = await fetch(getApiUrl('/api/solana-rpc?network=mainnet-beta'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-solana-network': 'mainnet-beta' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'getLatestBlockhash',
+            params: [{ commitment }],
+          }),
+        });
+        const data = await res.json();
+        if (data?.result?.value?.blockhash) {
+          return {
+            blockhash: data.result.value.blockhash,
+            lastValidBlockHeight: data.result.value.lastValidBlockHeight || 0,
+          };
+        }
+      } catch (proxyErr) {
+        console.warn('[SolanaService] Proxy Mainnet blockhash fetch failed:', proxyErr);
+      }
+      throw new Error(n?.message || 'Failed to fetch Mainnet blockhash');
+    }
+  }
+
+  static isSkrOrMainnetTransaction(tx: any): boolean {
+    if (!tx) return false;
+    if (tx.isMainnet || tx.token === 'SKR') return true;
+    const skrMintStr = SKR_MINT.toBase58();
+    if (Array.isArray(tx.instructions)) {
+      for (const ix of tx.instructions) {
+        if (ix.programId && (ix.programId.toBase58?.() === skrMintStr || ix.programId.equals?.(SKR_MINT))) {
+          return true;
+        }
+        if (ix.keys && Array.isArray(ix.keys)) {
+          for (const k of ix.keys) {
+            const pk = k?.pubkey;
+            if (!pk) continue;
+            if (typeof pk.equals === 'function' && pk.equals(SKR_MINT)) return true;
+            if (typeof pk.toBase58 === 'function' && pk.toBase58() === skrMintStr) return true;
+            if (String(pk) === skrMintStr) return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  static async getMainnetSolBalance(pubkeyStr: string): Promise<number> {
+    if (!pubkeyStr) return 0;
+    try {
+      const clean = pubkeyStr.trim();
+      const res = await fetch(getApiUrl(`/api/balance?address=${encodeURIComponent(clean)}`));
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data.mainnetSol === 'number') {
+          return data.mainnetSol;
+        }
+      }
+      const conn = this.getMainnetConnection();
+      const lamports = await conn.getBalance(new PublicKey(clean));
+      return Number((lamports / LAMPORTS_PER_SOL).toFixed(4));
+    } catch {
+      return 0;
+    }
+  }
+
   static getConnection(): Connection {
     const rpcUrl = this.getRpcUrl();
     if (!this.connection || (this.connection as any)._rpcEndpoint !== rpcUrl) {
@@ -109,12 +191,16 @@ export class SolanaService {
    * Send a serialized signed transaction via the HTTP proxy and poll for confirmation.
    * Avoids WebSocket dependency entirely.
    */
-  static async sendRawTransactionAndConfirm(signedTx: Uint8Array): Promise<string> {
+  static async sendRawTransactionAndConfirm(signedTx: Uint8Array, network?: 'devnet' | 'mainnet-beta'): Promise<string> {
+    const net = network || this.getNetwork();
     const encoded = Buffer.from(signedTx).toString('base64');
-    // Send via HTTP proxy
-    const sendRes = await fetch(getApiUrl('/api/solana-rpc'), {
+    // Send via HTTP proxy with explicit network target
+    const sendRes = await fetch(getApiUrl(`/api/solana-rpc?network=${net}`), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-solana-network': net,
+      },
       body: JSON.stringify({
         jsonrpc: '2.0', id: 1,
         method: 'sendTransaction',
@@ -125,14 +211,17 @@ export class SolanaService {
     if (sendJson.error) throw new Error(`sendTransaction RPC error: ${JSON.stringify(sendJson.error)}`);
     const signature: string = sendJson.result;
 
-    // Poll for confirmation via HTTP (no WebSocket)
-    const latestBh = await this.getLatestBlockhash('confirmed');
+    // Poll for confirmation via HTTP on the corresponding network
+    const latestBh = net === 'mainnet-beta' ? await this.getMainnetBlockhash('confirmed') : await this.getLatestBlockhash('confirmed');
     const deadline = latestBh.lastValidBlockHeight;
     for (let attempt = 0; attempt < 40; attempt++) {
       await new Promise(r => setTimeout(r, 2000));
-      const statusRes = await fetch(getApiUrl('/api/solana-rpc'), {
+      const statusRes = await fetch(getApiUrl(`/api/solana-rpc?network=${net}`), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-solana-network': net,
+        },
         body: JSON.stringify({
           jsonrpc: '2.0', id: 1,
           method: 'getSignatureStatuses',
@@ -148,9 +237,12 @@ export class SolanaService {
         }
       }
       // Check if block height exceeded
-      const blockRes = await fetch(getApiUrl('/api/solana-rpc'), {
+      const blockRes = await fetch(getApiUrl(`/api/solana-rpc?network=${net}`), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-solana-network': net,
+        },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getBlockHeight', params: [] }),
       });
       const blockJson = await blockRes.json();
@@ -165,13 +257,17 @@ export class SolanaService {
    * Poll for transaction confirmation via HTTP (no WebSocket).
    * Safe to call from background without triggering WS connection errors.
    */
-  static async confirmSignatureViaHttp(signature: string, maxAttempts = 30): Promise<boolean> {
+  static async confirmSignatureViaHttp(signature: string, maxAttempts = 30, network?: 'devnet' | 'mainnet-beta'): Promise<boolean> {
+    const net = network || this.getNetwork();
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       await new Promise(r => setTimeout(r, 2000));
       try {
-        const statusRes = await fetch(getApiUrl('/api/solana-rpc'), {
+        const statusRes = await fetch(getApiUrl(`/api/solana-rpc?network=${net}`), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-solana-network': net,
+          },
           body: JSON.stringify({
             jsonrpc: '2.0',
             id: 1,
@@ -693,11 +789,11 @@ export class SolanaService {
         const pubkey = new PublicKey(pubkeyStr);
         let total = 0;
 
-        // 1. Query real SKR token balance on mainnet
+        // 1. Query real SKR token balance on Solana Mainnet
         try {
-          const mainnetConn = new Connection(MAINNET_RPC, 'confirmed');
+          const mainnetConn = this.getMainnetConnection();
           const mainnetAccounts = await mainnetConn.getParsedTokenAccountsByOwner(pubkey, {
-            mint: SKR_DEVNET_MINT,
+            mint: SKR_MINT,
           });
           if (mainnetAccounts && mainnetAccounts.value.length > 0) {
             for (const item of mainnetAccounts.value) {
@@ -708,25 +804,34 @@ export class SolanaService {
             }
           }
         } catch (e) {
-          // quiet ignore
-        }
-
-        // 2. Also check devnet token account
-        if (total === 0) {
+          // If direct Mainnet RPC failed (CORS or rate limit), use server proxy
           try {
-            const devnetAccounts = await this.getConnection().getParsedTokenAccountsByOwner(pubkey, {
-              mint: SKR_DEVNET_MINT,
+            const res = await fetch(getApiUrl('/api/solana-rpc?network=mainnet-beta'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-solana-network': 'mainnet-beta' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: 1,
+                method: 'getTokenAccountsByOwner',
+                params: [
+                  pubkeyStr,
+                  { mint: SKR_MINT.toBase58() },
+                  { encoding: 'jsonParsed' },
+                ],
+              }),
             });
-            if (devnetAccounts && devnetAccounts.value.length > 0) {
-              for (const item of devnetAccounts.value) {
-                const parsed = item.account.data?.parsed?.info?.tokenAmount;
+            const data = await res.json();
+            const accounts = data?.result?.value;
+            if (Array.isArray(accounts)) {
+              for (const acc of accounts) {
+                const parsed = acc.account?.data?.parsed?.info?.tokenAmount;
                 if (parsed && typeof parsed.uiAmount === 'number') {
                   total += parsed.uiAmount;
                 }
               }
             }
-          } catch (e) {
-            // quiet ignore
+          } catch (proxyErr) {
+            console.warn('[SolanaService] Proxy SKR query error:', proxyErr);
           }
         }
 
@@ -913,19 +1018,25 @@ export class SolanaService {
     recipientPubkey: PublicKey,
     amountSkr: number
   ): Promise<Transaction> {
-    const mint = SKR_DEVNET_MINT;
+    const mint = SKR_MINT;
     const senderAta = getAssociatedTokenAddressSync(mint, senderPubkey);
     const recipientAta = getAssociatedTokenAddressSync(mint, recipientPubkey);
 
     const transaction = new Transaction();
 
-    // Check if recipient ATA exists on Solana network; create if not
+    // Check if recipient ATA exists on Solana Mainnet; create if not
     let needsAtaCreation = false;
     if (senderAta.equals(recipientAta)) {
       needsAtaCreation = false;
     } else {
-      const recipientAtaInfo = await this.getAccountInfoSafe(recipientAta);
-      needsAtaCreation = !recipientAtaInfo;
+      try {
+        const mainnetConn = this.getMainnetConnection();
+        const recipientAtaInfo = await mainnetConn.getAccountInfo(recipientAta);
+        needsAtaCreation = !recipientAtaInfo;
+      } catch (checkErr) {
+        console.warn('[SolanaService] Mainnet ATA check error, creating ATA defensively:', checkErr);
+        needsAtaCreation = true;
+      }
     }
 
     if (needsAtaCreation) {
@@ -940,9 +1051,12 @@ export class SolanaService {
       createTransferInstruction(senderAta, recipientAta, senderPubkey, amountUnits)
     );
 
-    const latestBlockhash = await this.getLatestBlockhash('confirmed');
+    // SKR is natively on Mainnet, so always use Mainnet blockhash
+    const latestBlockhash = await this.getMainnetBlockhash('confirmed');
     transaction.recentBlockhash = latestBlockhash.blockhash;
     transaction.feePayer = senderPubkey;
+    (transaction as any).isMainnet = true;
+    (transaction as any).token = 'SKR';
 
     return transaction;
   }
@@ -1300,10 +1414,11 @@ export class SolanaService {
     }
   }
 
-  static getExplorerUrl(identifier: string): string {
+  static getExplorerUrl(identifier: string, network?: 'devnet' | 'mainnet-beta'): string {
     const isAddress = identifier.length < 50;
     const path = isAddress ? 'address' : 'tx';
-    const cluster = this.activeNetwork === 'devnet' ? '?cluster=devnet' : '';
+    const targetNet = network || this.activeNetwork;
+    const cluster = targetNet === 'devnet' ? '?cluster=devnet' : '';
     return `https://explorer.solana.com/${path}/${identifier}${cluster}`;
   }
 }

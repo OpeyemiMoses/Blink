@@ -1125,9 +1125,15 @@ function BlinkMainApp() {
 
     if (activeSolanaWallet && (privySignTransaction || privySignAndSend)) {
       WalletProviderService.setPrivySigner(async (tx) => {
+        const isMainnet = SolanaService.isSkrOrMainnetTransaction(tx);
+        const privyChain = isMainnet ? 'solana:mainnet' : 'solana:devnet';
+        const targetNetwork = isMainnet ? 'mainnet-beta' : 'devnet';
+
         // Ensure recentBlockhash and feePayer are set and fresh
         if (!tx.recentBlockhash) {
-          const latestBh = await SolanaService.getLatestBlockhash('confirmed');
+          const latestBh = isMainnet
+            ? await SolanaService.getMainnetBlockhash('confirmed')
+            : await SolanaService.getLatestBlockhash('confirmed');
           tx.recentBlockhash = latestBh.blockhash;
         }
         if (!tx.feePayer && activeAccount?.publicKey) {
@@ -1144,7 +1150,7 @@ function BlinkMainApp() {
             const signRes = await privySignTransaction({
               transaction: serialized,
               wallet: activeSolanaWallet,
-              chain: 'solana:devnet',
+              chain: privyChain,
             });
             const signedRaw = (signRes as any)?.signedTransaction || (signRes as any)?.transaction || signRes;
             if (signedRaw) {
@@ -1155,8 +1161,8 @@ function BlinkMainApp() {
                 : Buffer.from(signedRaw);
 
               try {
-                // Send and confirm via HTTP polling (no WebSocket at all)
-                const sig = await SolanaService.sendRawTransactionAndConfirm(rawBytes);
+                // Send and confirm via HTTP polling on targeted network (no WebSocket at all)
+                const sig = await SolanaService.sendRawTransactionAndConfirm(rawBytes, targetNetwork);
                 console.log('Successfully broadcasted & confirmed via HTTP polling:', sig);
                 return sig;
               } catch (broadcastErr: any) {
@@ -1176,7 +1182,7 @@ function BlinkMainApp() {
             const res = await privySignAndSend({
               transaction: serialized,
               wallet: activeSolanaWallet,
-              chain: 'solana:devnet',
+              chain: privyChain,
               options: {
                 optimisticBroadcast: true,
                 skipSimulation: true,

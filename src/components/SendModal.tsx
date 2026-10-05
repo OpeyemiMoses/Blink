@@ -229,11 +229,25 @@ export const SendModal: React.FC<SendModalProps> = ({
       setLoading(true);
 
       // Pre-flight fresh balance check before biometrics or transaction building
-      const [freshSol, freshUsdc, freshSkr] = await Promise.all([
-        SolanaService.getBalance(senderPublicKey, true),
-        SolanaService.getUsdcBalance(senderPublicKey, true),
-        SolanaService.getSkrBalance(senderPublicKey, true),
-      ]);
+      let freshSol = 0;
+      let freshUsdc = 0;
+      let freshSkr = 0;
+
+      if (selectedToken === 'SKR') {
+        const [mainnetSol, skrBal] = await Promise.all([
+          SolanaService.getMainnetSolBalance(senderPublicKey),
+          SolanaService.getSkrBalance(senderPublicKey, true),
+        ]);
+        freshSol = mainnetSol;
+        freshSkr = skrBal;
+      } else {
+        const [devSol, usdcBal] = await Promise.all([
+          SolanaService.getBalance(senderPublicKey, true),
+          SolanaService.getUsdcBalance(senderPublicKey, true),
+        ]);
+        freshSol = devSol;
+        freshUsdc = usdcBal;
+      }
 
       const MIN_GAS_SOL = 0.00001;
 
@@ -250,12 +264,12 @@ export const SendModal: React.FC<SendModalProps> = ({
         }
       } else if (selectedToken === 'SKR') {
         if (numAmount > freshSkr) {
-          setError(`Insufficient SKR balance. You have ${freshSkr.toFixed(2)} SKR, but are trying to send ${numAmount.toFixed(2)} SKR.`);
+          setError(`Insufficient SKR balance. You have ${freshSkr.toFixed(2)} SKR on Mainnet, but are trying to send ${numAmount.toFixed(2)} SKR.`);
           setLoading(false);
           return;
         }
         if (freshSol < MIN_GAS_SOL) {
-          setError(`Insufficient SOL for network fee. You need at least 0.00001 SOL for gas, but have ${freshSol.toFixed(4)} SOL.`);
+          setError(`Insufficient SOL on Solana Mainnet for network fee. You need at least 0.00001 Mainnet SOL for gas, but have ${freshSol.toFixed(4)} SOL.`);
           setLoading(false);
           return;
         }
@@ -325,7 +339,7 @@ export const SendModal: React.FC<SendModalProps> = ({
       const sig = await WalletProviderService.signAndSendTransaction(transaction);
 
       // Non-blocking: verify transaction on-chain in background via HTTP polling (no WebSocket)
-      SolanaService.confirmSignatureViaHttp(sig).then((confirmed) => {
+      SolanaService.confirmSignatureViaHttp(sig, 30, selectedToken === 'SKR' ? 'mainnet-beta' : 'devnet').then((confirmed) => {
         if (!confirmed) {
           console.warn('SendModal transaction confirmation check timed out or failed:', sig);
         }
@@ -488,7 +502,7 @@ export const SendModal: React.FC<SendModalProps> = ({
                 <CheckCircle2 size={40} color="#10B981" />
                 <Text style={styles.successTitle}>Transaction Confirmed</Text>
                 <Text style={styles.successSub}>
-                  Transferred {selectedToken === 'SOL' ? `${amount} SOL` : `$${parseFloat(amount || '0').toFixed(2)} USDC`} on Solana
+                  Transferred {selectedToken === 'SOL' ? `${amount} SOL` : (selectedToken === 'SKR' ? `${amount} SKR` : `$${parseFloat(amount || '0').toFixed(2)} USDC`)} on Solana {selectedToken === 'SKR' ? '(Mainnet)' : ''}
                 </Text>
                 <Text style={styles.sigText} numberOfLines={1}>{txSignature}</Text>
 
@@ -506,7 +520,7 @@ export const SendModal: React.FC<SendModalProps> = ({
                 {typeof window !== 'undefined' && (
                   <TouchableOpacity
                     style={styles.explorerBtn}
-                    onPress={() => window.open(SolanaService.getExplorerUrl(txSignature), '_blank')}
+                    onPress={() => window.open(SolanaService.getExplorerUrl(txSignature, selectedToken === 'SKR' ? 'mainnet-beta' : 'devnet'), '_blank')}
                     activeOpacity={0.7}
                   >
                     <Text style={styles.explorerBtnText}>View on Solana Explorer</Text>

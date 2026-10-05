@@ -282,7 +282,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                     style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                     onPress={() => {
                       if (typeof window !== 'undefined' && currentReceipt.signature) {
-                        window.open(SolanaService.getExplorerUrl(currentReceipt.signature), '_blank');
+                        window.open(SolanaService.getExplorerUrl(currentReceipt.signature, currentReceipt.token === 'SKR' ? 'mainnet-beta' : 'devnet'), '_blank');
                       }
                     }}
                     activeOpacity={0.7}
@@ -330,7 +330,9 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 <Text style={styles.tableLabel}>Network</Text>
                 <View style={styles.networkTag}>
                   <View style={styles.greenDot} />
-                  <Text style={[styles.tableVal, { color: colors.textPrimary }]}>Solana Devnet</Text>
+                  <Text style={[styles.tableVal, { color: colors.textPrimary }]}>
+                    {currentReceipt.token === 'SKR' ? 'Solana Mainnet' : 'Solana Devnet'}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -355,7 +357,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 style={[styles.explorerBtn, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
                 onPress={() => {
                   if (typeof window !== 'undefined' && receipt.signature) {
-                    window.open(SolanaService.getExplorerUrl(receipt.signature), '_blank');
+                    window.open(SolanaService.getExplorerUrl(receipt.signature, receipt.token === 'SKR' ? 'mainnet-beta' : 'devnet'), '_blank');
                   }
                 }}
                 activeOpacity={0.7}

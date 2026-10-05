@@ -1485,7 +1485,7 @@ const server = http.createServer((req, res) => {
           ? Number(skrMainnet.value.toFixed(2))
           : (cachedBal?.data?.skr ?? 0);
 
-        const resultData = { address: resolvedAddress, sol, usdc, skr };
+        const resultData = { address: resolvedAddress, sol, usdc, skr, devnetSol, mainnetSol };
         addressBalanceCache.set(cacheKey, { data: resultData, time: Date.now() });
         return resultData;
       })();
@@ -1713,7 +1713,14 @@ const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
-      const rpcReq = https.request('https://api.devnet.solana.com', {
+      const parsedUrl = url.parse(req.url, true);
+      const reqNetwork = parsedUrl.query.network || req.headers['x-solana-network'];
+      const isMainnet = reqNetwork === 'mainnet-beta' || reqNetwork === 'mainnet';
+      const targetRpcHost = isMainnet ? 'api.mainnet-beta.solana.com' : 'api.devnet.solana.com';
+
+      const rpcReq = https.request({
+        hostname: targetRpcHost,
+        path: '/',
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1730,7 +1737,7 @@ const server = http.createServer((req, res) => {
       });
 
       rpcReq.on('error', (err) => {
-        console.warn('Solana RPC proxy error:', err);
+        console.warn('Solana RPC proxy error (' + targetRpcHost + '):', err);
         return sendJson(res, 502, { jsonrpc: '2.0', error: { code: -32603, message: 'RPC gateway error: ' + err.message } });
       });
 

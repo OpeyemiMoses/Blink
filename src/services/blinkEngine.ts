@@ -171,14 +171,14 @@ export class BlinkEngine {
       signature = await WalletProviderService.signAndSendTransaction(tx);
     }
 
+    const amountMatch = selectedAction.label.match(/([\d.]+)\s*(USDC|SOL|SKR)/i);
+    const amount = amountMatch ? parseFloat(amountMatch[1]) : 0.01;
+    const token = (amountMatch ? amountMatch[2].toUpperCase() : 'SOL') as 'SOL' | 'USDC' | 'SKR';
+
     // Wait for on-chain confirmation via HTTP polling
     try {
-      await SolanaService.confirmSignatureViaHttp(signature, 15);
+      await SolanaService.confirmSignatureViaHttp(signature, 15, token === 'SKR' ? 'mainnet-beta' : 'devnet');
     } catch {}
-
-    const amountMatch = selectedAction.label.match(/([\d.]+)\s*(USDC|SOL)/i);
-    const amount = amountMatch ? parseFloat(amountMatch[1]) : 0.01;
-    const token = (amountMatch ? amountMatch[2].toUpperCase() : 'SOL') as 'SOL' | 'USDC';
 
     return {
       id: 'tx-' + Date.now(),

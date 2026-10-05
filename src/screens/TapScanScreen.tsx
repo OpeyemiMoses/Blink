@@ -425,7 +425,7 @@ export const TapScanScreen: React.FC<TapScanScreenProps> = ({
       const signature = await WalletProviderService.signAndSendTransaction(transaction);
 
       // Non-blocking: verify transaction on-chain in background (don't block success UI)
-      SolanaService.confirmSignatureViaHttp(signature).then((confirmed) => {
+      SolanaService.confirmSignatureViaHttp(signature, 30, resolvedBlink.token === 'SKR' ? 'mainnet-beta' : 'devnet').then((confirmed) => {
         if (!confirmed) {
           console.warn('TapScan payment could not be confirmed on-chain or failed:', signature);
         }
@@ -1041,7 +1041,7 @@ export const TapScanScreen: React.FC<TapScanScreenProps> = ({
             style={[styles.solscanBtn, { backgroundColor: colors.bgCardAlt, borderColor: colors.border }]}
             onPress={() =>
               window.open?.(
-                SolanaService.getExplorerUrl(txSignature),
+                SolanaService.getExplorerUrl(txSignature, resolvedBlink.token === 'SKR' ? 'mainnet-beta' : 'devnet'),
                 '_blank'
               )
             }

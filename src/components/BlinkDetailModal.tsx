@@ -516,12 +516,25 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       }
 
       // 1. Pre-flight balance check before biometrics or transaction construction
-      const allBalances = await SolanaService.getAllBalances(activeAccount.publicKey).catch(() => ({ sol: 0, usdc: 0, skr: 0 }));
-      const freshSol = allBalances.sol;
-      const freshUsdc = allBalances.usdc;
-      const freshSkr = allBalances.skr;
+      let freshSol = 0;
+      let freshUsdc = 0;
+      let freshSkr = 0;
 
-      // Resilient fallback: ensure transient Devnet RPC hiccups never block payment when client has verified funds
+      if (currentBlink.token === 'SKR') {
+        const [mainnetSol, skrBal] = await Promise.all([
+          SolanaService.getMainnetSolBalance(activeAccount.publicKey),
+          SolanaService.getSkrBalance(activeAccount.publicKey, true),
+        ]);
+        freshSol = mainnetSol;
+        freshSkr = skrBal;
+      } else {
+        const allBalances = await SolanaService.getAllBalances(activeAccount.publicKey).catch(() => ({ sol: 0, usdc: 0, skr: 0 }));
+        freshSol = allBalances.sol;
+        freshUsdc = allBalances.usdc;
+        freshSkr = allBalances.skr;
+      }
+
+      // Resilient fallback: ensure transient RPC hiccups never block payment when client has verified funds
       const effectiveSol = Math.max(
         typeof freshSol === 'number' && !isNaN(freshSol) ? freshSol : 0,
         typeof walletBalanceSol === 'number' && !isNaN(walletBalanceSol) ? walletBalanceSol : 0,
@@ -562,14 +575,14 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
         }
       } else if (currentBlink.token === 'SKR') {
         if (effectiveSkr < effectiveAmount) {
-          const msg = `Insufficient SKR balance. You have ${effectiveSkr.toFixed(2)} SKR, but this Blink requires ${effectiveAmount.toFixed(2)} SKR.`;
+          const msg = `Insufficient SKR balance. You have ${effectiveSkr.toFixed(2)} SKR on Mainnet, but this Blink requires ${effectiveAmount.toFixed(2)} SKR.`;
           setError(msg);
           ToastService.error(msg);
           setAuthorizing(false);
           return;
         }
         if (effectiveSol < MIN_GAS_SOL) {
-          const msg = `Insufficient SOL for network fee. You need at least 0.00001 SOL for Solana gas, but have ${effectiveSol.toFixed(4)} SOL.`;
+          const msg = `Insufficient SOL on Solana Mainnet for network fee. You need at least 0.00001 Mainnet SOL for Solana gas, but have ${effectiveSol.toFixed(4)} SOL.`;
           setError(msg);
           ToastService.error(msg);
           setAuthorizing(false);
@@ -667,7 +680,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
       const sig = await WalletProviderService.signAndSendTransaction(tx);
 
       // Non-blocking: verify transaction on-chain in background (don't block success UI)
-      SolanaService.confirmSignatureViaHttp(sig).then((confirmed) => {
+      SolanaService.confirmSignatureViaHttp(sig, 30, currentBlink.token === 'SKR' ? 'mainnet-beta' : 'devnet').then((confirmed) => {
         if (!confirmed) {
           console.warn('Blink payment could not be confirmed on-chain or failed:', sig);
         }
@@ -1022,7 +1035,7 @@ export const BlinkDetailModal: React.FC<BlinkDetailModalProps> = ({
                     <Text style={{ fontSize: 10, color: colors.accent, fontWeight: '700' }}>View & Download Receipt</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    onPress={() => window.open(SolanaService.getExplorerUrl(txSignature), '_blank')}
+                    onPress={() => window.open(SolanaService.getExplorerUrl(txSignature, currentBlink?.token === 'SKR' ? 'mainnet-beta' : 'devnet'), '_blank')}
                     style={styles.explorerLinkRow}
                   >
                     <Text style={styles.explorerText}>Explorer</Text>

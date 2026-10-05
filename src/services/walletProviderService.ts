@@ -274,6 +274,25 @@ export class WalletProviderService {
 
     if (provider) {
       try {
+        const isMainnet = SolanaService.isSkrOrMainnetTransaction(transaction);
+        const targetNetwork = isMainnet ? 'mainnet-beta' : 'devnet';
+
+        // For browser extensions, prefer provider.signTransaction so our server proxy
+        // reliably broadcasts to the correct cluster (bypassing extension cluster mismatch)
+        if (typeof provider.signTransaction === 'function') {
+          try {
+            const signed = await provider.signTransaction(transaction);
+            const raw = signed.serialize();
+            return await SolanaService.sendRawTransactionAndConfirm(raw, targetNetwork);
+          } catch (signOnlyErr: any) {
+            console.warn('provider.signTransaction warning, falling back to signAndSendTransaction:', signOnlyErr);
+            const msg = signOnlyErr?.message || String(signOnlyErr);
+            if (/reject|cancel|denied|dismiss/i.test(msg)) {
+              throw signOnlyErr;
+            }
+          }
+        }
+
         if (typeof provider.signAndSendTransaction === 'function') {
           const res = await provider.signAndSendTransaction(transaction);
           return res.signature || res;
@@ -310,22 +329,28 @@ export class WalletProviderService {
    */
   private static async fallbackKeypairSignAndSend(transaction: Transaction): Promise<string> {
     try {
-      const connection = SolanaService.getConnection();
+      const isMainnet = SolanaService.isSkrOrMainnetTransaction(transaction);
+      const network = isMainnet ? 'mainnet-beta' : 'devnet';
+      const connection = isMainnet ? SolanaService.getMainnetConnection() : SolanaService.getConnection();
       const localKeypair = SolanaService.getOrCreateKeypair();
 
-      // Check balance on Devnet and request 1 SOL airdrop if needed
-      try {
-        const bal = await connection.getBalance(localKeypair.publicKey);
-        if (bal < 0.005 * LAMPORTS_PER_SOL) {
-          const airdropSig = await connection.requestAirdrop(localKeypair.publicKey, 1 * LAMPORTS_PER_SOL);
-          await SolanaService.confirmSignatureViaHttp(airdropSig, 15);
+      // Check balance on Devnet and request 1 SOL airdrop if needed (Devnet only)
+      if (!isMainnet) {
+        try {
+          const bal = await connection.getBalance(localKeypair.publicKey);
+          if (bal < 0.005 * LAMPORTS_PER_SOL) {
+            const airdropSig = await connection.requestAirdrop(localKeypair.publicKey, 1 * LAMPORTS_PER_SOL);
+            await SolanaService.confirmSignatureViaHttp(airdropSig, 15, 'devnet');
+          }
+        } catch (airdropErr) {
+          console.warn('Devnet airdrop check warning:', airdropErr);
         }
-      } catch (airdropErr) {
-        console.warn('Devnet airdrop check warning:', airdropErr);
       }
 
       // Re-target fee payer & instructions to ensure valid signature
-      const latestBlockhash = await connection.getLatestBlockhash('confirmed');
+      const latestBlockhash = isMainnet
+        ? await SolanaService.getMainnetBlockhash('confirmed')
+        : await connection.getLatestBlockhash('confirmed');
       transaction.recentBlockhash = latestBlockhash.blockhash;
       transaction.feePayer = localKeypair.publicKey;
 
@@ -342,7 +367,7 @@ export class WalletProviderService {
       try {
         transaction.sign(localKeypair);
         const rawTx = transaction.serialize();
-        const sig = await SolanaService.sendRawTransactionAndConfirm(rawTx);
+        const sig = await SolanaService.sendRawTransactionAndConfirm(rawTx, network);
         return sig;
       } catch (confirmErr: any) {
         throw confirmErr;
