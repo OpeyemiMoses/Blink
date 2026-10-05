@@ -84,18 +84,18 @@ export const UniversalQrCode: React.FC<UniversalQrCodeProps> = ({
 
   // In Web / DOM runtime (Capacitor Android WebView and Desktop/Mobile Chrome)
   if (Platform.OS === 'web' && svgHtml) {
-    return createElement('div', {
+    const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svgHtml)}`;
+    return createElement('img', {
+      src: dataUri,
+      alt: 'Solana QR Code',
       style: {
         width: `${size}px`,
         height: `${size}px`,
         backgroundColor: bgColor,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
         borderRadius: '8px',
-        overflow: 'hidden',
+        objectFit: 'contain',
+        display: 'block',
       },
-      dangerouslySetInnerHTML: { __html: svgHtml },
     });
   }
 

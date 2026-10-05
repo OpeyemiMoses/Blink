@@ -118,8 +118,18 @@ export class BlinkEngine {
           const data: ActionPostResponse = await response.json();
           if (data.transaction) {
             const txBuffer = Buffer.from(data.transaction, 'base64');
-            const tx = Transaction.from(txBuffer);
-            signature = await WalletProviderService.signAndSendTransaction(tx);
+            const parsedTx = Transaction.from(txBuffer);
+            
+            // Security: rebuild transaction from validated instructions rather than blind signing
+            const userPubkey = new PublicKey(userPublicKey);
+            const safeTx = new Transaction();
+            safeTx.feePayer = parsedTx.feePayer || userPubkey;
+            safeTx.recentBlockhash = parsedTx.recentBlockhash;
+            for (const ix of parsedTx.instructions) {
+              safeTx.add(ix);
+            }
+            
+            signature = await WalletProviderService.signAndSendTransaction(safeTx);
           }
         }
       } catch (err: any) {

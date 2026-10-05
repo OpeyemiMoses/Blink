@@ -222,16 +222,16 @@ public class MainActivity extends BridgeActivity {
 
     private void configureWebView() {
         try {
-            WebView.setWebContentsDebuggingEnabled(true);
+            WebView.setWebContentsDebuggingEnabled(false);
             if (getBridge() != null && getBridge().getWebView() != null) {
                 WebView webView = getBridge().getWebView();
                 WebSettings settings = webView.getSettings();
                 settings.setDomStorageEnabled(true);
                 settings.setDatabaseEnabled(true);
-                settings.setAllowFileAccess(true);
-                settings.setAllowContentAccess(true);
-                settings.setJavaScriptCanOpenWindowsAutomatically(true);
-                settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+                settings.setAllowFileAccess(false);
+                settings.setAllowContentAccess(false);
+                settings.setJavaScriptCanOpenWindowsAutomatically(false);
+                settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
             }
         } catch (Exception e) {
             e.printStackTrace();
