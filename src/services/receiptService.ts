@@ -263,7 +263,8 @@ export class ReceiptService {
 
     const isSend = tx.direction === 'send';
     const isReceive = tx.direction === 'receive';
-    const isUsdc = tx.token === 'USDC' || (tx.amountUsdc !== null && tx.amountUsdc !== undefined && tx.amountUsdc > 0);
+    const isSkr = tx.token === 'SKR' || (tx.amountSkr !== null && tx.amountSkr !== undefined && tx.amountSkr > 0);
+    const isUsdc = !isSkr && (tx.token === 'USDC' || (tx.amountUsdc !== null && tx.amountUsdc !== undefined && tx.amountUsdc > 0));
 
     const sender = isSend
       ? activeWalletAddress
@@ -273,11 +274,13 @@ export class ReceiptService {
       ? activeWalletAddress
       : (tx.counterparty || 'External Solana Address');
 
-    const amount = isUsdc
+    const amount = isSkr
+      ? (tx.amountSkr || 0)
+      : isUsdc
       ? (tx.amountUsdc || tx.amountSol || 0)
       : (tx.amountSol || 0);
 
-    const tokenName = isUsdc ? 'USDC' : 'SOL';
+    const tokenName: 'SOL' | 'USDC' | 'SKR' = isSkr ? 'SKR' : isUsdc ? 'USDC' : 'SOL';
     const title = isSend
       ? `Outgoing ${tokenName} Transfer`
       : isReceive
@@ -372,7 +375,8 @@ export class ReceiptService {
       if (onChain) {
         const isSend = onChain.direction === 'send';
         const isReceive = onChain.direction === 'receive';
-        const isUsdc = onChain.token === 'USDC';
+        const isSkr = onChain.token === 'SKR' || (onChain.amountSkr !== null && onChain.amountSkr !== undefined && onChain.amountSkr > 0);
+        const isUsdc = !isSkr && onChain.token === 'USDC';
 
         const sender = isSend
           ? (activeWalletAddress || onChain.sender || 'Unknown Sender')
@@ -382,11 +386,13 @@ export class ReceiptService {
           ? (activeWalletAddress || onChain.recipient || 'Connected Wallet')
           : (onChain.recipient || onChain.counterparty || 'Recipient Wallet');
 
-        const amount = isUsdc
+        const amount = isSkr
+          ? (onChain.amountSkr || 0)
+          : isUsdc
           ? (onChain.amountUsdc || onChain.amountSol || 0)
           : (onChain.amountSol || 0);
 
-        const token = isUsdc ? 'USDC' : 'SOL';
+        const token: 'SOL' | 'USDC' | 'SKR' = isSkr ? 'SKR' : isUsdc ? 'USDC' : 'SOL';
         const title = isSend
           ? `Outgoing ${token} Transfer`
           : isReceive

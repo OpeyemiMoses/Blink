@@ -1233,13 +1233,14 @@ export class SolanaService {
 
 
   /**
-   * Universal on-chain transaction parser for SOL and SPL Tokens (USDC).
+   * Universal on-chain transaction parser for SOL and SPL Tokens (USDC, SKR).
    */
   static parseTransactionDetails(parsed: any, userAddress?: string | null): {
     direction: 'send' | 'receive' | 'unknown';
     amountSol: number | null;
     amountUsdc: number | null;
-    token: 'SOL' | 'USDC';
+    amountSkr: number | null;
+    token: 'SOL' | 'USDC' | 'SKR';
     sender: string | null;
     recipient: string | null;
     counterparty: string | null;
@@ -1248,14 +1249,15 @@ export class SolanaService {
     let direction: 'send' | 'receive' | 'unknown' = 'unknown';
     let amountSol: number | null = null;
     let amountUsdc: number | null = null;
-    let token: 'SOL' | 'USDC' = 'SOL';
+    let amountSkr: number | null = null;
+    let token: 'SOL' | 'USDC' | 'SKR' = 'SOL';
     let sender: string | null = null;
     let recipient: string | null = null;
     let counterparty: string | null = null;
     let feeSol = 0;
 
     if (!parsed || !parsed.transaction || !parsed.meta) {
-      return { direction, amountSol, amountUsdc, token, sender, recipient, counterparty, feeSol };
+      return { direction, amountSol, amountUsdc, amountSkr, token, sender, recipient, counterparty, feeSol };
     }
 
     const accountKeys: string[] = parsed.transaction.message.accountKeys.map(
@@ -1267,7 +1269,7 @@ export class SolanaService {
 
     const userIndex = userAddress ? accountKeys.indexOf(userAddress) : -1;
 
-    // 1. Check SPL Token Transfers (e.g. USDC) via pre/post token balances
+    // 1. Check SPL Token Transfers (e.g. USDC, SKR) via pre/post token balances
     const preTokens = parsed.meta.preTokenBalances || [];
     const postTokens = parsed.meta.postTokenBalances || [];
 
@@ -1278,17 +1280,32 @@ export class SolanaService {
       const diff = postAmount - preAmount;
 
       if (Math.abs(diff) > 0.000001) {
-        token = 'USDC';
+        const isSkrMint = post.mint === SKR_MINT.toBase58();
+        token = isSkrMint ? 'SKR' : 'USDC';
         const owner = post.owner || accountKeys[post.accountIndex];
         if (userAddress && owner === userAddress) {
           if (diff > 0) {
             direction = 'receive';
-            amountUsdc = Number(diff.toFixed(2));
+            if (isSkrMint) {
+              amountSkr = Number(diff.toFixed(2));
+            } else {
+              amountUsdc = Number(diff.toFixed(2));
+            }
             recipient = userAddress;
           } else {
             direction = 'send';
-            amountUsdc = Number(Math.abs(diff).toFixed(2));
+            if (isSkrMint) {
+              amountSkr = Number(Math.abs(diff).toFixed(2));
+            } else {
+              amountUsdc = Number(Math.abs(diff).toFixed(2));
+            }
             sender = userAddress;
+          }
+        } else if (!userAddress) {
+          if (isSkrMint) {
+            amountSkr = Number(Math.abs(diff).toFixed(2));
+          } else {
+            amountUsdc = Number(Math.abs(diff).toFixed(2));
           }
         }
       }
@@ -1328,19 +1345,24 @@ export class SolanaService {
           }
         }
 
-        // SPL Token transfer (USDC)
+        // SPL Token transfer (USDC or SKR)
         if (
           (parsedIx.type === 'transfer' || parsedIx.type === 'transferChecked') &&
           (program === 'spl-token' || info.tokenAmount || info.amount !== undefined)
         ) {
-          token = 'USDC';
-          let usdcAmount = 0;
+          const isSkr = info.mint === SKR_MINT.toBase58() || token === 'SKR';
+          token = isSkr ? 'SKR' : 'USDC';
+          let tokAmount = 0;
           if (info.tokenAmount && typeof info.tokenAmount.uiAmount === 'number') {
-            usdcAmount = info.tokenAmount.uiAmount;
+            tokAmount = info.tokenAmount.uiAmount;
           } else if (info.amount) {
-            usdcAmount = Number(info.amount) / 1e6; // USDC decimals = 6
+            tokAmount = Number(info.amount) / 1e6; // USDC & SKR decimals = 6
           }
-          amountUsdc = Number(usdcAmount.toFixed(2));
+          if (isSkr) {
+            amountSkr = Number(tokAmount.toFixed(2));
+          } else {
+            amountUsdc = Number(tokAmount.toFixed(2));
+          }
 
           const tokenAuthority = info.authority || info.multisigAuthority || feePayer;
           sender = sender || tokenAuthority;
@@ -1360,7 +1382,7 @@ export class SolanaService {
     }
 
     // 3. Native SOL balance diff fallback if amount still undetermined
-    if (amountSol === null && amountUsdc === null && userIndex !== -1 && parsed.meta.preBalances && parsed.meta.postBalances) {
+    if (amountSol === null && amountUsdc === null && amountSkr === null && userIndex !== -1 && parsed.meta.preBalances && parsed.meta.postBalances) {
       const preBal = parsed.meta.preBalances[userIndex];
       const postBal = parsed.meta.postBalances[userIndex];
       const diff = postBal - preBal;
@@ -1389,7 +1411,7 @@ export class SolanaService {
       counterparty = direction === 'send' ? recipient : sender;
     }
 
-    return { direction, amountSol, amountUsdc, token, sender, recipient, counterparty, feeSol };
+    return { direction, amountSol, amountUsdc, amountSkr, token, sender, recipient, counterparty, feeSol };
   }
 
   /**
@@ -1397,10 +1419,19 @@ export class SolanaService {
    */
   static async fetchFullTransactionDetails(signature: string, userAddress?: string | null) {
     try {
-      const parsed = await this.getConnection().getParsedTransaction(signature, {
+      let parsed = await this.getConnection().getParsedTransaction(signature, {
         maxSupportedTransactionVersion: 0,
         commitment: 'confirmed',
       });
+      // If not found and current connection is devnet, attempt mainnet query (critical for SKR Mainnet transactions)
+      if (!parsed && this.getNetwork() !== 'mainnet-beta') {
+        try {
+          parsed = await this.getMainnetConnection().getParsedTransaction(signature, {
+            maxSupportedTransactionVersion: 0,
+            commitment: 'confirmed',
+          });
+        } catch {}
+      }
       if (!parsed) return null;
       return {
         ...this.parseTransactionDetails(parsed, userAddress),

@@ -1611,11 +1611,15 @@ const server = http.createServer((req, res) => {
           let direction = 'unknown';
           let amountSol = null;
           let amountUsdc = null;
+          let amountSkr = null;
           let token = 'SOL';
           let counterparty = null;
 
           if (rcpt && rcpt.amount > 0) {
-            if (rcpt.token === 'USDC') {
+            if (rcpt.token === 'SKR') {
+              amountSkr = rcpt.amount;
+              token = 'SKR';
+            } else if (rcpt.token === 'USDC') {
               amountUsdc = rcpt.amount;
               token = 'USDC';
             } else {
@@ -1664,6 +1668,7 @@ const server = http.createServer((req, res) => {
             direction,
             amountSol,
             amountUsdc,
+            amountSkr,
             token,
             counterparty,
           };
@@ -1686,6 +1691,7 @@ const server = http.createServer((req, res) => {
             direction: isSend ? 'send' : 'receive',
             amountSol: r.token === 'SOL' ? r.amount : null,
             amountUsdc: r.token === 'USDC' ? r.amount : null,
+            amountSkr: r.token === 'SKR' ? r.amount : null,
             token: r.token || 'SOL',
             counterparty: isSend ? r.recipientAddress : r.payerAddress,
           };

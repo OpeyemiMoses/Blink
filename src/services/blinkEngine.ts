@@ -3,10 +3,11 @@ import {
   PublicKey,
   SystemProgram,
   LAMPORTS_PER_SOL,
+  TransactionInstruction,
 } from '@solana/web3.js';
 import { Buffer } from 'buffer';
 import { SolanaActionMetadata, LinkedAction, TransactionReceipt } from '../types';
-import { SolanaService } from './solanaService';
+import { SolanaService, SKR_MINT } from './solanaService';
 import { WalletProviderService } from './walletProviderService';
 
 export interface ActionPostResponse {
@@ -119,16 +120,119 @@ export class BlinkEngine {
           if (data.transaction) {
             const txBuffer = Buffer.from(data.transaction, 'base64');
             const parsedTx = Transaction.from(txBuffer);
-            
-            // Security: rebuild transaction from validated instructions rather than blind signing
             const userPubkey = new PublicKey(userPublicKey);
-            const safeTx = new Transaction();
-            safeTx.feePayer = parsedTx.feePayer || userPubkey;
-            safeTx.recentBlockhash = parsedTx.recentBlockhash;
+
+            // Reconstruct and validate recipient, amount, mint, and instructions locally before wallet signing
+            // Remote response provides parameters only; the client reconstructs the transaction from verified values
+            let extractedRecipient: PublicKey | null = null;
+            let extractedAmount: number = 0;
+            let extractedToken: 'SOL' | 'USDC' | 'SKR' = 'SOL';
+            let memoText: string | null = null;
+
             for (const ix of parsedTx.instructions) {
-              safeTx.add(ix);
+              const programId = ix.programId.toBase58();
+
+              // 1. Verify native transfer instruction
+              if (programId === SystemProgram.programId.toBase58()) {
+                if (ix.data.length >= 12) {
+                  const type = ix.data.readUInt32LE(0);
+                  if (type === 2) {
+                    const lamports = Number(ix.data.readBigUInt64LE(4));
+                    const toKey = ix.keys.find(k => !k.pubkey.equals(userPubkey) && k.isWritable)?.pubkey;
+                    if (toKey && lamports > 0) {
+                      extractedRecipient = toKey;
+                      extractedAmount = lamports / LAMPORTS_PER_SOL;
+                      extractedToken = 'SOL';
+                    }
+                  }
+                }
+              }
+              // 2. Verify SPL Token transfer instruction
+              else if (
+                programId === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' ||
+                programId === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
+              ) {
+                const ixType = ix.data[0];
+                if (ixType === 3 || ixType === 12) {
+                  const amountRaw = ix.data.readBigUInt64LE(1);
+                  const destAta = ix.keys[1]?.pubkey;
+                  if (destAta && amountRaw > BigInt(0)) {
+                    const isSkr = ix.keys.some(k => k.pubkey.equals(SKR_MINT)) || selectedAction.label.includes('SKR');
+                    extractedToken = isSkr ? 'SKR' : 'USDC';
+                    extractedAmount = Number(amountRaw) / 1e6;
+                    extractedRecipient = destAta;
+                  }
+                }
+              }
+              // 3. Verify Memo instruction
+              else if (
+                programId === 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr' ||
+                programId === 'Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo'
+              ) {
+                try {
+                  memoText = ix.data.toString('utf8').replace(/[^\x20-\x7E]/g, '').slice(0, 100);
+                } catch {}
+              } else {
+                console.warn('[BlinkEngine] Untrusted or unknown instruction rejected for safety:', programId);
+              }
             }
-            
+
+            // Fallback: If parameters weren't extracted from wire tx, extract from action metadata & query
+            if (!extractedRecipient) {
+              const urlParams = new URLSearchParams(targetHref.split('?')[1] || '');
+              const rec = urlParams.get('recipient');
+              if (rec) {
+                try { extractedRecipient = new PublicKey(rec); } catch {}
+              }
+            }
+            if (!extractedRecipient) {
+              extractedRecipient = userPubkey;
+            }
+
+            if (extractedAmount <= 0) {
+              const amountMatch = selectedAction.label.match(/([\d.]+)\s*(USDC|SOL|SKR)/i);
+              extractedAmount = amountMatch ? parseFloat(amountMatch[1]) : 0.01;
+              if (amountMatch) {
+                extractedToken = amountMatch[2].toUpperCase() as 'SOL' | 'USDC' | 'SKR';
+              }
+            }
+
+            // Enforce maximum safety bounds (prevent drain attacks)
+            if (extractedToken === 'SOL' && extractedAmount > 50) {
+              throw new Error(`Transaction amount (${extractedAmount} SOL) exceeds security limit of 50 SOL.`);
+            }
+
+            // Reconstruct the transaction locally from validated parameters
+            let safeTx: Transaction;
+            if (extractedToken === 'SKR') {
+              safeTx = await SolanaService.buildSkrTransferTransaction(userPubkey, extractedRecipient, extractedAmount);
+            } else if (extractedToken === 'USDC') {
+              safeTx = await SolanaService.buildUsdcTransferTransaction(userPubkey, extractedRecipient, extractedAmount);
+            } else {
+              const connection = SolanaService.getConnection();
+              const latestBlockhash = await connection.getLatestBlockhash('confirmed');
+              safeTx = new Transaction();
+              safeTx.recentBlockhash = latestBlockhash.blockhash;
+              safeTx.feePayer = userPubkey;
+              safeTx.add(
+                SystemProgram.transfer({
+                  fromPubkey: userPubkey,
+                  toPubkey: extractedRecipient,
+                  lamports: Math.round(extractedAmount * LAMPORTS_PER_SOL),
+                })
+              );
+            }
+
+            if (memoText) {
+              safeTx.add(
+                new TransactionInstruction({
+                  keys: [{ pubkey: userPubkey, isSigner: true, isWritable: false }],
+                  programId: new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'),
+                  data: Buffer.from(memoText, 'utf8'),
+                })
+              );
+            }
+
             signature = await WalletProviderService.signAndSendTransaction(safeTx);
           }
         }
@@ -139,9 +243,10 @@ export class BlinkEngine {
 
     // If no signature yet, execute a real on-chain transfer to the action recipient
     if (!signature) {
-      // Parse amount from label if present (e.g. "Pay 0.05 SOL" or "4.50 USDC")
-      const amountMatch = selectedAction.label.match(/([\d.]+)\s*(SOL|USDC)/i);
-      const amountSol = amountMatch ? parseFloat(amountMatch[1]) : 0.01;
+      // Parse amount and token from label if present (e.g. "Pay 0.05 SOL", "4.50 USDC", "100 SKR")
+      const amountMatch = selectedAction.label.match(/([\d.]+)\s*(USDC|SOL|SKR)/i);
+      const amount = amountMatch ? parseFloat(amountMatch[1]) : 0.01;
+      const token = (amountMatch ? amountMatch[2].toUpperCase() : 'SOL') as 'SOL' | 'USDC' | 'SKR';
 
       // Extract recipient pubkey from URL query if present, otherwise transfer micro-amount
       const urlParams = new URLSearchParams(targetHref.split('?')[1] || '');
@@ -155,18 +260,24 @@ export class BlinkEngine {
         toPubkey = fromPubkey;
       }
 
-      const connection = SolanaService.getConnection();
-      const latestBlockhash = await connection.getLatestBlockhash('confirmed');
-
-      const tx = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey,
-          toPubkey,
-          lamports: Math.round(amountSol * LAMPORTS_PER_SOL),
-        })
-      );
-      tx.recentBlockhash = latestBlockhash.blockhash;
-      tx.feePayer = fromPubkey;
+      let tx: Transaction;
+      if (token === 'SKR') {
+        tx = await SolanaService.buildSkrTransferTransaction(fromPubkey, toPubkey, amount);
+      } else if (token === 'USDC') {
+        tx = await SolanaService.buildUsdcTransferTransaction(fromPubkey, toPubkey, amount);
+      } else {
+        const connection = SolanaService.getConnection();
+        const latestBlockhash = await connection.getLatestBlockhash('confirmed');
+        tx = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey,
+            toPubkey,
+            lamports: Math.round(amount * LAMPORTS_PER_SOL),
+          })
+        );
+        tx.recentBlockhash = latestBlockhash.blockhash;
+        tx.feePayer = fromPubkey;
+      }
 
       signature = await WalletProviderService.signAndSendTransaction(tx);
     }

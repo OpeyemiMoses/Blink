@@ -224,10 +224,13 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
       for (const sig of sigs) {
         const cachedRcpt = ReceiptService.getReceiptBySignature(sig.signature);
         if (cachedRcpt && cachedRcpt.amount > 0) {
-          if (!sig.amountSol && !sig.amountUsdc) {
+          if (!sig.amountSol && !sig.amountUsdc && !sig.amountSkr) {
             if (cachedRcpt.token === 'SOL') {
               sig.amountSol = cachedRcpt.amount;
               sig.token = 'SOL';
+            } else if (cachedRcpt.token === 'SKR') {
+              sig.amountSkr = cachedRcpt.amount;
+              sig.token = 'SKR';
             } else {
               sig.amountUsdc = cachedRcpt.amount;
               sig.token = 'USDC';
@@ -263,6 +266,7 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
             direction: isSend ? 'send' : 'receive',
             amountSol: r.token === 'SOL' ? r.amount : null,
             amountUsdc: r.token === 'USDC' ? r.amount : null,
+            amountSkr: r.token === 'SKR' ? r.amount : null,
             token: r.token || 'SOL',
             counterparty: (isSend ? r.recipientAddress : r.payerAddress) || null,
           };
@@ -907,7 +911,11 @@ export const PocketScreen: React.FC<PocketScreenProps> = ({
                 </View>
 
                 <View style={styles.txItemRight}>
-                  {sig.token === 'USDC' && sig.amountUsdc !== null && sig.amountUsdc !== undefined ? (
+                  {sig.token === 'SKR' && sig.amountSkr !== null && sig.amountSkr !== undefined ? (
+                    <Text style={[styles.txStatus, { color: dirColor, fontWeight: '900', fontSize: 14 }]}>
+                      {amountPrefix}{sig.amountSkr.toLocaleString()}
+                    </Text>
+                  ) : sig.token === 'USDC' && sig.amountUsdc !== null && sig.amountUsdc !== undefined ? (
                     <Text style={[styles.txStatus, { color: dirColor, fontWeight: '900', fontSize: 14 }]}>
                       {amountPrefix}${sig.amountUsdc.toFixed(2)}
                     </Text>

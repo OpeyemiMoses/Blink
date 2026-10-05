@@ -116,6 +116,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   const amountNum = Number(currentReceipt.amount || 0);
   const formattedAmount = currentReceipt.token === 'SOL'
     ? `${amountNum.toFixed(4)} SOL`
+    : currentReceipt.token === 'SKR'
+    ? `${amountNum.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} SKR`
     : `$${amountNum.toFixed(2)} USDC`;
 
   const isSender = Boolean(
@@ -208,7 +210,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 {isSend ? `-${formattedAmount}` : isReceive ? `+${formattedAmount}` : formattedAmount}
               </Text>
               <Text style={[styles.amountSub, { color: colors.textSecondary }]}>
-                {isSend ? 'Total Amount Sent' : isReceive ? 'Total Amount Received' : currentReceipt.token === 'SOL' ? 'Solana Native Transfer' : 'SPL Token • USDC on Solana'}
+                {isSend ? 'Total Amount Sent' : isReceive ? 'Total Amount Received' : currentReceipt.token === 'SOL' ? 'Solana Native Transfer' : currentReceipt.token === 'SKR' ? 'SPL Token • $SKR on Solana' : 'SPL Token • USDC on Solana'}
               </Text>
             </View>
 
