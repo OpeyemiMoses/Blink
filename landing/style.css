@@ -1,27 +1,24 @@
 /* ==========================================================================
    BLINK — The Physical Interaction Layer for Solana
-   Landing Page Design System & Stylesheet
+   Landing Page Design System & Stylesheet (Solid, Premium Obsidian Aesthetic)
    ========================================================================== */
 
 :root {
-  /* Color Tokens */
-  --bg-primary: #07080B;
-  --bg-secondary: #0D1017;
-  --bg-card: rgba(16, 21, 33, 0.72);
-  --bg-card-hover: rgba(23, 29, 45, 0.85);
-  --bg-card-solid: #101521;
-  --bg-glass: rgba(255, 255, 255, 0.03);
-  --bg-input: rgba(10, 14, 23, 0.8);
+  /* Solid Color Palette - No Gradients */
+  --bg-primary: #08090D;
+  --bg-secondary: #0E1118;
+  --bg-card: #121622;
+  --bg-card-hover: #171D2B;
+  --bg-card-solid: #121622;
+  --bg-input: #0A0D14;
+  --bg-surface: #181F2E;
 
-  /* Accents & Gradients */
-  --solana-purple: #9945FF;
+  /* Solid Brand Accents */
   --solana-green: #14F195;
-  --solana-gradient: linear-gradient(135deg, #9945FF 0%, #14F195 100%);
-  --solana-glow: rgba(153, 69, 255, 0.25);
-  --skr-gradient: linear-gradient(135deg, #FF6B4A 0%, #FFA834 100%);
-  --cyan-glow: rgba(20, 241, 149, 0.2);
-  --accent-blue: #5B67F6;
-  --accent-blue-hover: #4C57E8;
+  --solana-purple: #9945FF;
+  --accent-primary: #14F195;
+  --accent-blue: #3B82F6;
+  --skr-orange: #FF6B4A;
 
   /* Text Colors */
   --text-white: #FFFFFF;
@@ -30,10 +27,10 @@
   --text-muted: #64748B;
   --text-accent: #14F195;
 
-  /* Borders & Dividers */
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-glow: rgba(153, 69, 255, 0.35);
-  --border-active: rgba(20, 241, 149, 0.4);
+  /* Solid Borders */
+  --border-subtle: #1E2536;
+  --border-strong: #2A334A;
+  --border-active: #14F195;
 
   /* Typography */
   --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -44,13 +41,11 @@
   --header-height: 80px;
   --radius-sm: 8px;
   --radius-md: 14px;
-  --radius-lg: 22px;
+  --radius-lg: 20px;
   --radius-full: 9999px;
 
   /* Shadows */
-  --shadow-card: 0 16px 36px -12px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 40px -10px rgba(153, 69, 255, 0.35);
-  --shadow-green: 0 0 35px -8px rgba(20, 241, 149, 0.3);
+  --shadow-card: 0 12px 30px rgba(0, 0, 0, 0.45);
 }
 
 /* Base Reset */
@@ -77,66 +72,9 @@ body {
   position: relative;
 }
 
-/* Background Atmosphere */
-.ambient-glow-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 0;
-  overflow: hidden;
-}
-
-.glow-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(120px);
-  opacity: 0.22;
-  will-change: transform;
-}
-
-.glow-orb-1 {
-  width: 650px;
-  height: 650px;
-  background: var(--solana-purple);
-  top: -150px;
-  right: -100px;
-  animation: floatOrb 22s ease-in-out infinite alternate;
-}
-
-.glow-orb-2 {
-  width: 600px;
-  height: 600px;
-  background: var(--solana-green);
-  bottom: 10%;
-  left: -150px;
-  opacity: 0.16;
-  animation: floatOrb 26s ease-in-out infinite alternate-reverse;
-}
-
-.glow-orb-3 {
-  width: 450px;
-  height: 450px;
-  background: #3B82F6;
-  top: 45%;
-  right: 15%;
-  opacity: 0.12;
-}
-
+/* Clean Flat Background Overlay */
 .grid-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-image: 
-    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-  background-size: 48px 48px;
-  pointer-events: none;
-  z-index: 1;
+  display: none;
 }
 
 /* Content Container */
@@ -154,11 +92,8 @@ body {
   top: 0;
   z-index: 100;
   height: var(--header-height);
-  background: rgba(7, 8, 11, 0.82);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: #08090D;
   border-bottom: 1px solid var(--border-subtle);
-  transition: all 0.3s ease;
 }
 
 .header-inner {
@@ -182,8 +117,8 @@ body {
 .logo-mark {
   width: 42px;
   height: 42px;
-  border-radius: 11px;
-  background: linear-gradient(135deg, rgba(153,69,255,0.2) 0%, rgba(20,241,149,0.2) 100%);
+  border-radius: 10px;
+  background: #121622;
   border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
@@ -199,9 +134,8 @@ body {
 }
 
 .logo-text {
-  background: linear-gradient(135deg, #FFFFFF 30%, #CBD5E1 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #FFFFFF;
+  letter-spacing: 0.02em;
 }
 
 .nav-links {
@@ -217,7 +151,6 @@ body {
   font-size: 0.92rem;
   font-weight: 500;
   transition: color 0.2s ease;
-  position: relative;
 }
 
 .nav-link:hover {
@@ -237,9 +170,9 @@ body {
   padding: 6px 14px;
   border-radius: var(--radius-full);
   background: rgba(20, 241, 149, 0.08);
-  border: 1px solid rgba(20, 241, 149, 0.25);
-  font-size: 0.78rem;
-  font-weight: 600;
+  border: 1px solid rgba(20, 241, 149, 0.3);
+  font-size: 0.76rem;
+  font-weight: 700;
   color: var(--solana-green);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -250,11 +183,9 @@ body {
   height: 7px;
   border-radius: 50%;
   background-color: var(--solana-green);
-  box-shadow: 0 0 10px var(--solana-green);
-  animation: pulseGreen 2s infinite;
 }
 
-/* Buttons */
+/* Solid Buttons - No Gradients */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -263,36 +194,33 @@ body {
   padding: 12px 24px;
   border-radius: var(--radius-md);
   font-size: 0.95rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   text-decoration: none;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
   border: 1px solid transparent;
   white-space: nowrap;
 }
 
 .btn-primary {
-  background: var(--solana-gradient);
-  color: #07080B;
-  font-weight: 700;
-  box-shadow: var(--shadow-glow);
+  background: #14F195;
+  color: #08090D;
 }
 
 .btn-primary:hover {
+  background: #10B981;
   transform: translateY(-2px);
-  box-shadow: 0 0 45px rgba(20, 241, 149, 0.45);
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.06);
+  background: #121622;
   color: var(--text-white);
   border-color: var(--border-subtle);
-  backdrop-filter: blur(10px);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: #171D2B;
+  border-color: var(--border-strong);
   transform: translateY(-2px);
 }
 
@@ -334,17 +262,13 @@ body {
   align-self: flex-start;
   padding: 6px 16px;
   border-radius: var(--radius-full);
-  background: rgba(153, 69, 255, 0.1);
-  border: 1px solid rgba(153, 69, 255, 0.3);
-  font-size: 0.82rem;
+  background: #121622;
+  border: 1px solid var(--border-subtle);
+  font-size: 0.8rem;
   font-weight: 700;
-  color: #C084FC;
+  color: var(--solana-green);
   letter-spacing: 0.04em;
   text-transform: uppercase;
-}
-
-.hero-pill-icon {
-  font-size: 1rem;
 }
 
 .hero-title {
@@ -355,10 +279,8 @@ body {
   color: var(--text-white);
 }
 
-.gradient-text-solana {
-  background: var(--solana-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+.text-highlight {
+  color: var(--solana-green);
   display: inline-block;
 }
 
@@ -416,23 +338,12 @@ body {
   font-weight: 600;
 }
 
-/* Phone Mockup & Interactive Showcase */
+/* Phone Mockup */
 .phone-mockup-wrapper {
   position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
-}
-
-.phone-ambient-ring {
-  position: absolute;
-  width: 440px;
-  height: 440px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(153, 69, 255, 0.28) 0%, rgba(20, 241, 149, 0.15) 50%, transparent 70%);
-  filter: blur(40px);
-  z-index: 0;
-  animation: pulseGlow 6s ease-in-out infinite alternate;
 }
 
 .seeker-phone {
@@ -443,21 +354,17 @@ body {
   background: #0B0E14;
   border-radius: 46px;
   border: 4px solid #1E293B;
-  box-shadow: 
-    0 25px 60px -15px rgba(0, 0, 0, 0.85),
-    0 0 0 1px rgba(255, 255, 255, 0.1),
-    inset 0 0 0 2px rgba(0, 0, 0, 0.9);
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.85);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.3s ease;
 }
 
 .seeker-phone:hover {
-  transform: translateY(-6px) scale(1.01);
+  transform: translateY(-4px);
 }
 
-/* Phone Camera Notch */
 .phone-camera-notch {
   position: absolute;
   top: 14px;
@@ -484,7 +391,7 @@ body {
 
 .phone-screen {
   flex: 1;
-  background: #07080B;
+  background: #08090D;
   display: flex;
   flex-direction: column;
   padding: 44px 18px 20px;
@@ -522,15 +429,15 @@ body {
   font-weight: 700;
   padding: 3px 8px;
   border-radius: 6px;
-  background: rgba(20, 241, 149, 0.15);
+  background: rgba(20, 241, 149, 0.12);
   color: var(--solana-green);
   text-transform: uppercase;
 }
 
-/* Interactive Simulator Elements */
+/* Simulator Elements */
 .sim-mode-toggle {
   display: flex;
-  background: rgba(255, 255, 255, 0.05);
+  background: #121622;
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   padding: 3px;
@@ -555,12 +462,10 @@ body {
 }
 
 .sim-mode-btn.active {
-  background: var(--bg-card-solid);
+  background: #1A2133;
   color: var(--text-white);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
-/* Simulator Main Stage */
 .sim-stage {
   flex: 1;
   display: flex;
@@ -568,9 +473,8 @@ body {
   gap: 14px;
 }
 
-/* NFC Radar Zone */
 .nfc-radar-zone {
-  background: rgba(16, 21, 33, 0.85);
+  background: #121622;
   border: 1px solid var(--border-subtle);
   border-radius: 16px;
   padding: 24px 16px;
@@ -583,34 +487,22 @@ body {
 }
 
 .nfc-target-ring {
-  width: 90px;
-  height: 90px;
+  width: 86px;
+  height: 86px;
   border-radius: 50%;
-  border: 2px dashed rgba(153, 69, 255, 0.5);
+  border: 2px solid var(--border-strong);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: border-color 0.2s ease, background 0.2s ease;
   margin-bottom: 14px;
-  background: rgba(153, 69, 255, 0.08);
-  position: relative;
+  background: #181F2E;
 }
 
 .nfc-target-ring:hover {
-  transform: scale(1.08);
   border-color: var(--solana-green);
-  background: rgba(20, 241, 149, 0.12);
-}
-
-.nfc-target-ring.tapping {
-  animation: tapRipple 0.8s ease-out;
-  border-color: var(--solana-green);
-  background: rgba(20, 241, 149, 0.25);
-}
-
-.nfc-icon-inner {
-  font-size: 2rem;
+  background: #1F283C;
 }
 
 .nfc-radar-title {
@@ -625,16 +517,14 @@ body {
   color: var(--text-muted);
 }
 
-/* Blink Action Card Preview inside Phone */
 .sim-blink-card {
-  background: rgba(16, 21, 33, 0.9);
+  background: #121622;
   border: 1px solid var(--border-subtle);
   border-radius: 16px;
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: all 0.3s ease;
 }
 
 .sim-blink-header {
@@ -651,7 +541,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.1rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #14F195;
 }
 
 .sim-merchant-info {
@@ -674,12 +566,13 @@ body {
 }
 
 .sim-amount-banner {
-  background: rgba(0, 0, 0, 0.3);
+  background: #0A0D14;
   border-radius: 10px;
   padding: 10px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  border: 1px solid var(--border-subtle);
 }
 
 .sim-amount-val {
@@ -690,7 +583,7 @@ body {
 }
 
 .sim-skr-badge {
-  background: rgba(255, 107, 74, 0.15);
+  background: rgba(255, 107, 74, 0.12);
   border: 1px solid rgba(255, 107, 74, 0.3);
   color: #FF8564;
   font-size: 0.68rem;
@@ -700,32 +593,27 @@ body {
 }
 
 .sim-action-btn {
-  background: var(--solana-gradient);
+  background: #14F195;
   border: none;
   padding: 11px;
   border-radius: 10px;
-  color: #07080B;
-  font-weight: 700;
+  color: #08090D;
+  font-weight: 800;
   font-size: 0.84rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  transition: transform 0.2s ease;
+  transition: background-color 0.2s ease;
 }
 
 .sim-action-btn:hover {
-  transform: scale(1.02);
+  background: #10B981;
 }
 
-.sim-action-btn:active {
-  transform: scale(0.98);
-}
-
-/* Simulator Settlement Animation */
 .sim-receipt-overlay {
-  background: rgba(16, 21, 33, 0.98);
+  background: #121622;
   border: 1px solid var(--solana-green);
   border-radius: 16px;
   padding: 16px;
@@ -734,7 +622,6 @@ body {
   align-items: center;
   text-align: center;
   gap: 10px;
-  animation: fadeIn 0.3s ease-out;
 }
 
 .sim-check-icon {
@@ -746,7 +633,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
+  font-size: 1.3rem;
+  font-weight: 800;
 }
 
 .sim-receipt-title {
@@ -764,12 +652,13 @@ body {
   font-family: var(--font-mono);
   font-size: 0.68rem;
   color: var(--solana-green);
-  background: rgba(0, 0, 0, 0.3);
+  background: #08090D;
   padding: 4px 8px;
   border-radius: 6px;
+  border: 1px solid var(--border-subtle);
 }
 
-/* Section Header Shared */
+/* Section Headers */
 .section-header {
   text-align: center;
   max-width: 680px;
@@ -782,7 +671,7 @@ body {
   gap: 6px;
   padding: 5px 14px;
   border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.05);
+  background: #121622;
   border: 1px solid var(--border-subtle);
   font-size: 0.78rem;
   font-weight: 700;
@@ -827,56 +716,27 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  position: relative;
-  overflow: hidden;
-}
-
-.feature-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: transparent;
-  transition: background 0.3s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
 .feature-card:hover {
-  transform: translateY(-5px);
-  border-color: rgba(153, 69, 255, 0.4);
+  transform: translateY(-4px);
+  border-color: var(--border-strong);
   background: var(--bg-card-hover);
-  box-shadow: var(--shadow-card);
-}
-
-.feature-card:hover::before {
-  background: var(--solana-gradient);
 }
 
 .feature-icon-box {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.6rem;
-  background: rgba(153, 69, 255, 0.12);
-  border: 1px solid rgba(153, 69, 255, 0.25);
-  color: #C084FC;
-}
-
-.feature-icon-box.green {
-  background: rgba(20, 241, 149, 0.12);
-  border-color: rgba(20, 241, 149, 0.25);
+  font-size: 1.1rem;
+  font-weight: 800;
+  background: #181F2E;
+  border: 1px solid var(--border-subtle);
   color: var(--solana-green);
-}
-
-.feature-icon-box.orange {
-  background: rgba(255, 107, 74, 0.12);
-  border-color: rgba(255, 107, 74, 0.25);
-  color: #FF8564;
 }
 
 .feature-title {
@@ -899,21 +759,23 @@ body {
   font-weight: 700;
   padding: 4px 10px;
   border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.05);
+  background: #181F2E;
   color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
 }
 
 /* How It Works Journey */
 .how-section {
   padding: 100px 0;
-  background: linear-gradient(180deg, transparent 0%, rgba(13, 16, 23, 0.8) 50%, transparent 100%);
+  background: #0B0E14;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .steps-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 24px;
-  position: relative;
 }
 
 .step-card {
@@ -924,12 +786,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  position: relative;
-  transition: transform 0.3s ease;
+  transition: border-color 0.2s ease;
 }
 
 .step-card:hover {
-  transform: translateY(-4px);
   border-color: var(--border-active);
 }
 
@@ -960,7 +820,7 @@ body {
   line-height: 1.6;
 }
 
-/* Tokens & Ecosystem Showcase */
+/* Tokens */
 .token-section {
   padding: 100px 0;
 }
@@ -1022,10 +882,10 @@ body {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  background: rgba(0, 0, 0, 0.3);
+  background: #0A0D14;
   padding: 12px 16px;
   border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
 }
 
 .token-price-val {
@@ -1051,10 +911,11 @@ body {
 
 .token-mint-code {
   font-family: var(--font-mono);
-  color: #C084FC;
-  background: rgba(255, 255, 255, 0.04);
+  color: #14F195;
+  background: #0A0D14;
   padding: 3px 8px;
   border-radius: 6px;
+  border: 1px solid var(--border-subtle);
 }
 
 /* Security Callout Banner */
@@ -1063,15 +924,14 @@ body {
 }
 
 .security-banner {
-  background: linear-gradient(135deg, rgba(20, 241, 149, 0.05) 0%, rgba(153, 69, 255, 0.08) 100%);
-  border: 1px solid rgba(153, 69, 255, 0.3);
+  background: #10141F;
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
   padding: 48px 40px;
   display: grid;
   grid-template-columns: 1.2fr 0.8fr;
   gap: 40px;
   align-items: center;
-  box-shadow: var(--shadow-glow);
 }
 
 .security-banner-content {
@@ -1087,10 +947,11 @@ body {
   align-self: flex-start;
   padding: 4px 12px;
   border-radius: var(--radius-full);
-  background: rgba(20, 241, 149, 0.15);
+  background: rgba(20, 241, 149, 0.12);
   color: var(--solana-green);
   font-size: 0.78rem;
   font-weight: 700;
+  border: 1px solid rgba(20, 241, 149, 0.3);
 }
 
 .security-title {
@@ -1133,8 +994,8 @@ body {
 
 .download-card-hero {
   background: var(--bg-card);
-  border: 1px solid var(--border-glow);
-  border-radius: 32px;
+  border: 1px solid var(--border-strong);
+  border-radius: 28px;
   padding: 64px 40px;
   max-width: 880px;
   margin: 0 auto;
@@ -1142,8 +1003,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 28px;
-  position: relative;
-  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), var(--shadow-glow);
+  box-shadow: var(--shadow-card);
 }
 
 .download-hero-title {
@@ -1171,7 +1031,7 @@ body {
   font-family: var(--font-mono);
   padding: 6px 14px;
   border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.05);
+  background: #0A0D14;
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
 }
@@ -1194,11 +1054,11 @@ body {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   overflow: hidden;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease;
 }
 
 .faq-item.open {
-  border-color: rgba(153, 69, 255, 0.4);
+  border-color: var(--border-strong);
 }
 
 .faq-question {
@@ -1217,9 +1077,11 @@ body {
 }
 
 .faq-chevron {
-  font-size: 1.2rem;
-  transition: transform 0.3s ease;
+  font-size: 1rem;
+  transition: transform 0.25s ease;
   color: var(--solana-green);
+  font-family: var(--font-mono);
+  font-weight: 800;
 }
 
 .faq-item.open .faq-chevron {
@@ -1229,7 +1091,7 @@ body {
 .faq-answer {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 0.35s ease, padding 0.35s ease;
+  transition: max-height 0.3s ease, padding 0.3s ease;
   padding: 0 24px;
   color: var(--text-secondary);
   font-size: 0.95rem;
@@ -1243,7 +1105,7 @@ body {
 
 /* Footer */
 .site-footer {
-  background: #040507;
+  background: #050608;
   border-top: 1px solid var(--border-subtle);
   padding: 60px 0 30px;
 }
@@ -1303,35 +1165,7 @@ body {
   color: var(--text-muted);
 }
 
-/* Animations */
-@keyframes floatOrb {
-  0% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(40px, -30px) scale(1.1); }
-  100% { transform: translate(-30px, 40px) scale(0.95); }
-}
-
-@keyframes pulseGreen {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.85); }
-}
-
-@keyframes pulseGlow {
-  0%, 100% { transform: scale(1); opacity: 0.8; }
-  50% { transform: scale(1.1); opacity: 1; }
-}
-
-@keyframes tapRipple {
-  0% { box-shadow: 0 0 0 0 rgba(20, 241, 149, 0.7); }
-  70% { box-shadow: 0 0 0 30px rgba(20, 241, 149, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(20, 241, 149, 0); }
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* Responsive Breakpoints */
+/* Responsive */
 @media (max-width: 1024px) {
   .hero-grid {
     grid-template-columns: 1fr;

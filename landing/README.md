@@ -3,7 +3,7 @@
 The official, high-performance landing page for **Blink — The Physical Interaction Layer for Solana**.
 
 ## Features Included
-- **Stunning Dark Glassmorphic Aesthetic:** Custom radiant Solana gradients (`#9945FF` to `#14F195`), glowing ambient spheres, and sleek card typography.
+- **Solid Obsidian Aesthetic:** Clean dark mode with solid high-contrast borders and accents, zero distracting gradients, and crisp typography.
 - **Interactive Seeker Phone Simulator:** Visitors can interact live with NFC Tap-to-Pay, QR Scanner, and Blink Studio simulations right on the page without installing anything.
 - **Live Solana Market Ticker:** Displays real-time SOL and $SKR token economics.
 - **Download Center:** Direct 1-tap download for the official Android APK (`blink.apk v1.0.0`) with installation walkthrough.

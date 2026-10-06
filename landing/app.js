@@ -1,6 +1,6 @@
 /**
  * BLINK — Landing Page Interactive Engine
- * Controls the live Seeker Phone Simulator, FAQ accordion, token price updates, and micro-interactions.
+ * Solid Minimalist Interaction Engine: Seeker Phone Simulator, FAQ accordion, token prices.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -14,7 +14,6 @@ document.addEventListener('DOMContentLoaded', () => {
  * Interactive Solana Seeker Phone Simulator
  */
 function initPhoneSimulator() {
-  const radarTarget = document.getElementById('sim-radar-target');
   const simStage = document.getElementById('sim-stage-content');
   const modeBtns = document.querySelectorAll('.sim-mode-btn');
 
@@ -31,7 +30,7 @@ function initPhoneSimulator() {
       solPrice: 0.025,
       recipient: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
       category: "Food & Beverage",
-      icon: "☕"
+      code: "COFFEE"
     },
     event: {
       name: "Solana Breakpoint VIP Pass",
@@ -41,7 +40,7 @@ function initPhoneSimulator() {
       solPrice: 0.14,
       recipient: "G7jrT6yzAoXP3bCXspD37WhA27KwtcHTomCMLDnFJ42Z",
       category: "Event Ticket",
-      icon: "🎟️"
+      code: "VIP"
     }
   };
 
@@ -64,26 +63,25 @@ function initPhoneSimulator() {
       simStage.innerHTML = `
         <div class="nfc-radar-zone">
           <div class="nfc-target-ring" id="sim-radar-target" title="Click to Simulate NFC Tap">
-            <span class="nfc-icon-inner">📡</span>
+            <span style="font-family: var(--font-mono); font-weight: 800; font-size: 0.85rem; color: var(--solana-green);">NFC</span>
           </div>
           <div class="nfc-radar-title">Ready to Tap</div>
           <div class="nfc-radar-sub">Click the target to simulate holding your Seeker against a physical NFC tag</div>
         </div>
       `;
-      // Reattach listener
       const newTarget = document.getElementById('sim-radar-target');
       if (newTarget) {
         newTarget.addEventListener('click', handleNfcTap);
       }
     } else if (currentMode === 'qr') {
       simStage.innerHTML = `
-        <div class="nfc-radar-zone" style="background: rgba(10, 14, 23, 0.9);">
-          <div style="width: 140px; height: 140px; border: 2px solid var(--solana-purple); border-radius: 16px; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #000; margin-bottom: 12px;">
-            <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--solana-green); box-shadow: 0 0 10px var(--solana-green); animation: scanLine 2s infinite linear;"></div>
-            <span style="font-size: 3rem;">📷</span>
+        <div class="nfc-radar-zone">
+          <div style="width: 130px; height: 130px; border: 2px solid var(--border-strong); border-radius: 14px; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #0A0D14; margin-bottom: 12px;">
+            <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--solana-green); animation: scanLine 2s infinite linear;"></div>
+            <span style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted); font-weight: 700;">SCANNER</span>
           </div>
-          <div class="nfc-radar-title">Live QR Scanner</div>
-          <div class="nfc-radar-sub">Pointing camera at counter display...</div>
+          <div class="nfc-radar-title">Live QR Viewfinder</div>
+          <div class="nfc-radar-sub">Camera aligned to counter display</div>
           <button class="btn btn-primary btn-sm" id="sim-scan-now-btn" style="margin-top: 12px;">Simulate Instant Scan</button>
         </div>
       `;
@@ -94,7 +92,7 @@ function initPhoneSimulator() {
     } else if (currentMode === 'studio') {
       simStage.innerHTML = `
         <div class="sim-blink-card" style="padding: 16px;">
-          <div style="font-size: 0.82rem; font-weight: 700; color: var(--solana-purple); text-transform: uppercase;">Blink Studio Preview</div>
+          <div style="font-size: 0.8rem; font-weight: 800; color: var(--solana-green); text-transform: uppercase;">Blink Studio Preview</div>
           <input type="text" id="sim-studio-name" value="Artisan Espresso" style="background: var(--bg-input); border: 1px solid var(--border-subtle); color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 0.85rem; width: 100%;" placeholder="Blink Title" />
           <div style="display: flex; gap: 8px;">
             <input type="number" id="sim-studio-amount" value="3.50" style="flex: 1; background: var(--bg-input); border: 1px solid var(--border-subtle); color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 0.85rem;" placeholder="Amount" />
@@ -110,21 +108,14 @@ function initPhoneSimulator() {
       const genBtn = document.getElementById('sim-generate-btn');
       if (genBtn) {
         genBtn.addEventListener('click', () => {
-          alert('Blink programmed! In the mobile app, tap "Write to NFC Tag" to write NDEF records directly to physical stickers.');
+          alert('Blink programmed! In the mobile APK, tap "Write to NFC Tag" to program NDEF records onto physical NFC tags.');
         });
       }
     }
   }
 
   function handleNfcTap() {
-    const target = document.getElementById('sim-radar-target');
-    if (target) {
-      target.classList.add('tapping');
-    }
-
-    setTimeout(() => {
-      showActionConfirmation();
-    }, 400);
+    showActionConfirmation();
   }
 
   function handleScanSuccess() {
@@ -137,11 +128,11 @@ function initPhoneSimulator() {
     simStage.innerHTML = `
       <div class="sim-blink-card" id="sim-action-card">
         <div class="sim-blink-header">
-          <div class="sim-merchant-logo">${activeBlink.icon}</div>
+          <div class="sim-merchant-logo">${activeBlink.code}</div>
           <div class="sim-merchant-info">
             <div class="sim-blink-title">${activeBlink.name}</div>
             <div class="sim-verified-tag">
-              <span>✓</span> Verified Solana Blink
+              Verified Solana Action
             </div>
           </div>
         </div>
@@ -159,11 +150,11 @@ function initPhoneSimulator() {
               ${selectedToken === 'SKR' ? `${effectiveSkr} SKR` : (selectedToken === 'USDC' ? `$${activeBlink.baseUsdc.toFixed(2)} USDC` : `${activeBlink.solPrice} SOL`)}
             </div>
           </div>
-          ${selectedToken === 'SKR' ? `<span class="sim-skr-badge">10% OFF</span>` : ''}
+          ${selectedToken === 'SKR' ? `<span class="sim-skr-badge">10% DISCOUNT</span>` : ''}
         </div>
 
         <button class="sim-action-btn" id="sim-confirm-pay-btn">
-          <span>⚡</span> Confirm & Settle (~400ms)
+          Confirm & Settle (~400ms)
         </button>
       </div>
     `;
@@ -186,23 +177,22 @@ function initPhoneSimulator() {
   function executeSimulatedSettlement() {
     simStage.innerHTML = `
       <div class="sim-receipt-overlay" style="min-height: 220px; justify-content: center;">
-        <div style="width: 38px; height: 38px; border: 3px solid rgba(20,241,149,0.2); border-top-color: var(--solana-green); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 8px;"></div>
-        <div style="font-size: 0.92rem; font-weight: 700; color: #fff;">Sub-Second Settlement</div>
+        <div style="width: 32px; height: 32px; border: 3px solid #1E2536; border-top-color: var(--solana-green); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 10px;"></div>
+        <div style="font-size: 0.92rem; font-weight: 800; color: #fff;">Sub-Second Settlement</div>
         <div style="font-size: 0.74rem; color: var(--text-muted);">Broadcasting via Solana Mainnet...</div>
       </div>
     `;
 
-    // 400ms simulate sub-second finality
     setTimeout(() => {
       const mockSig = '5Kj' + Math.random().toString(36).substring(2, 8) + '...' + Math.random().toString(36).substring(2, 6);
       simStage.innerHTML = `
         <div class="sim-receipt-overlay">
-          <div class="sim-check-icon">✓</div>
-          <div class="sim-receipt-title">Settlement Confirmed!</div>
-          <div class="sim-receipt-detail">Payment sent to <strong>${activeBlink.name}</strong></div>
+          <div class="sim-check-icon">CONFIRMED</div>
+          <div class="sim-receipt-title">Settlement Confirmed</div>
+          <div class="sim-receipt-detail">Transferred to <strong>${activeBlink.name}</strong></div>
           <div class="sim-receipt-sig">TX: ${mockSig}</div>
-          <div style="font-size: 0.72rem; color: var(--solana-green); font-weight: 700;">Finality: 382ms • Fee: < 0.0001 SOL</div>
-          <button class="btn btn-secondary btn-sm" id="sim-reset-btn" style="margin-top: 8px; width: 100%;">Tap Another Tag</button>
+          <div style="font-size: 0.72rem; color: var(--solana-green); font-weight: 700;">Finality: 382ms • Fee: &lt; 0.0001 SOL</div>
+          <button class="btn btn-secondary btn-sm" id="sim-reset-btn" style="margin-top: 8px; width: 100%;">Reset Demo</button>
         </div>
       `;
 
@@ -215,7 +205,6 @@ function initPhoneSimulator() {
     }, 450);
   }
 
-  // Initial render
   renderSimulatorStage();
 }
 
@@ -232,7 +221,6 @@ function initFaqAccordion() {
     questionBtn.addEventListener('click', () => {
       const isOpen = item.classList.contains('open');
 
-      // Close all other items for clean accordion behavior
       faqItems.forEach(otherItem => {
         otherItem.classList.remove('open');
       });
@@ -245,14 +233,13 @@ function initFaqAccordion() {
 }
 
 /**
- * Live Token Prices Ticker
+ * Live Token Prices
  */
 async function initLivePrices() {
   const solPriceEl = document.getElementById('price-sol-val');
   const skrPriceEl = document.getElementById('price-skr-val');
 
   try {
-    // Fetch live market prices from public CoinGecko / DexScreener
     const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
     if (res.ok) {
       const data = await res.json();
@@ -261,7 +248,6 @@ async function initLivePrices() {
       }
     }
   } catch (err) {
-    // Graceful fallback to realistic market values
     if (solPriceEl) solPriceEl.innerText = '$148.50';
   }
 
@@ -271,7 +257,7 @@ async function initLivePrices() {
 }
 
 /**
- * Smooth scrolling for navigation links
+ * Smooth scrolling
  */
 function initSmoothScroll() {
   const scrollLinks = document.querySelectorAll('a[href^="#"]');
@@ -293,7 +279,7 @@ function initSmoothScroll() {
   });
 }
 
-// Add CSS keyframe for scan line animation dynamically
+// Keyframes
 const style = document.createElement('style');
 style.innerHTML = `
   @keyframes scanLine {
@@ -308,18 +294,17 @@ style.innerHTML = `
     flex: 1;
     font-size: 0.68rem;
     font-weight: 700;
-    padding: 4px 6px;
+    padding: 5px 6px;
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.05);
+    background: #0A0D14;
     border: 1px solid var(--border-subtle);
     color: var(--text-muted);
     cursor: pointer;
-    transition: all 0.2s ease;
   }
   .token-toggle-pill.active {
-    background: rgba(153, 69, 255, 0.2);
-    border-color: var(--solana-purple);
-    color: #fff;
+    background: #181F2E;
+    border-color: var(--solana-green);
+    color: var(--solana-green);
   }
 `;
 document.head.appendChild(style);
