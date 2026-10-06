@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blink — The Physical Interaction Layer for Solana | Tap, Scan & Settle in Sub-Seconds</title>
+  
+  <!-- SEO & Social Meta Tags -->
+  <meta name="description" content="Blink transforms physical NFC tags, posters, wristbands, and counter QR codes into instant Solana Actions. Settle transactions in ~400ms with biometric authorization, non-custodial security, and 10% discounts on native $SKR.">
+  <meta name="keywords" content="Solana, Blink, Solana Actions, Solana Seeker, NFC Payments, Crypto Tap to Pay, Web NFC, SKR Token, Mobile Wallet Adapter, Solana Mobile">
+  <meta name="author" content="Blink Team">
+  <link rel="canonical" href="https://blink.app">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://blink.app">
+  <meta property="og:title" content="Blink — The Physical Interaction Layer for Solana">
+  <meta property="og:description" content="Tap. Scan. Settle in 400ms. Non-custodial physical transactions powered by Solana and Seeker hardware.">
+  <meta property="og:image" content="assets/logo_square_white.png">
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:url" content="https://blink.app">
+  <meta property="twitter:title" content="Blink — Physical Interaction Layer for Solana">
+  <meta property="twitter:description" content="Instant real-world Solana NFC taps and QR actions. Settle in ~400ms.">
+  <meta property="twitter:image" content="assets/logo_square_white.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+
+  <!-- Google Typography: Plus Jakarta Sans & Space Grotesk -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Ambient Glowing Spheres Background -->
+  <div class="ambient-glow-container" aria-hidden="true">
+    <div class="glow-orb glow-orb-1"></div>
+    <div class="glow-orb glow-orb-2"></div>
+    <div class="glow-orb glow-orb-3"></div>
+    <div class="grid-overlay"></div>
+  </div>
+
+  <!-- Main Navigation Header -->
+  <header class="site-header" id="site-header">
+    <div class="container header-inner">
+      <a href="#" class="logo-wrap" aria-label="Blink Home">
+        <div class="logo-mark">
+          <img src="assets/logo_cropped_white.png" alt="Blink Mark">
+        </div>
+        <span class="logo-text">BLINK</span>
+      </a>
+
+      <nav aria-label="Main Navigation">
+        <ul class="nav-links">
+          <li><a href="#features" class="nav-link">Features</a></li>
+          <li><a href="#how-it-works" class="nav-link">How It Works</a></li>
+          <li><a href="#simulator" class="nav-link">Live Simulator</a></li>
+          <li><a href="#token" class="nav-link">$SKR Ecosystem</a></li>
+          <li><a href="#security" class="nav-link">Security Audit</a></li>
+          <li><a href="#faq" class="nav-link">FAQ</a></li>
+        </ul>
+      </nav>
+
+      <div class="header-actions">
+        <div class="status-badge" title="Live on Solana Mainnet">
+          <span class="status-dot"></span>
+          <span>Mainnet Live</span>
+        </div>
+        <a href="#download" class="btn btn-primary btn-sm">
+          <span>⬇</span> Download APK
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <main>
+    <section class="hero-section" id="hero">
+      <div class="container hero-grid">
+        <div class="hero-content">
+          <div class="hero-pill">
+            <span class="hero-pill-icon">⚡</span>
+            <span>Solana Seeker Native • Web NFC Interaction</span>
+          </div>
+
+          <h1 class="hero-title">
+            The Physical Interaction Layer for <span class="gradient-text-solana">Solana</span>
+          </h1>
+
+          <p class="hero-desc">
+            Transform any real-world NFC sticker, smart poster, event wristband, or counter QR display into an instant Solana Action. Settle in ~400ms with biometric authorization, zero-custody security, and automated 10% discounts when paying in native $SKR.
+          </p>
+
+          <div class="hero-actions">
+            <a href="https://github.com/OpeyemiMoses/Blink/releases/download/v1.0.0/blink.apk" class="btn btn-primary btn-lg" id="hero-download-btn">
+              <span>🤖</span> Download Android APK (v1.0.0)
+            </a>
+            <a href="https://yellow-trees-exist.loca.lt" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-lg" id="hero-web-app-btn">
+              <span>🌐</span> Launch Live Web App ↗
+            </a>
+          </div>
+
+          <div class="hero-specs">
+            <div class="spec-item">
+              <span class="spec-val accent-green">~400ms</span>
+              <span class="spec-label">Sub-Second Finality</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-val">&lt; $0.00025</span>
+              <span class="spec-label">Avg Network Gas</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-val accent-purple">10% OFF</span>
+              <span class="spec-label">With Native $SKR</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-val">100%</span>
+              <span class="spec-label">Self-Custodial</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive Seeker Phone Simulation Mockup -->
+        <div class="phone-mockup-wrapper" id="simulator">
+          <div class="phone-ambient-ring"></div>
+          
+          <div class="seeker-phone" role="region" aria-label="Interactive Phone Simulator">
+            <div class="phone-camera-notch">
+              <div class="camera-lens"></div>
+            </div>
+
+            <div class="phone-screen">
+              <div class="phone-header-row">
+                <div class="phone-brand">
+                  <img src="assets/logo_cropped_white.png" alt="" class="phone-brand-logo">
+                  <span class="phone-brand-name">Blink Mobile</span>
+                </div>
+                <div class="phone-status-pill">Mainnet-Beta</div>
+              </div>
+
+              <!-- Interactive Simulator Mode Switcher -->
+              <div class="sim-mode-toggle" role="tablist">
+                <button class="sim-mode-btn active" data-mode="nfc" role="tab" aria-selected="true">
+                  <span>📡</span> NFC Tap
+                </button>
+                <button class="sim-mode-btn" data-mode="qr" role="tab" aria-selected="false">
+                  <span>📷</span> QR Scan
+                </button>
+                <button class="sim-mode-btn" data-mode="studio" role="tab" aria-selected="false">
+                  <span>🎨</span> Studio
+                </button>
+              </div>
+
+              <!-- Stage Content Rendered by JS -->
+              <div class="sim-stage" id="sim-stage-content">
+                <!-- Dynamically injected interactive stage -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Deep-Dive Features Grid -->
+    <section class="features-section" id="features">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-pill">Core Architecture</div>
+          <h2 class="section-title">Built for Real-World Crypto Commerce</h2>
+          <p class="section-subtitle">
+            Blink bridges the physical universe with Solana's high-speed consensus, removing the friction of manual address typing, custodial intermediaries, and clunky POS terminals.
+          </p>
+        </div>
+
+        <div class="features-grid">
+          <!-- Feature 1 -->
+          <article class="feature-card">
+            <div class="feature-icon-box">📡</div>
+            <h3 class="feature-title">Hardware NFC Tap-to-Pay</h3>
+            <p class="feature-desc">
+              Leverage native NDEF chip protocol and Web NFC. Hold your Solana Seeker or Android device against smart coasters, wristbands, or counter tags for instant discovery.
+            </p>
+            <span class="feature-badge">Web NFC + React Native</span>
+          </article>
+
+          <!-- Feature 2 -->
+          <article class="feature-card">
+            <div class="feature-icon-box orange">🔥</div>
+            <h3 class="feature-title">Native $SKR Token Economics</h3>
+            <p class="feature-desc">
+              Integrated natively with the canonical Solana Mobile $SKR SPL mint. Features automated idempotent Associated Token Account (ATA) creation and an instant 10% discount on every purchase.
+            </p>
+            <span class="feature-badge">Solana Mainnet Canonical Mint</span>
+          </article>
+
+          <!-- Feature 3 -->
+          <article class="feature-card">
+            <div class="feature-icon-box green">🎨</div>
+            <h3 class="feature-title">Blink Studio & NFC Tag Writer</h3>
+            <p class="feature-desc">
+              Any merchant or event organizer can design a Physical Blink in seconds, customize pricing in SOL, USDC, or $SKR, and write NDEF payloads directly onto blank NFC stickers.
+            </p>
+            <span class="feature-badge">Merchant Toolkit</span>
+          </article>
+
+          <!-- Feature 4 -->
+          <article class="feature-card">
+            <div class="feature-icon-box">🔐</div>
+            <h3 class="feature-title">100% Non-Custodial Security</h3>
+            <p class="feature-desc">
+              Your keys never leave your device. Authorize transactions with on-device biometrics (fingerprint/face recognition) or connect external mobile wallets like Phantom and Solflare.
+            </p>
+            <span class="feature-badge">Seed Vault & MWA Ready</span>
+          </article>
+
+          <!-- Feature 5 -->
+          <article class="feature-card">
+            <div class="feature-icon-box green">🧾</div>
+            <h3 class="feature-title">Verifiable Digital Receipts</h3>
+            <p class="feature-desc">
+              Every confirmed transaction produces an immutable digital receipt stored in encrypted local storage, complete with on-chain Solana signature explorer verification.
+            </p>
+            <span class="feature-badge">Instant Verification</span>
+          </article>
+
+          <!-- Feature 6 -->
+          <article class="feature-card">
+            <div class="feature-icon-box">⚡</div>
+            <h3 class="feature-title">Sub-Second Finality</h3>
+            <p class="feature-desc">
+              Engineered with optimized RPC websocket bridges and local transaction reconstruction to settle payments in ~400ms without relying on slow central payment rails.
+            </p>
+            <span class="feature-badge">~400ms Atomic Settlement</span>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- How It Works Flow -->
+    <section class="how-section" id="how-it-works">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-pill">User Experience</div>
+          <h2 class="section-title">Four Steps to Zero-Friction Settlement</h2>
+          <p class="section-subtitle">
+            Experience the smoothest on-chain transaction lifecycle ever built for mobile devices.
+          </p>
+        </div>
+
+        <div class="steps-grid">
+          <div class="step-card">
+            <div class="step-num">01</div>
+            <h3 class="step-title">Deploy Physical Blink</h3>
+            <p class="step-desc">
+              Merchants create an Action in Blink Studio and flash it onto an NFC sticker or display a high-contrast QR code at the counter.
+            </p>
+          </div>
+
+          <div class="step-card">
+            <div class="step-num">02</div>
+            <h3 class="step-title">Tap or Scan</h3>
+            <p class="step-desc">
+              Customers hold their phone against the NFC tag or point their live camera. Blink parses the action payload instantly.
+            </p>
+          </div>
+
+          <div class="step-card">
+            <div class="step-num">03</div>
+            <h3 class="step-title">Biometric Approval</h3>
+            <p class="step-desc">
+              The user previews the item and verified discount, approving the transfer in a single tap via device biometrics or Phantom.
+            </p>
+          </div>
+
+          <div class="step-card">
+            <div class="step-num">04</div>
+            <h3 class="step-title">Instant On-Chain Receipt</h3>
+            <p class="step-desc">
+              Funds settle atomically on Solana Mainnet in under 400ms. An official cryptographic receipt is delivered immediately.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Token Ecosystem Showcase -->
+    <section class="token-section" id="token">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-pill">Multi-Asset Engine</div>
+          <h2 class="section-title">Native Support for Solana Currencies</h2>
+          <p class="section-subtitle">
+            Flexible settlement options tailored for micro-transactions, merchant stability, and the Solana Seeker ecosystem.
+          </p>
+        </div>
+
+        <div class="token-cards-row">
+          <!-- SKR Card -->
+          <div class="token-card" style="border-color: rgba(255, 107, 74, 0.35);">
+            <div class="token-card-header">
+              <div class="token-avatar">
+                <img src="assets/skr_logo_user.jpg" alt="SKR Token">
+              </div>
+              <div class="token-meta">
+                <div class="token-name">$SKR (Seeker Token)</div>
+                <div class="token-role">Official Ecosystem Discount Token</div>
+              </div>
+            </div>
+            <div class="token-price-display">
+              <span class="token-price-val" id="price-skr-val">$0.05</span>
+              <span class="token-price-change">10% Instant Discount</span>
+            </div>
+            <div class="token-mint-row">
+              <span>Canonical Mint</span>
+              <span class="token-mint-code">SKRbvo6...PZhW3</span>
+            </div>
+            <p style="font-size: 0.88rem; color: var(--text-secondary); line-height: 1.5;">
+              Pay with $SKR to unlock automatic 10% merchant discounts with idempotent ATA creation on Solana Mainnet.
+            </p>
+          </div>
+
+          <!-- USDC Card -->
+          <div class="token-card">
+            <div class="token-card-header">
+              <div class="token-avatar">
+                <img src="assets/usdc_logo_user.jpg" alt="USDC">
+              </div>
+              <div class="token-meta">
+                <div class="token-name">USDC (Circle)</div>
+                <div class="token-role">Dollar Stablecoin Settlement</div>
+              </div>
+            </div>
+            <div class="token-price-display">
+              <span class="token-price-val">$1.00</span>
+              <span class="token-price-change" style="color: #94A3B8;">Zero Volatility</span>
+            </div>
+            <div class="token-mint-row">
+              <span>Decimals</span>
+              <span class="token-mint-code">6 Decimals (Atomic)</span>
+            </div>
+            <p style="font-size: 0.88rem; color: var(--text-secondary); line-height: 1.5;">
+              Ideal for high-volume merchants seeking direct US dollar stablecoin settlement with micro-cent network gas fees.
+            </p>
+          </div>
+
+          <!-- SOL Card -->
+          <div class="token-card">
+            <div class="token-card-header">
+              <div class="token-avatar">
+                <img src="assets/solana_logo_user.jpg" alt="Solana SOL">
+              </div>
+              <div class="token-meta">
+                <div class="token-name">SOL (Native)</div>
+                <div class="token-role">Solana Base Layer Fuel</div>
+              </div>
+            </div>
+            <div class="token-price-display">
+              <span class="token-price-val" id="price-sol-val">$148.50</span>
+              <span class="token-price-change">Live Network</span>
+            </div>
+            <div class="token-mint-row">
+              <span>Execution</span>
+              <span class="token-mint-code">Native SystemProgram</span>
+            </div>
+            <p style="font-size: 0.88rem; color: var(--text-secondary); line-height: 1.5;">
+              Native SOL transfers executing with high priority and direct wallet signature validation across all clusters.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Security & Audit Callout -->
+    <section class="security-section" id="security">
+      <div class="container">
+        <div class="security-banner">
+          <div class="security-banner-content">
+            <div class="security-badge">
+              <span>🛡️</span> Security Audited & Hardened
+            </div>
+            <h2 class="security-title">Built with Zero Compromise on Security</h2>
+            <p class="security-desc">
+              Blink has undergone rigorous code audits and penetration reviews. Our architecture implements local transaction reconstruction, eliminating external injection vulnerabilities.
+            </p>
+            <div class="security-checks-list">
+              <div class="security-check-item">
+                <span class="check-icon">✓</span>
+                <span><strong>Local Reconstruction:</strong> NFC & deep-link parameters are rebuilt locally before wallet signing to prevent drainer attacks.</span>
+              </div>
+              <div class="security-check-item">
+                <span class="check-icon">✓</span>
+                <span><strong>Idempotent ATA Creation:</strong> Prevents simulation failures across Phantom and Solflare mobile clients.</span>
+              </div>
+              <div class="security-check-item">
+                <span class="check-icon">✓</span>
+                <span><strong>Native Container Hardening:</strong> Disabled cleartext traffic, scoped storage, and restricted WebView file access.</span>
+              </div>
+              <div class="security-check-item">
+                <span class="check-icon">✓</span>
+                <span><strong>Patched Dependencies:</strong> 100% resolved package overrides across critical crypto and WebSocket libraries.</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="text-align: center;">
+            <div style="display: inline-block; padding: 28px; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--border-subtle); border-radius: 20px;">
+              <div style="font-size: 3.5rem; margin-bottom: 8px;">🔒</div>
+              <div style="font-size: 1.2rem; font-weight: 800; color: #fff;">100% Non-Custodial</div>
+              <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px;">Zero Private Keys Stored on Servers</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Download Center -->
+    <section class="download-section" id="download">
+      <div class="container">
+        <div class="download-card-hero">
+          <div class="hero-pill" style="align-self: center;">
+            <span>🚀</span> Production Ready Release
+          </div>
+
+          <h2 class="download-hero-title">Experience the Future of Solana Commerce Today</h2>
+          <p class="download-hero-sub">
+            Download the official Blink Android application for your Solana Seeker or any NFC-enabled Android device.
+          </p>
+
+          <div class="apk-meta-badge-row">
+            <span class="meta-pill">APK: blink.apk</span>
+            <span class="meta-pill">Version: v1.0.0</span>
+            <span class="meta-pill">Size: 10.17 MB</span>
+            <span class="meta-pill">Platform: Android 10+ / Solana Seeker</span>
+          </div>
+
+          <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; width: 100%;">
+            <a href="https://github.com/OpeyemiMoses/Blink/releases/download/v1.0.0/blink.apk" class="btn btn-primary btn-lg" style="min-width: 260px;">
+              <span>📥</span> Download Android APK
+            </a>
+            <a href="https://yellow-trees-exist.loca.lt" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-lg" style="min-width: 220px;">
+              <span>🌐</span> Open Web Application ↗
+            </a>
+          </div>
+
+          <!-- 3-Step Install Guide -->
+          <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-subtle); width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: left;">
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 700; color: var(--solana-green);">STEP 1</div>
+              <div style="font-size: 0.95rem; font-weight: 700; color: #fff;">Download APK</div>
+              <div style="font-size: 0.82rem; color: var(--text-muted);">Tap the button above on your mobile phone or transfer via USB.</div>
+            </div>
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 700; color: var(--solana-purple);">STEP 2</div>
+              <div style="font-size: 0.95rem; font-weight: 700; color: #fff;">Allow Install</div>
+              <div style="font-size: 0.82rem; color: var(--text-muted);">Enable "Install from this source" when prompted by your browser.</div>
+            </div>
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 700; color: var(--solana-green);">STEP 3</div>
+              <div style="font-size: 0.95rem; font-weight: 700; color: #fff;">Connect & Tap</div>
+              <div style="font-size: 0.82rem; color: var(--text-muted);">Open Blink, log in with Privy or Phantom, and tap your first NFC tag!</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ Accordion -->
+    <section class="faq-section" id="faq">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-pill">Got Questions?</div>
+          <h2 class="section-title">Frequently Asked Questions</h2>
+          <p class="section-subtitle">
+            Everything you need to know about Blink, physical tags, and Solana integration.
+          </p>
+        </div>
+
+        <div class="faq-list">
+          <div class="faq-item">
+            <button class="faq-question">
+              <span>What is a Physical Blink?</span>
+              <span class="faq-chevron">▼</span>
+            </button>
+            <div class="faq-answer">
+              A Physical Blink brings Solana Actions into the tangible world. Instead of clicking a link on a web screen, you physically tap your mobile device against an NFC sticker or scan a live QR code on a counter, poster, or card to instantly execute an on-chain transaction.
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-question">
+              <span>Do I need a Solana Seeker phone, or does any Android work?</span>
+              <span class="faq-chevron">▼</span>
+            </button>
+            <div class="faq-answer">
+              While Blink is custom-tailored and optimized for the Solana Seeker device (supporting its hardware Seed Vault and high-DPI AMOLED panel), the APK runs smoothly on any Android phone (version 10+) equipped with standard NFC or a camera for live QR scanning.
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-question">
+              <span>How does the 10% discount on $SKR work?</span>
+              <span class="faq-chevron">▼</span>
+            </button>
+            <div class="faq-answer">
+              When a merchant creates an action priced in US Dollars or USDC, customers choosing to pay with the native $SKR SPL token receive an automatic 10% discount calculated in real-time. The transaction automatically creates your recipient token account idempotently if it doesn't already exist.
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-question">
+              <span>Is Blink custodial? Does it hold my funds?</span>
+              <span class="faq-chevron">▼</span>
+            </button>
+            <div class="faq-answer">
+              No. Blink is strictly 100% non-custodial. It never takes custody of private keys or assets. All transfers are constructed client-side and signed directly by your biometric authorization or your connected Phantom / Solflare wallet.
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-question">
+              <span>How can merchants write their own NFC stickers?</span>
+              <span class="faq-chevron">▼</span>
+            </button>
+            <div class="faq-answer">
+              Inside Blink Studio, merchants simply specify their title, price, and token. Tapping "Write to NFC Tag" activates the phone's NFC hardware to flash any standard NTAG213, NTAG215, or NTAG216 sticker in less than a second.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Site Footer -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <a href="#" class="logo-wrap">
+            <div class="logo-mark">
+              <img src="assets/logo_cropped_white.png" alt="Blink">
+            </div>
+            <span class="logo-text">BLINK</span>
+          </a>
+          <p class="footer-desc">
+            The Physical Interaction Layer for Solana. Bringing real-world NFC taps, instant QR scans, and sub-second settlement to global commerce.
+          </p>
+        </div>
+
+        <div>
+          <div class="footer-col-title">Navigation</div>
+          <ul class="footer-links">
+            <li><a href="#features" class="footer-link">Features</a></li>
+            <li><a href="#how-it-works" class="footer-link">How It Works</a></li>
+            <li><a href="#simulator" class="footer-link">Live Simulator</a></li>
+            <li><a href="#token" class="footer-link">$SKR Ecosystem</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="footer-col-title">Resources</div>
+          <ul class="footer-links">
+            <li><a href="https://github.com/OpeyemiMoses/Blink/releases/tag/v1.0.0" target="_blank" rel="noopener noreferrer" class="footer-link">GitHub Release v1.0.0</a></li>
+            <li><a href="https://solanamobile.com" target="_blank" rel="noopener noreferrer" class="footer-link">Solana Seeker</a></li>
+            <li><a href="https://solana.com" target="_blank" rel="noopener noreferrer" class="footer-link">Solana Network</a></li>
+            <li><a href="#security" class="footer-link">Security Report</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="footer-col-title">Get Started</div>
+          <ul class="footer-links">
+            <li><a href="#download" class="footer-link">Download APK</a></li>
+            <li><a href="https://yellow-trees-exist.loca.lt" target="_blank" rel="noopener noreferrer" class="footer-link">Launch Web Demo</a></li>
+            <li><a href="#faq" class="footer-link">FAQ & Help</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div>© 2026 Blink Ecosystem. Non-custodial open protocol on Solana.</div>
+        <div>Built for Solana Seeker & Mobile Warriors ⚡</div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="app.js"></script>
+</body>
+</html>
