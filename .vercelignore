@@ -1,0 +1,7 @@
+server.js
+src/
+android/
+dist/
+scripts/
+node_modules/
+.expo/

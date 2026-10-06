@@ -1,7 +1,8 @@
 {
   "version": 2,
-  "installCommand": "echo 'Landing page assets ready - skipping npm install'",
-  "buildCommand": "echo 'Blink landing page built successfully'",
+  "framework": null,
+  "installCommand": "echo 'Landing page static assets ready'",
+  "buildCommand": "echo 'Blink landing page ready'",
   "outputDirectory": "landing",
   "cleanUrls": true,
   "headers": [
